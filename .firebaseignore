@@ -1,0 +1,27 @@
+
+# Arquivos de cache e logs
+*.log
+.DS_Store
+
+# Diretórios de dependências
+node_modules/
+functions/node_modules/
+
+# Código-fonte (já que o build o processa)
+src/
+functions/src/
+
+# Configurações e metadados de desenvolvimento
+.git/
+.vscode/
+.eslintrc.json
+tsconfig.json
+functions/tsconfig.json
+tailwind.config.ts
+postcss.config.js
+next.config.mjs
+components.json
+README.md
+
+# Arquivos de build que não são o output final
+*.map

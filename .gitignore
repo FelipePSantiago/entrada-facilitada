@@ -1,0 +1,47 @@
+gitignore
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Next.js
+/.next/
+/out/
+
+# Production
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local environment variables
+.env*.local
+.env
+
+# TypeScript
+*.tsbuildinfo
+# Removido: next-env.d.ts
+
+# Firebase
+service-account-key.json
+firebase-debug.log
+firebase-debug.*.log
+
+# Adições com base na sua lista de arquivos na raiz:
+# Configurações específicas do ambiente de desenvolvimento
+.idx/
+.vscode/
+.nsprc # Ignorando com base na suposição inicial
+# home/ # Ignorando com base na suposição inicial
+# .modified/ # Geralmente temporário
