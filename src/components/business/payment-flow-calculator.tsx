@@ -1245,7 +1245,7 @@ useEffect(() => {
         return;
     }
 
-    // ADICIONE ESTAS LINhas - Declaração das taxas
+    // Declaração das taxas
     const rateBeforeDelivery = 0.005; 
     const rateAfterDelivery = 0.015;
 
@@ -1305,6 +1305,7 @@ useEffect(() => {
     const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
     let campaignBonusValue = 0;
 
+    // Cálculo do bônus campanha (igual ao stepped calculator)
     if (isSinalCampaignActive) {
         const tempSinalAto = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue;
         const sinalPadrao5Percent = 0.05 * saleValue;
@@ -1322,12 +1323,21 @@ useEffect(() => {
             campaignBonusValue = potentialBonus;
         }
     }
-    
-    const finalSinalAto = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue - campaignBonusValue;
+
+    // CORREÇÃO: Subtrair o bônus campanha do pró-soluto (igual ao stepped calculator)
+    let finalProSolutoComBonus = finalProSolutoValue;
+    if (campaignBonusValue > 0) {
+        finalProSolutoComBonus = Math.max(0, finalProSolutoValue - campaignBonusValue);
+    }
+
+    // Recalcular o sinal ato com o pró-soluto ajustado
+    const finalSinalAto = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoComBonus - campaignBonusValue;
 
     const newPayments: PaymentField[] = existingPayments.filter(p => !['sinalAto', 'proSoluto', 'bonusCampanha'].includes(p.type));
     
-    newPayments.push({ type: 'sinalAto', value: Math.max(0, finalSinalAto), date: new Date() });
+    if (finalSinalAto > 0) {
+        newPayments.push({ type: 'sinalAto', value: Math.max(0, finalSinalAto), date: new Date() });
+    }
     
     if (campaignBonusValue > 0) {
         newPayments.push({ type: 'bonusCampanha', value: campaignBonusValue, date: new Date() });
@@ -1339,7 +1349,8 @@ useEffect(() => {
     const targetMonth = addMonths(baseDate, 1);
     proSolutoDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 5);
 
-    newPayments.push({ type: 'proSoluto', value: Math.max(0, finalProSolutoValue), date: proSolutoDate });
+    // Usar o valor do pró-soluto já reduzido pelo bônus
+    newPayments.push({ type: 'proSoluto', value: Math.max(0, finalProSolutoComBonus), date: proSolutoDate });
     
     replace(newPayments);
 
