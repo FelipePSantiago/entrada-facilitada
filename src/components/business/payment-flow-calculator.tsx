@@ -1246,7 +1246,6 @@ useEffect(() => {
         return;
     }
 
-    // ADICIONE ESTAS LINHAS - Declaração das taxas
     const rateBeforeDelivery = 0.005; 
     const rateAfterDelivery = 0.015;
 
@@ -1298,7 +1297,7 @@ useEffect(() => {
 
     // 2. Calcular Sinal Ato mínimo considerando DESCONTO
     const sumOfOtherPayments = existingPayments.reduce((acc, p) => {
-        // ⭐ INCLUIR desconto nos "outros pagamentos"
+        // INCLUIR desconto nos "outros pagamentos"
         if (!['sinalAto', 'proSoluto', 'bonusAdimplencia', 'bonusCampanha'].includes(p.type)) {
             return acc + (p.value || 0);
         }
@@ -1307,7 +1306,7 @@ useEffect(() => {
     
     const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
     
-    // ⭐ VALOR FINAL DE VENDA (considerando desconto)
+    // VALOR FINAL DE VENDA (considerando desconto)
     const descontoValue = existingPayments.find(p => p.type === 'desconto')?.value || 0;
     const valorFinalVenda = saleValue - descontoValue;
     const sinalAtoMinimoPermitido = 0.05 * valorFinalVenda;
@@ -1360,8 +1359,21 @@ useEffect(() => {
     }
 
     // 5. Atualizar fluxo de pagamento
-    const newPayments: PaymentField[] = existingPayments.filter(p => !['sinalAto', 'proSoluto', 'bonusCampanha'].includes(p.type));
-    
+    const newPayments: PaymentField[] = existingPayments.filter(p => !['sinalAto', 'proSoluto', 'bonusCampanha', 'bonusAdimplencia'].includes(p.type));
+
+    // SEMPRE incluir bônus adimplência quando avaliação > venda
+    if (bonusAdimplenciaValue > 0) {
+        let bonusDate = deliveryDateObj;
+        if (new Date() > bonusDate) {
+            bonusDate = lastDayOfMonth(addMonths(new Date(), 1));
+        }
+        newPayments.push({ 
+            type: 'bonusAdimplencia', 
+            value: bonusAdimplenciaValue, 
+            date: bonusDate 
+        });
+    }
+
     if (finalSinalAto > 0) {
         newPayments.push({ type: 'sinalAto', value: Math.max(0, finalSinalAto), date: new Date() });
     }
@@ -1377,7 +1389,28 @@ useEffect(() => {
     proSolutoDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 5);
 
     newPayments.push({ type: 'proSoluto', value: Math.max(0, finalProSolutoValue), date: proSolutoDate });
-    
+
+    // 6. VERIFICAÇÃO FINAL MELHORADA com os valores reais do fluxo
+    const totalCalculado = newPayments.reduce((sum, payment) => sum + payment.value, 0);
+    const valorEsperadoFinal = appraisalValue > saleValue ? appraisalValue : saleValue;
+
+    if (Math.abs(totalCalculado - valorEsperadoFinal) > 0.01) {
+        console.warn('⚠️ Discrepância final no cálculo:', { 
+            totalCalculado, 
+            valorEsperadoFinal, 
+            diferenca: totalCalculado - valorEsperadoFinal,
+            appraisalValue,
+            saleValue
+        });
+        
+        // Ajuste final no Pró-Soluto para fechar a conta
+        const ajusteFinal = valorEsperadoFinal - totalCalculado;
+        const proSolutoIndex = newPayments.findIndex(p => p.type === 'proSoluto');
+        if (proSolutoIndex !== -1) {
+            newPayments[proSolutoIndex].value = Math.max(0, newPayments[proSolutoIndex].value + ajusteFinal);
+        }
+    }
+
     replace(newPayments);
 
     toast({
