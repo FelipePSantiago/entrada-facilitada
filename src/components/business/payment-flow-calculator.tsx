@@ -444,183 +444,171 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   }, [results?.monthlyInsuranceBreakdown, sinalAtoDate]);
 
   // ⭐ useEffect CORRIGIDO para Pró-Soluto com Financiamento
-useEffect(() => {
-  if (!selectedProperty || !watchedPayments.some(p => p.type === 'financiamento') || !deliveryDateObj) return;
+  useEffect(() => {
+    if (!selectedProperty || !watchedPayments.some(p => p.type === 'financiamento') || !deliveryDateObj) return;
 
-  const proSolutoIndex = watchedPayments.findIndex(p => p.type === 'proSoluto');
-  if (proSolutoIndex === -1) return;
+    const proSolutoIndex = watchedPayments.findIndex(p => p.type === 'proSoluto');
+    if (proSolutoIndex === -1) return;
 
-  const sumOfOtherPayments = watchedPayments.reduce((acc, payment) => {
-    if (!['proSoluto', 'bonusAdimplencia', 'bonusCampanha'].includes(payment.type)) {
-      return acc + (payment.value || 0);
-    }
-    return acc;
-  }, 0);
-  
-  const appraisalValue = watchedAppraisalValue || 0;
-  const saleValue = watchedSaleValue || 0;
-  const bonusAdimplencia = watchedPayments.find(p => p.type === 'bonusAdimplencia')?.value || 0;
-
-  // ⭐ CÁLCULO CORRETO: appraisalValue = soma de todos os pagamentos
-  const newProSolutoValue = Math.max(0, appraisalValue - sumOfOtherPayments - bonusAdimplencia);
-
-  console.log('🔍 Recalculando Pró-Soluto:', {
-    appraisalValue,
-    sumOfOtherPayments,
-    bonusAdimplencia,
-    newProSolutoValue
-  });
-
-  // ⭐ VERIFICAR LIMITES DO PRÓ-SOLUTO
-  const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
-  const conditionType = getValues('conditionType');
-  const limiteProSoluto = conditionType === 'especial' ? 0.1799 : (isReservaParque ? 0.1799 : 0.1499);
-  
-  // Calcular Pró-Soluto corrigido para verificar limite
-  const calcularProSolutoCorrigido = (proSolutoValue: number) => {
-    let corrigido = proSolutoValue;
-    const today = new Date();
+    const sumOfOtherPayments = watchedPayments.reduce((acc, payment) => {
+      if (!['proSoluto', 'bonusAdimplencia', 'bonusCampanha'].includes(payment.type)) {
+        return acc + (payment.value || 0);
+      }
+      return acc;
+    }, 0);
     
-    let gracePeriod = 1;
-    if (watchedPayments.some(p => p.type === 'sinal1')) gracePeriod++;
-    if (watchedPayments.some(p => p.type === 'sinal2')) gracePeriod++;
-    if (watchedPayments.some(p => p.type === 'sinal3')) gracePeriod++;
+    const appraisalValue = watchedAppraisalValue || 0;
+    const saleValue = watchedSaleValue || 0;
+    const bonusAdimplencia = watchedPayments.find(p => p.type === 'bonusAdimplencia')?.value || 0;
 
-    if (deliveryDateObj < today) {
-      gracePeriod += differenceInMonths(today, deliveryDateObj);
-    }
+    // ⭐ CÁLCULO CORRETO: appraisalValue = soma de todos os pagamentos
+    const newProSolutoValue = Math.max(0, appraisalValue - sumOfOtherPayments - bonusAdimplencia);
 
-    for (let i = 0; i < gracePeriod; i++) {
-      const installmentDate = addMonths(today, i);
-      const installmentMonth = startOfMonth(installmentDate);
-      const deliveryMonth = startOfMonth(deliveryDateObj);
-      const rate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
-      corrigido *= (1 + rate);
-    }
-    
-    return corrigido;
-  };
-
-  const proSolutoCorrigido = calcularProSolutoCorrigido(newProSolutoValue);
-  const percentualProSoluto = saleValue > 0 ? proSolutoCorrigido / saleValue : 0;
-
-  let proSolutoValueFinal = newProSolutoValue;
-
-  // ⭐ APLICAR LIMITE SE NECESSÁRIO
-  if (percentualProSoluto > limiteProSoluto) {
-    console.warn('🚨 Pró-Soluto manual excede limite, ajustando...', {
-      percentualAtual: formatPercentage(percentualProSoluto),
-      limite: formatPercentage(limiteProSoluto)
+    console.log('🔍 Recalculando Pró-Soluto:', {
+      appraisalValue,
+      sumOfOtherPayments,
+      bonusAdimplencia,
+      newProSolutoValue
     });
 
-    // Calcular valor máximo permitido
-    const valorLimiteCorrigido = limiteProSoluto * saleValue;
+    // ⭐ VERIFICAR LIMITES DO PRÓ-SOLUTO
+    const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
+    const conditionType = getValues('conditionType');
+    const limiteProSoluto = conditionType === 'especial' ? 0.1799 : (isReservaParque ? 0.1799 : 0.1499);
     
-    // Reverter correção para encontrar valor original máximo
-    let fatorCorrecao = 1;
-    let gracePeriod = 1;
-    if (watchedPayments.some(p => p.type === 'sinal1')) gracePeriod++;
-    if (watchedPayments.some(p => p.type === 'sinal2')) gracePeriod++;
-    if (watchedPayments.some(p => p.type === 'sinal3')) gracePeriod++;
+    // Calcular Pró-Soluto corrigido para verificar limite
+    const calcularProSolutoCorrigido = (proSolutoValue: number) => {
+      let corrigido = proSolutoValue;
+      const today = new Date();
+      
+      let gracePeriod = 1;
+      if (watchedPayments.some(p => p.type === 'sinal1')) gracePeriod++;
+      if (watchedPayments.some(p => p.type === 'sinal2')) gracePeriod++;
+      if (watchedPayments.some(p => p.type === 'sinal3')) gracePeriod++;
 
-    if (deliveryDateObj < today) {
-      gracePeriod += differenceInMonths(today, deliveryDateObj);
-    }
+      if (deliveryDateObj < today) {
+        gracePeriod += differenceInMonths(today, deliveryDateObj);
+      }
 
-    for (let i = 0; i < gracePeriod; i++) {
-      const installmentDate = addMonths(today, i);
-      const installmentMonth = startOfMonth(installmentDate);
-      const deliveryMonth = startOfMonth(deliveryDateObj);
-      const rate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
-      fatorCorrecao *= (1 + rate);
-    }
-    
-    proSolutoValueFinal = valorLimiteCorrigido / fatorCorrecao;
-    
-    console.log('✅ Pró-Soluto ajustado para respeitar limite:', {
-      valorOriginal: newProSolutoValue,
-      valorAjustado: proSolutoValueFinal
-    });
-  }
-
-  const existingProSoluto = watchedPayments[proSolutoIndex];
-  if (Math.abs(existingProSoluto.value - proSolutoValueFinal) > 0.01) {
-    const newProSolutoPayment = { ...existingProSoluto, value: Math.max(0, proSolutoValueFinal) };
-    const newPayments = [...watchedPayments];
-    newPayments[proSolutoIndex] = newProSolutoPayment;
-    replace(newPayments);
-    
-    console.log('🔄 Pró-Soluto atualizado com limites:', proSolutoValueFinal);
-  }
-}, [watchedSaleValue, watchedAppraisalValue, watchedPayments, replace, selectedProperty, deliveryDateObj, getValues]);
-  
-  // SUBSTITUA ESTE useEffect (Bônus Adimplência) pelo código corrigido:
-// ⭐ useEffect CORRIGIDO para Bônus Adimplência
-useEffect(() => {
-  if (!selectedProperty || !deliveryDateObj) return;
-
-  const hasFinancing = watchedPayments.some(p => p.type === 'financiamento');
-  const appraisalValue = watchedAppraisalValue || 0;
-  const saleValue = watchedSaleValue || 0;
-
-  console.log('🔍 Verificando Bônus Adimplência:', {
-    hasFinancing,
-    appraisalValue,
-    saleValue,
-    difference: appraisalValue - saleValue
-  });
-
-  // Só calcular bônus se houver financiamento E avaliação > venda
-  if (hasFinancing && saleValue > 0 && appraisalValue > saleValue) {
-    const bonusValue = appraisalValue - saleValue;
-    
-    let bonusDate = deliveryDateObj;
-    if (new Date() > bonusDate) {
-      bonusDate = lastDayOfMonth(addMonths(new Date(), 1));
-    }
-    
-    const bonusPayment: PaymentField = {
-      type: "bonusAdimplencia",
-      value: Math.max(0, bonusValue),
-      date: bonusDate,
+      for (let i = 0; i < gracePeriod; i++) {
+        const installmentDate = addMonths(today, i);
+        const installmentMonth = startOfMonth(installmentDate);
+        const deliveryMonth = startOfMonth(deliveryDateObj);
+        const rate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
+        corrigido *= (1 + rate);
+      }
+      
+      return corrigido;
     };
 
-    const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusAdimplencia');
-    
-    if (bonusIndex > -1) {
-      // Atualizar bônus existente se o valor mudou
-      if (watchedPayments[bonusIndex].value !== bonusValue) {
-        const newPayments = [...watchedPayments];
-        newPayments[bonusIndex] = bonusPayment;
-        replace(newPayments);
-        console.log('🔄 Bônus Adimplência atualizado:', bonusValue);
+    const proSolutoCorrigido = calcularProSolutoCorrigido(newProSolutoValue);
+    const percentualProSoluto = saleValue > 0 ? proSolutoCorrigido / saleValue : 0;
+
+    let proSolutoValueFinal = newProSolutoValue;
+
+    // ⭐ APLICAR LIMITE SE NECESSÁRIO
+    if (percentualProSoluto > limiteProSoluto) {
+      console.warn('🚨 Pró-Soluto manual excede limite, ajustando...', {
+        percentualAtual: formatPercentage(percentualProSoluto),
+        limite: formatPercentage(limiteProSoluto)
+      });
+
+      // Calcular valor máximo permitido
+      const valorLimiteCorrigido = limiteProSoluto * saleValue;
+      
+      // Reverter correção para encontrar valor original máximo
+      const today = new Date();
+      let fatorCorrecao = 1;
+      let gracePeriod = 1;
+      if (watchedPayments.some(p => p.type === 'sinal1')) gracePeriod++;
+      if (watchedPayments.some(p => p.type === 'sinal2')) gracePeriod++;
+      if (watchedPayments.some(p => p.type === 'sinal3')) gracePeriod++;
+
+      if (deliveryDateObj < today) {
+        gracePeriod += differenceInMonths(today, deliveryDateObj);
+      }
+
+      for (let i = 0; i < gracePeriod; i++) {
+        const installmentDate = addMonths(today, i);
+        const installmentMonth = startOfMonth(installmentDate);
+        const deliveryMonth = startOfMonth(deliveryDateObj);
+        const rate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
+        fatorCorrecao *= (1 + rate);
+      }
+      
+      proSolutoValueFinal = valorLimiteCorrigido / fatorCorrecao;
+      
+      console.log('✅ Pró-Soluto ajustado para respeitar limite:', {
+        valorOriginal: newProSolutoValue,
+        valorAjustado: proSolutoValueFinal
+      });
+    }
+
+    const existingProSoluto = watchedPayments[proSolutoIndex];
+    if (Math.abs(existingProSoluto.value - proSolutoValueFinal) > 0.01) {
+      const newProSolutoPayment = { ...existingProSoluto, value: Math.max(0, proSolutoValueFinal) };
+      const newPayments = [...watchedPayments];
+      newPayments[proSolutoIndex] = newProSolutoPayment;
+      replace(newPayments);
+      
+      console.log('🔄 Pró-Soluto atualizado com limites:', proSolutoValueFinal);
+    }
+  }, [watchedSaleValue, watchedAppraisalValue, watchedPayments, replace, selectedProperty, deliveryDateObj, getValues]);
+  
+  // ⭐ useEffect CORRIGIDO para Bônus Adimplência
+  useEffect(() => {
+    if (!selectedProperty || !deliveryDateObj) return;
+
+    const hasFinancing = watchedPayments.some(p => p.type === 'financiamento');
+    const appraisalValue = watchedAppraisalValue || 0;
+    const saleValue = watchedSaleValue || 0;
+
+    console.log('🔍 Verificando Bônus Adimplência:', {
+      hasFinancing,
+      appraisalValue,
+      saleValue,
+      difference: appraisalValue - saleValue
+    });
+
+    // Só calcular bônus se houver financiamento E avaliação > venda
+    if (hasFinancing && saleValue > 0 && appraisalValue > saleValue) {
+      const bonusValue = appraisalValue - saleValue;
+      
+      let bonusDate = deliveryDateObj;
+      if (new Date() > bonusDate) {
+        bonusDate = lastDayOfMonth(addMonths(new Date(), 1));
+      }
+      
+      const bonusPayment: PaymentField = {
+        type: "bonusAdimplencia",
+        value: Math.max(0, bonusValue),
+        date: bonusDate,
+      };
+
+      const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusAdimplencia');
+      
+      if (bonusIndex > -1) {
+        // Atualizar bônus existente se o valor mudou
+        if (watchedPayments[bonusIndex].value !== bonusValue) {
+          const newPayments = [...watchedPayments];
+          newPayments[bonusIndex] = bonusPayment;
+          replace(newPayments);
+          console.log('🔄 Bônus Adimplência atualizado:', bonusValue);
+        }
+      } else {
+        // Adicionar novo bônus
+        append(bonusPayment);
+        console.log('➕ Bônus Adimplência adicionado:', bonusValue);
       }
     } else {
-      // Adicionar novo bônus
-      append(bonusPayment);
-      console.log('➕ Bônus Adimplência adicionado:', bonusValue);
+      // Remover bônus se não atender às condições
+      const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusAdimplencia');
+      if (bonusIndex > -1) {
+        remove(bonusIndex);
+        console.log('➖ Bônus Adimplência removido');
+      }
     }
-  } else {
-    // Remover bônus se não atender às condições
-    const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusAdimplencia');
-    if (bonusIndex > -1) {
-      remove(bonusIndex);
-      console.log('➖ Bônus Adimplência removido');
-    }
-  }
-}, [watchedAppraisalValue, watchedSaleValue, watchedPayments, selectedProperty, deliveryDateObj, append, remove, replace]);
-
-// ADICIONE ESTE novo useEffect APÓS o que você acabou de substituir:
-useEffect(() => {
-  const hasFinancing = watchedPayments.some(p => p.type === 'financiamento');
-  console.log('🏦 Status do Financiamento:', hasFinancing ? 'Presente' : 'Ausente');
-  
-  // Disparar recálculo do bônus quando o financiamento mudar
-  if (hasFinancing && watchedAppraisalValue > 0 && watchedSaleValue > 0) {
-    console.log('🎯 Forçando recálculo do Bônus Adimplência');
-    // O useEffect acima será acionado pelas dependências
-  }
-}, [watchedPayments.filter(p => p.type === 'financiamento').length]);
+  }, [watchedAppraisalValue, watchedSaleValue, watchedPayments, selectedProperty, deliveryDateObj, append, remove, replace]);
 
 // Adicione também este useEffect para forçar recálculo quando financiamento for adicionado/removido
 useEffect(() => {
@@ -632,7 +620,7 @@ useEffect(() => {
     console.log('🎯 Forçando recálculo do Bônus Adimplência');
     // O useEffect acima será acionado pelas dependências
   }
-}, [watchedPayments.filter(p => p.type === 'financiamento').length]); // Monitora apenas mudanças no financiamento
+}, [watchedPayments.filter(p => p.type === 'financiamento').length]);
   
   useEffect(() => {
     if (!selectedProperty) return;
@@ -1262,10 +1250,10 @@ useEffect(() => {
       }, 0);
       
       const bonusAdimplencia = payments.find(p => p.type === 'bonusAdimplencia')?.value || 0;
-    
+
       // ⭐ CÁLCULO CORRETO DO PRÓ-SOLUTO
       let initialValue = Math.max(0, appraisalValue - sumOfOtherPayments - bonusAdimplencia);
-    
+
       // ⭐ VERIFICAR LIMITES
       const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
       const conditionType = getValues('conditionType');
@@ -1280,11 +1268,11 @@ useEffect(() => {
         if (payments.some(p => p.type === 'sinal1')) gracePeriod++;
         if (payments.some(p => p.type === 'sinal2')) gracePeriod++;
         if (payments.some(p => p.type === 'sinal3')) gracePeriod++;
-    
+
         if (deliveryDateObj && deliveryDateObj < today) {
           gracePeriod += differenceInMonths(today, deliveryDateObj);
         }
-    
+
         for (let i = 0; i < gracePeriod; i++) {
           const installmentDate = addMonths(today, i);
           const installmentMonth = startOfMonth(installmentDate);
@@ -1295,10 +1283,10 @@ useEffect(() => {
         
         return corrigido;
       };
-    
+
       const proSolutoCorrigido = calcularProSolutoCorrigido(initialValue);
       const percentualProSoluto = saleValue > 0 ? proSolutoCorrigido / saleValue : 0;
-    
+
       // ⭐ APLICAR LIMITE SE NECESSÁRIO
       if (percentualProSoluto > limiteProSoluto) {
         console.warn('🚨 Pró-Soluto inicial excede limite, ajustando...');
@@ -1310,11 +1298,11 @@ useEffect(() => {
         if (payments.some(p => p.type === 'sinal1')) gracePeriod++;
         if (payments.some(p => p.type === 'sinal2')) gracePeriod++;
         if (payments.some(p => p.type === 'sinal3')) gracePeriod++;
-    
+
         if (deliveryDateObj && deliveryDateObj < today) {
           gracePeriod += differenceInMonths(today, deliveryDateObj);
         }
-    
+
         for (let i = 0; i < gracePeriod; i++) {
           const installmentDate = addMonths(today, i);
           const installmentMonth = startOfMonth(installmentDate);
@@ -1494,6 +1482,7 @@ useEffect(() => {
     // Função auxiliar para calcular Pró-Soluto corrigido
     const calcularProSolutoCorrigido = (proSolutoValue: number) => {
         let corrigido = proSolutoValue;
+        const today = new Date();
         let gracePeriod = 1;
         if (existingPayments.some(p => p.type === 'sinal1')) gracePeriod++;
         if (existingPayments.some(p => p.type === 'sinal2')) gracePeriod++;
@@ -1566,6 +1555,7 @@ useEffect(() => {
         const excessoValor = proSolutoCorrigidoFinal - valorLimiteProSolutoCorrigido;
         
         // Calcular fator de correção considerando a correção futura
+        const today = new Date();
         let fatorCorrecao = 1;
         let gracePeriod = 1;
         if (existingPayments.some(p => p.type === 'sinal1')) gracePeriod++;
