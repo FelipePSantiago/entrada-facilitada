@@ -1,7 +1,7 @@
 
 import { useState } from 'react';
 import { FormValues, Results } from '@/types';
-import { calculateNotaryFee } from '@/lib/business/notary-fees';
+import { getNotaryFee } from '@/lib/business/notary-fees';
 
 export const usePaymentCalculator = () => {
   const [results, setResults] = useState<Results | null>(null);
@@ -27,15 +27,21 @@ export const usePaymentCalculator = () => {
     const totalPaid = proSolutoValue + sinalCampaignBonus;
     const remainingBalance = data.saleValue - totalPaid;
 
-    const notaryFee = calculateNotaryFee(data.saleValue);
+    const notaryFee = getNotaryFee(data.saleValue);
 
     setResults({
-      proSolutoValue,
-      sinalCampaignBonus,
-      totalPaid,
-      remainingBalance,
-      notaryFee,
-      installments: [],
+      summary: {
+        remaining: remainingBalance,
+        okTotal: remainingBalance >= 0,
+      },
+      financedAmount: 0, // Placeholder, will be calculated elsewhere
+      totalWithInterest: 0, // Placeholder
+      totalConstructionInsurance: 0, // Placeholder
+      monthlyInsuranceBreakdown: [], // Placeholder
+      incomeCommitmentPercentage: 0, // Placeholder
+      proSolutoCommitmentPercentage: proSolutoValue,
+      averageInterestRate: 0, // Placeholder
+      notaryInstallmentValue: notaryFee, // Used the notaryFee variable
     });
   };
 

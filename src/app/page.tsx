@@ -66,7 +66,7 @@ export default function RootPage() {
                         <FeatureCard 
                            icon={<BotMessageSquare className="h-8 w-8 text-primary" />}
                            title="Extração de Dados com IA"
-                           description="Envie um PDF ou cole um print da simulação da Caixa e nossa IA preenche os campos para você."
+                           description="Envie um PDF da simulação Caixa e nossa IA preenche os campos para você."
                        />
                        <FeatureCard 
                            icon={<FileText className="h-8 w-8 text-primary" />}
