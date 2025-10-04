@@ -1224,6 +1224,16 @@ useEffect(() => {
     const { saleValue, appraisalValue, grossIncome, payments: existingPayments, conditionType } = getValues();
     const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
 
+    // ⭐ DEFINIÇÃO CONSISTENTE DOS LIMITES
+    const PRO_SOLUTO_LIMITS = {
+        NORMAL: 0.1499,
+        ESPECIAL: 0.1799
+    };
+    
+    const limiteProSoluto = conditionType === 'especial' 
+        ? PRO_SOLUTO_LIMITS.ESPECIAL 
+        : (isReservaParque ? PRO_SOLUTO_LIMITS.ESPECIAL : PRO_SOLUTO_LIMITS.NORMAL);
+
     // 1. Encontrar valor máximo do Pró-Soluto
     const incomeLimit = 0.5 * grossIncome;
     const { breakdown: monthlyInsurance } = calculateConstructionInsuranceLocal(
@@ -1271,11 +1281,8 @@ useEffect(() => {
     }
     const proSolutoByIncome = pvOfMaxInstallments;
     
-    const proSolutoLimitPercent = conditionType === 'especial' 
-        ? 0.1799 
-        : (isReservaParque ? 0.1799 : 0.1499);
-    
-    const maxProSolutoCorrigido = proSolutoLimitPercent * saleValue;
+    // ⭐ CORREÇÃO: Usar o mesmo limite em todo o cálculo
+    const maxProSolutoCorrigido = limiteProSoluto * saleValue;
     
     let correctionFactor = 1;
     let gracePeriodMonths = 1;
@@ -1339,7 +1346,7 @@ useEffect(() => {
         }
     }
 
-    // 4. VERIFICAÇÃO FINAL CORRIGIDA
+    // ⭐⭐ VERIFICAÇÃO FINAL CORRIGIDA - VERSÃO MELHORADA
     const totalFluxo = sumOfOtherPayments + finalSinalAto + finalProSolutoValue + bonusAdimplenciaValue + campaignBonusValue;
     const valorEsperado = appraisalValue > saleValue ? appraisalValue : saleValue;
 
@@ -1366,41 +1373,88 @@ useEffect(() => {
         return corrigido;
     };
 
-    // Verificar discrepância e ajustar
+    // ⭐ PRIMEIRA VERIFICAÇÃO: Ajustar discrepância no fluxo total
     if (Math.abs(totalFluxo - valorEsperado) > 0.01) {
+        console.warn('⚠️ Discrepância no fluxo:', { totalFluxo, valorEsperado, diferenca: totalFluxo - valorEsperado });
+        
         const ajuste = valorEsperado - totalFluxo;
         
         // Tentar ajuste no Pró-Soluto primeiro
         const proSolutoAjustado = finalProSolutoValue + ajuste;
         const proSolutoCorrigidoAjustado = calcularProSolutoCorrigido(proSolutoAjustado);
-        const percentualAjustado = saleValue > 0 ? proSolutoCorrigidoAjustado / saleValue : 0;
         
-        const limitePercentual = conditionType === 'especial' ? 0.18 : (isReservaParque ? 0.18 : 0.15);
+        // ⭐ CORREÇÃO CRÍTICA: Usar valorFinalVenda em vez de saleValue
+        const percentualAjustado = valorFinalVenda > 0 ? proSolutoCorrigidoAjustado / valorFinalVenda : 0;
         
-        if (percentualAjustado <= limitePercentual) {
+        if (percentualAjustado <= limiteProSoluto) {
+            // ✅ Ajuste seguro no Pró-Soluto
             finalProSolutoValue = proSolutoAjustado;
+            console.log('✅ Ajuste aplicado no Pró-Soluto');
         } else {
-            // Ajustar no Sinal Ato se Pró-Soluto violaria limite
+            // ❌ Ajustar no Sinal Ato se Pró-Soluto violaria limite
+            console.warn('⚠️ Ajuste no Pró-Soluto violaria limite, ajustando no Sinal Ato');
             finalSinalAto += ajuste;
         }
     }
 
-    // ⭐ VERIFICAÇÃO CRÍTICA: garantir que Pró-Soluto está dentro dos limites
+    // ⭐⭐ SEGUNDA VERIFICAÇÃO CRÍTICA: Garantir que Pró-Soluto está dentro dos limites
     const proSolutoCorrigidoFinal = calcularProSolutoCorrigido(finalProSolutoValue);
-    const percentualFinal = saleValue > 0 ? proSolutoCorrigidoFinal / saleValue : 0;
-    const limiteFinal = conditionType === 'especial' ? 0.18 : (isReservaParque ? 0.18 : 0.15);
+    
+    // ⭐ CORREÇÃO CRÍTICA: Usar valorFinalVenda para cálculo do percentual
+    const percentualFinal = valorFinalVenda > 0 ? proSolutoCorrigidoFinal / valorFinalVenda : 0;
 
-    if (percentualFinal > limiteFinal) {
-        // CORREÇÃO: Reduzir Pró-Soluto e aumentar Sinal Ato
-        const excessoPercentual = percentualFinal - limiteFinal;
-        const excessoValor = excessoPercentual * saleValue;
+    console.log('🔍 VERIFICAÇÃO DE LIMITES:', {
+        proSolutoCorrigidoFinal,
+        valorFinalVenda,
+        percentualFinal: formatPercentage(percentualFinal),
+        limiteProSoluto: formatPercentage(limiteProSoluto),
+        conditionType,
+        isReservaParque
+    });
+
+    if (percentualFinal > limiteProSoluto) {
+        console.warn('🚨 Pró-Soluto final excede limite! Ajustando...', {
+            percentualFinal: formatPercentage(percentualFinal),
+            limite: formatPercentage(limiteProSoluto),
+            proSolutoCorrigidoFinal,
+            valorFinalVenda
+        });
         
-        const fatorCorrecao = excessoValor / proSolutoCorrigidoFinal;
-        const reducaoProSoluto = finalProSolutoValue * fatorCorrecao;
+        // ⭐ CORREÇÃO PRECISA: Calcular exatamente quanto reduzir
+        const valorLimiteProSolutoCorrigido = limiteProSoluto * valorFinalVenda;
+        const excessoValor = proSolutoCorrigidoFinal - valorLimiteProSolutoCorrigido;
         
-        finalProSolutoValue -= reducaoProSoluto;
+        // Calcular fator de correção considerando a correção futura
+        let fatorCorrecao = 1;
+        let gracePeriod = 1;
+        if (existingPayments.some(p => p.type === 'sinal1')) gracePeriod++;
+        if (existingPayments.some(p => p.type === 'sinal2')) gracePeriod++;
+        if (existingPayments.some(p => p.type === 'sinal3')) gracePeriod++;
+
+        if (deliveryDateObj < today) {
+            gracePeriod += differenceInMonths(today, deliveryDateObj);
+        }
+
+        for (let i = 0; i < gracePeriod; i++) {
+            const installmentDate = addMonths(today, i);
+            const installmentMonth = startOfMonth(installmentDate);
+            const deliveryMonth = startOfMonth(deliveryDateObj);
+            const rate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
+            fatorCorrecao *= (1 + rate);
+        }
+        
+        const reducaoProSoluto = excessoValor / fatorCorrecao;
+        
+        finalProSolutoValue = Math.max(0, finalProSolutoValue - reducaoProSoluto);
         finalSinalAto += reducaoProSoluto;
         
+        console.log('✅ Pró-Soluto ajustado:', {
+            novoPercentual: formatPercentage(calcularProSolutoCorrigido(finalProSolutoValue) / valorFinalVenda),
+            finalProSolutoValue,
+            finalSinalAto,
+            reducaoProSoluto
+        });
+
         // Se campanha ativada, converter parte em bônus campanha se possível
         if (isSinalCampaignActive && finalSinalAto > sinalAtoMinimoPermitido) {
             const excedenteSinalAto = finalSinalAto - sinalAtoMinimoPermitido;
@@ -1412,10 +1466,32 @@ useEffect(() => {
                 if (bonusAdicional > 0) {
                     campaignBonusValue += bonusAdicional;
                     finalSinalAto -= bonusAdicional;
+                    // Ajustar proporcionalmente o Pró-Soluto para manter o fluxo
                     finalProSolutoValue -= bonusAdicional;
                 }
             }
         }
+    }
+
+    // ⭐ VERIFICAÇÃO FINAL DE CONSISTÊNCIA
+    const totalFluxoFinal = sumOfOtherPayments + finalSinalAto + finalProSolutoValue + bonusAdimplenciaValue + campaignBonusValue;
+    const proSolutoCorrigidoVerificacao = calcularProSolutoCorrigido(finalProSolutoValue);
+    const percentualVerificacao = valorFinalVenda > 0 ? proSolutoCorrigidoVerificacao / valorFinalVenda : 0;
+
+    console.log('✅ VERIFICAÇÃO FINAL:', {
+        totalFluxoFinal,
+        valorEsperado,
+        diferenca: totalFluxoFinal - valorEsperado,
+        percentualProSoluto: formatPercentage(percentualVerificacao),
+        dentroDoLimite: percentualVerificacao <= limiteProSoluto
+    });
+
+    // Ajuste final se ainda houver discrepância (margem muito pequena)
+    if (Math.abs(totalFluxoFinal - valorEsperado) > 0.01) {
+        const ajusteFinal = valorEsperado - totalFluxoFinal;
+        finalSinalAto += ajusteFinal;
+        
+        console.log('🔧 Ajuste final aplicado:', { ajusteFinal, finalSinalAto });
     }
 
     // 5. Atualizar fluxo de pagamento
