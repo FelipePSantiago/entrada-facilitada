@@ -1106,13 +1106,18 @@ const handleAddPaymentField = async (value: string) => {
 
     // 1. Encontrar valor máximo do Pró-Soluto
     const incomeLimit = 0.5 * grossIncome;
-    const { breakdown: monthlyInsurance } = calculateConstructionInsuranceLocal(constructionStartDateObj, deliveryDateObj, simulationInstallmentValue);
+    const { breakdown: monthlyInsurance } = calculateConstructionInsuranceLocal(
+        constructionStartDateObj,
+        deliveryDateObj,
+        simulationInstallmentValue
+    );
     const insuranceMap = new Map(monthlyInsurance.map(item => [item.month, item.value]));
 
     const today = new Date();
-    const { installments: steppedInstallmentsFor1BRL, periodLengths } = calculateSteppedInstallments(1, installments, deliveryDateObj, existingPayments);
     
-    if (steppedInstallmentsFor1BRL.every(i => i <= 0)) {
+    const { installment: firstInstallmentFor1BRL } = calculatePriceInstallment(1, installments, deliveryDateObj, existingPayments);
+
+    if (firstInstallmentFor1BRL <= 0) {
         toast({
             variant: "destructive",
             title: "❌ Erro de Cálculo",
@@ -1125,12 +1130,11 @@ const handleAddPaymentField = async (value: string) => {
     const rateAfterDelivery = 0.015;
 
     let pvOfMaxInstallments = 0;
-    let installmentCounter = 0;
-
+    
     for (let i = 1; i <= installments; i++) {
         const monthDate = addMonths(today, i);
         const otherPayment = deliveryDateObj && monthDate < deliveryDateObj
-        ? (insuranceMap.get(format(monthDate, "MMMM/yyyy", { locale: ptBR })) || 0)
+            ? (insuranceMap.get(format(monthDate, "MMMM/yyyy", { locale: ptBR })) || 0)
             : simulationInstallmentValue;
         
         const maxProSolutoForThisMonth = Math.max(0, incomeLimit - otherPayment);
@@ -1138,25 +1142,14 @@ const handleAddPaymentField = async (value: string) => {
         let discountFactor = 1;
         for (let j = 1; j <= i; j++) {
             const pastMonthDate = addMonths(today, j);
-            const interestRate = deliveryDateObj && startOfMonth(pastMonthDate) < startOfMonth(deliveryDateObj) ? 0.005 : 0.015;
-            discountFactor /= (1 + interestRate);
-        }
-
-        installmentCounter++;
-        let currentFactorIndex = 0;
-        if (installmentCounter > periodLengths[0]) {
-            if (installmentCounter <= periodLengths[0] + periodLengths[1]) {
-                currentFactorIndex = 1;
-            } else if (installmentCounter <= periodLengths[0] + periodLengths[1] + periodLengths[2]) {
-                currentFactorIndex = 2;
-            } else {
-                currentFactorIndex = 3;
-            }
+            const pastInstallmentMonth = startOfMonth(pastMonthDate);
+            const pastRate = pastInstallmentMonth < startOfMonth(deliveryDateObj) ? rateBeforeDelivery : rateAfterDelivery;
+            discountFactor /= (1 + pastRate);
         }
         
-        pvOfMaxInstallments += (maxProSolutoForThisMonth / steppedInstallmentsFor1BRL[currentFactorIndex]) * discountFactor;
+        pvOfMaxInstallments += (maxProSolutoForThisMonth / firstInstallmentFor1BRL) * discountFactor;
     }
-    let finalProSolutoValue = pvOfMaxInstallments;
+    const proSolutoByIncome = pvOfMaxInstallments;
     
     const proSolutoLimitPercent = conditionType === 'especial' 
         ? 0.1799 
@@ -1174,17 +1167,16 @@ const handleAddPaymentField = async (value: string) => {
 
     for (let i = 0; i < gracePeriodMonths; i++) {
         const month = startOfMonth(addMonths(today, i));
-        const rate = deliveryDateObj && month < startOfMonth(deliveryDateObj) ? 0.005 : 0.015;
+        const rate = deliveryDateObj && month < startOfMonth(deliveryDateObj) ? rateBeforeDelivery : rateAfterDelivery;
         correctionFactor *= (1 + rate);
     }
     
     const proSolutoByPercentage = maxProSolutoCorrigido / correctionFactor;
     
-    finalProSolutoValue = Math.min(finalProSolutoValue, proSolutoByPercentage);
+    let finalProSolutoValue = Math.min(proSolutoByIncome, proSolutoByPercentage);
 
     // 2. Calcular Sinal Ato mínimo considerando DESCONTO
     const sumOfOtherPayments = existingPayments.reduce((acc, p) => {
-        // INCLUIR desconto nos "outros pagamentos"
         if (!['sinalAto', 'proSoluto', 'bonusAdimplencia', 'bonusCampanha'].includes(p.type)) {
             return acc + (p.value || 0);
         }
@@ -1193,28 +1185,23 @@ const handleAddPaymentField = async (value: string) => {
     
     const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
     
-    // VALOR FINAL DE VENDA (considerando desconto)
     const descontoValue = existingPayments.find(p => p.type === 'desconto')?.value || 0;
     const valorFinalVenda = saleValue - descontoValue;
     const sinalAtoMinimoPermitido = 0.05 * valorFinalVenda;
     
-    // Sinal Ato inicial calculado
     const sinalAtoCalculado = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue;
     
     let finalSinalAto = sinalAtoCalculado;
     let campaignBonusValue = 0;
 
-    // 3. Lógica diferenciada para campanha ATIVADA vs DESATIVADA
+    // 3. Lógica para campanha ATIVADA vs DESATIVADA
     if (isSinalCampaignActive) {
         if (sinalAtoCalculado < sinalAtoMinimoPermitido) {
-            // Caso 1: Sinal Ato menor que mínimo → ajusta para mínimo
             finalSinalAto = sinalAtoMinimoPermitido;
             finalProSolutoValue = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto;
         } else {
-            // Caso 2: Sinal Ato maior que mínimo → converte excedente em bônus campanha
             const excedente = sinalAtoCalculado - sinalAtoMinimoPermitido;
             
-            // Aplica limite percentual da campanha
             if (sinalCampaignLimitPercent !== undefined && sinalCampaignLimitPercent >= 0) {
                 const limitInCurrency = valorFinalVenda * (sinalCampaignLimitPercent / 100);
                 campaignBonusValue = Math.min(excedente, limitInCurrency);
@@ -1226,29 +1213,94 @@ const handleAddPaymentField = async (value: string) => {
             finalProSolutoValue = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto - campaignBonusValue;
         }
     } else {
-        // Campanha DESATIVADA
         if (sinalAtoCalculado < sinalAtoMinimoPermitido) {
             finalSinalAto = sinalAtoMinimoPermitido;
             finalProSolutoValue = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto;
         }
-        // Se sinalAtoCalculado >= sinalAtoMinimoPermitido, mantém os valores calculados
     }
 
-    // 4. VERIFICAÇÃO FINAL (confirmação do cálculo)
+    // 4. VERIFICAÇÃO FINAL CORRIGIDA
     const totalFluxo = sumOfOtherPayments + finalSinalAto + finalProSolutoValue + bonusAdimplenciaValue + campaignBonusValue;
     const valorEsperado = appraisalValue > saleValue ? appraisalValue : saleValue;
-    
+
+    // Função auxiliar para calcular Pró-Soluto corrigido
+    const calcularProSolutoCorrigido = (proSolutoValue: number) => {
+        let corrigido = proSolutoValue;
+        let gracePeriod = 1;
+        if (existingPayments.some(p => p.type === 'sinal1')) gracePeriod++;
+        if (existingPayments.some(p => p.type === 'sinal2')) gracePeriod++;
+        if (existingPayments.some(p => p.type === 'sinal3')) gracePeriod++;
+
+        if (deliveryDateObj < today) {
+            gracePeriod += differenceInMonths(today, deliveryDateObj);
+        }
+
+        for (let i = 0; i < gracePeriod; i++) {
+            const installmentDate = addMonths(today, i);
+            const installmentMonth = startOfMonth(installmentDate);
+            const deliveryMonth = startOfMonth(deliveryDateObj);
+            const rate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
+            corrigido *= (1 + rate);
+        }
+        
+        return corrigido;
+    };
+
+    // Verificar discrepância e ajustar
     if (Math.abs(totalFluxo - valorEsperado) > 0.01) {
-        console.warn('⚠️ Discrepância no cálculo:', { totalFluxo, valorEsperado, diferenca: totalFluxo - valorEsperado });
-        // Ajuste fino para garantir precisão
         const ajuste = valorEsperado - totalFluxo;
-        finalProSolutoValue += ajuste;
+        
+        // Tentar ajuste no Pró-Soluto primeiro
+        const proSolutoAjustado = finalProSolutoValue + ajuste;
+        const proSolutoCorrigidoAjustado = calcularProSolutoCorrigido(proSolutoAjustado);
+        const percentualAjustado = saleValue > 0 ? proSolutoCorrigidoAjustado / saleValue : 0;
+        
+        const limitePercentual = conditionType === 'especial' ? 0.18 : (isReservaParque ? 0.18 : 0.15);
+        
+        if (percentualAjustado <= limitePercentual) {
+            finalProSolutoValue = proSolutoAjustado;
+        } else {
+            // Ajustar no Sinal Ato se Pró-Soluto violaria limite
+            finalSinalAto += ajuste;
+        }
+    }
+
+    // ⭐ VERIFICAÇÃO CRÍTICA: garantir que Pró-Soluto está dentro dos limites
+    const proSolutoCorrigidoFinal = calcularProSolutoCorrigido(finalProSolutoValue);
+    const percentualFinal = saleValue > 0 ? proSolutoCorrigidoFinal / saleValue : 0;
+    const limiteFinal = conditionType === 'especial' ? 0.18 : (isReservaParque ? 0.18 : 0.15);
+
+    if (percentualFinal > limiteFinal) {
+        // CORREÇÃO: Reduzir Pró-Soluto e aumentar Sinal Ato
+        const excessoPercentual = percentualFinal - limiteFinal;
+        const excessoValor = excessoPercentual * saleValue;
+        
+        const fatorCorrecao = excessoValor / proSolutoCorrigidoFinal;
+        const reducaoProSoluto = finalProSolutoValue * fatorCorrecao;
+        
+        finalProSolutoValue -= reducaoProSoluto;
+        finalSinalAto += reducaoProSoluto;
+        
+        // Se campanha ativada, converter parte em bônus campanha se possível
+        if (isSinalCampaignActive && finalSinalAto > sinalAtoMinimoPermitido) {
+            const excedenteSinalAto = finalSinalAto - sinalAtoMinimoPermitido;
+            
+            if (sinalCampaignLimitPercent !== undefined && sinalCampaignLimitPercent >= 0) {
+                const limitInCurrency = valorFinalVenda * (sinalCampaignLimitPercent / 100);
+                const bonusAdicional = Math.min(excedenteSinalAto, limitInCurrency - campaignBonusValue);
+                
+                if (bonusAdicional > 0) {
+                    campaignBonusValue += bonusAdicional;
+                    finalSinalAto -= bonusAdicional;
+                    finalProSolutoValue -= bonusAdicional;
+                }
+            }
+        }
     }
 
     // 5. Atualizar fluxo de pagamento
     const newPayments: PaymentField[] = existingPayments.filter(p => !['sinalAto', 'proSoluto', 'bonusCampanha', 'bonusAdimplencia'].includes(p.type));
 
-    // SEMPRE incluir bônus adimplência quando avaliação > venda
     if (bonusAdimplenciaValue > 0) {
         let bonusDate = deliveryDateObj;
         if (new Date() > bonusDate) {
@@ -1276,27 +1328,6 @@ const handleAddPaymentField = async (value: string) => {
     proSolutoDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 5);
 
     newPayments.push({ type: 'proSoluto', value: Math.max(0, finalProSolutoValue), date: proSolutoDate });
-
-    // 6. VERIFICAÇÃO FINAL MELHORADA com os valores reais do fluxo
-    const totalCalculado = newPayments.reduce((sum, payment) => sum + payment.value, 0);
-    const valorEsperadoFinal = appraisalValue > saleValue ? appraisalValue : saleValue;
-
-    if (Math.abs(totalCalculado - valorEsperadoFinal) > 0.01) {
-        console.warn('⚠️ Discrepância final no cálculo:', { 
-            totalCalculado, 
-            valorEsperadoFinal, 
-            diferenca: totalCalculado - valorEsperadoFinal,
-            appraisalValue,
-            saleValue
-        });
-        
-        // Ajuste final no Pró-Soluto para fechar a conta
-        const ajusteFinal = valorEsperadoFinal - totalCalculado;
-        const proSolutoIndex = newPayments.findIndex(p => p.type === 'proSoluto');
-        if (proSolutoIndex !== -1) {
-            newPayments[proSolutoIndex].value = Math.max(0, newPayments[proSolutoIndex].value + ajusteFinal);
-        }
-    }
 
     replace(newPayments);
 
