@@ -331,167 +331,49 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     return isValid(date) ? date : null;
   }, [selectedProperty]);
 
-  // ⭐ useEffect CORRIGIDO para Pró-Soluto com Financiamento
-  // ⭐ useEffect CORRIGIDO para Pró-Soluto com Financiamento - VERSÃO CONSISTENTE
+// ⭐ SUBSTITUA o useEffect atual (linhas ~300-380) por esta versão corrigida:
 useEffect(() => {
     if (!selectedProperty || !watchedPayments.some(p => p.type === 'financiamento') || !deliveryDateObj) return;
   
     const proSolutoIndex = watchedPayments.findIndex(p => p.type === 'proSoluto');
     if (proSolutoIndex === -1) return;
   
-    const sumOfOtherPayments = watchedPayments.reduce((acc, payment) => {
-      if (!['proSoluto', 'bonusAdimplencia', 'bonusCampanha'].includes(payment.type)) {
-        return acc + (payment.value || 0);
-      }
-      return acc;
-    }, 0);
-    
-    const appraisalValue = watchedAppraisalValue || 0;
-    const saleValue = watchedSaleValue || 0;
-    const bonusAdimplencia = watchedPayments.find(p => p.type === 'bonusAdimplencia')?.value || 0;
-    const descontoValue = watchedPayments.find(p => p.type === 'desconto')?.value || 0;
-    
-    // ⭐⭐ CORREÇÃO: Usar valorFinalVenda consistente com condição mínima
-    const valorFinalVenda = saleValue - descontoValue;
-  
-    // ⭐ CÁLCULO BASE: appraisalValue = soma de todos os pagamentos
-    let newProSolutoValue = Math.max(0, appraisalValue - sumOfOtherPayments - bonusAdimplencia);
-  
-    console.log('🔍 Cálculo Manual Pró-Soluto:', {
-      appraisalValue,
-      sumOfOtherPayments,
-      bonusAdimplencia,
-      descontoValue,
-      valorFinalVenda,
-      newProSolutoValue
-    });
-  
-    // ⭐ VERIFICAR LIMITES DO PRÓ-SOLUTO (igual à condição mínima)
-    const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
-    const conditionType = getValues('conditionType');
-    const limiteProSoluto = conditionType === 'especial' ? 0.1799 : (isReservaParque ? 0.1799 : 0.1499);
-    
-    // Calcular Pró-Soluto corrigido para verificar limite
-    const calcularProSolutoCorrigido = (proSolutoValue: number) => {
-      let corrigido = proSolutoValue;
-      const today = new Date();
-      
-      let gracePeriod = 1;
-      if (watchedPayments.some(p => p.type === 'sinal1')) gracePeriod++;
-      if (watchedPayments.some(p => p.type === 'sinal2')) gracePeriod++;
-      if (watchedPayments.some(p => p.type === 'sinal3')) gracePeriod++;
-  
-      if (deliveryDateObj < today) {
-        gracePeriod += differenceInMonths(today, deliveryDateObj);
-      }
-  
-      for (let i = 0; i < gracePeriod; i++) {
-        const installmentDate = addMonths(today, i);
-        const installmentMonth = startOfMonth(installmentDate);
-        const deliveryMonth = startOfMonth(deliveryDateObj);
-        const rate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
-        corrigido *= (1 + rate);
-      }
-      
-      return corrigido;
-    };
-  
-    const proSolutoCorrigido = calcularProSolutoCorrigido(newProSolutoValue);
-    
-    // ⭐⭐ CORREÇÃO: Usar valorFinalVenda para cálculo do percentual
-    const percentualProSoluto = valorFinalVenda > 0 ? proSolutoCorrigido / valorFinalVenda : 0;
-  
-    let proSolutoValueFinal = newProSolutoValue;
-  
-    // ⭐⭐ CORREÇÃO: Lógica consistente com condição mínima para campanha sinal
-    if (percentualProSoluto > limiteProSoluto) {
-      console.warn('🚨 Pró-Soluto manual excede limite, ajustando...', {
-        percentualAtual: formatPercentage(percentualProSoluto),
-        limite: formatPercentage(limiteProSoluto),
-        isSinalCampaignActive
-      });
-  
-      // Calcular valor máximo permitido
-      const valorLimiteCorrigido = limiteProSoluto * valorFinalVenda;
-      
-      // Reverter correção para encontrar valor original máximo
-      const today = new Date();
-      let fatorCorrecao = 1;
-      let gracePeriod = 1;
-      if (watchedPayments.some(p => p.type === 'sinal1')) gracePeriod++;
-      if (watchedPayments.some(p => p.type === 'sinal2')) gracePeriod++;
-      if (watchedPayments.some(p => p.type === 'sinal3')) gracePeriod++;
-  
-      if (deliveryDateObj < today) {
-        gracePeriod += differenceInMonths(today, deliveryDateObj);
-      }
-  
-      for (let i = 0; i < gracePeriod; i++) {
-        const installmentDate = addMonths(today, i);
-        const installmentMonth = startOfMonth(installmentDate);
-        const deliveryMonth = startOfMonth(deliveryDateObj);
-        const rate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
-        fatorCorrecao *= (1 + rate);
-      }
-      
-      proSolutoValueFinal = valorLimiteCorrigido / fatorCorrecao;
-      
-      console.log('✅ Pró-Soluto manual ajustado para respeitar limite:', {
-        valorOriginal: newProSolutoValue,
-        valorAjustado: proSolutoValueFinal
-      });
-  
-      // ⭐⭐ CORREÇÃO: Se campanha sinal está ativa, verificar se podemos converter parte em bônus
-      if (isSinalCampaignActive && sinalCampaignLimitPercent !== undefined) {
-        const sinalAtoAtual = watchedPayments.find(p => p.type === 'sinalAto')?.value || 0;
-        const sinalAtoMinimoPermitido = 0.05 * valorFinalVenda;
-        const excedenteSinalAto = sinalAtoAtual - sinalAtoMinimoPermitido;
-        
-        if (excedenteSinalAto > 0) {
-          const limiteMaximoBonus = valorFinalVenda * (sinalCampaignLimitPercent / 100);
-          const bonusPossivel = Math.min(excedenteSinalAto, limiteMaximoBonus);
-          
-          // Se há espaço para bônus, ajustar os valores
-          if (bonusPossivel > 0) {
-            console.log('🎁 Ajustando para bônus campanha no cálculo manual:', bonusPossivel);
-            
-            // Encontrar índice do bônus campanha se existir
-            const bonusCampanhaIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
-            const newPayments = [...watchedPayments];
-            
-            if (bonusCampanhaIndex > -1) {
-              // Atualizar bônus existente
-              newPayments[bonusCampanhaIndex] = {
-                ...newPayments[bonusCampanhaIndex],
-                value: bonusPossivel
-              };
-            } else {
-              // Adicionar novo bônus
-              newPayments.push({
-                type: 'bonusCampanha',
-                value: bonusPossivel,
-                date: new Date()
-              });
-            }
-            
-            // Ajustar Pró-Soluto considerando o bônus
-            proSolutoValueFinal += bonusPossivel;
-            replace(newPayments);
-          }
+    // ⭐ DEBOUNCE: Executar apenas uma vez a cada 500ms
+    const timeoutId = setTimeout(() => {
+      const sumOfOtherPayments = watchedPayments.reduce((acc, payment) => {
+        if (!['proSoluto', 'bonusAdimplencia', 'bonusCampanha'].includes(payment.type)) {
+          return acc + (payment.value || 0);
         }
-      }
-    }
-  
-    const existingProSoluto = watchedPayments[proSolutoIndex];
-    if (Math.abs(existingProSoluto.value - proSolutoValueFinal) > 0.01) {
-      const newProSolutoPayment = { ...existingProSoluto, value: Math.max(0, proSolutoValueFinal) };
-      const newPayments = [...watchedPayments];
-      newPayments[proSolutoIndex] = newProSolutoPayment;
-      replace(newPayments);
+        return acc;
+      }, 0);
       
-      console.log('🔄 Pró-Soluto manual atualizado com limites:', proSolutoValueFinal);
-    }
-  }, [watchedSaleValue, watchedAppraisalValue, watchedPayments, replace, selectedProperty, deliveryDateObj, getValues, isSinalCampaignActive, sinalCampaignLimitPercent]);
+      const appraisalValue = watchedAppraisalValue || 0;
+      const descontoValue = watchedPayments.find(p => p.type === 'desconto')?.value || 0;
+      const valorFinalVenda = (watchedSaleValue || 0) - descontoValue;
+  
+      let newProSolutoValue = Math.max(0, appraisalValue - sumOfOtherPayments);
+  
+      const existingProSoluto = watchedPayments[proSolutoIndex];
+      
+      // ⭐ Só atualizar se mudança for significativa (> 1 real)
+      if (Math.abs(existingProSoluto.value - newProSolutoValue) > 1) {
+        const newPayments = [...watchedPayments];
+        newPayments[proSolutoIndex] = {
+          ...existingProSoluto,
+          value: newProSolutoValue
+        };
+        replace(newPayments);
+      }
+    }, 500); // Debounce de 500ms
+  
+    return () => clearTimeout(timeoutId); // Cleanup
+  }, [
+    watchedSaleValue, 
+    watchedAppraisalValue,
+    watchedPayments.length, // Apenas length, não o array completo
+    selectedProperty?.id,   // Apenas ID, não o objeto completo
+    deliveryDateObj?.getTime() // Apenas timestamp
+  ]);
   
   // ⭐ useEffect CORRIGIDO para Bônus Adimplência
   useEffect(() => {
@@ -1311,31 +1193,45 @@ const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     append({ type: fieldType, value: initialValue, date: initialDate });
   };
   
-  const handleSetMinimumCondition = async () => {
-    const { installments, simulationInstallmentValue } = getValues();
-    if (!installments || installments <= 0) {
-        setError("installments", { message: "Número de parcelas é obrigatório para este cálculo." });
-        toast({
-            variant: "destructive",
-            title: "❌ Parcelas Não Informadas",
-            description: "Por favor, informe o número de parcelas do pró-soluto.",
-        });
-        return;
-    }
+  // ⭐ REF para controle de processamento - adicione no topo do componente
+const isProcessingRef = useRef(false);
 
-    const isValid = await trigger(
-        ["propertyId", "saleValue", "appraisalValue", "grossIncome", "simulationInstallmentValue", "installments"],
-        { shouldFocus: true }
-    );
-    if (!isValid || !selectedProperty || !deliveryDateObj || !constructionStartDateObj) {
-        toast({
-            variant: "destructive",
-            title: "❌ Dados Incompletos",
-            description: "Por favor, preencha todos os campos obrigatórios antes de calcular.",
-        });
-        return;
-    }
-    
+// ⭐ FUNÇÃO handleSetMinimumCondition CORRIGIDA com Debounce
+const handleSetMinimumCondition = async () => {
+  // ⭐ CORREÇÃO: Verificar se já está processando para evitar loops
+  if (isProcessingRef.current) {
+    console.log('⏳ Cálculo de condição mínima já em andamento...');
+    return;
+  }
+
+  const { installments, simulationInstallmentValue } = getValues();
+  if (!installments || installments <= 0) {
+      setError("installments", { message: "Número de parcelas é obrigatório para este cálculo." });
+      toast({
+          variant: "destructive",
+          title: "❌ Parcelas Não Informadas",
+          description: "Por favor, informe o número de parcelas do pró-soluto.",
+      });
+      return;
+  }
+
+  const isValid = await trigger(
+      ["propertyId", "saleValue", "appraisalValue", "grossIncome", "simulationInstallmentValue", "installments"],
+      { shouldFocus: true }
+  );
+  if (!isValid || !selectedProperty || !deliveryDateObj || !constructionStartDateObj) {
+      toast({
+          variant: "destructive",
+          title: "❌ Dados Incompletos",
+          description: "Por favor, preencha todos os campos obrigatórios antes de calcular.",
+      });
+      return;
+  }
+  
+  // ⭐ CORREÇÃO: Marcar como processando
+  isProcessingRef.current = true;
+
+  try {
     const { saleValue, appraisalValue, grossIncome, payments: existingPayments, conditionType } = getValues();
     const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
 
@@ -1349,7 +1245,7 @@ const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         ? PRO_SOLUTO_LIMITS.ESPECIAL 
         : (isReservaParque ? PRO_SOLUTO_LIMITS.ESPECIAL : PRO_SOLUTO_LIMITS.NORMAL);
 
-    // 1. Encontrar valor máximo do Pró-Soluto (igual quando campanha está desativada)
+    // 1. Encontrar valor máximo do Pró-Soluto
     const incomeLimit = 0.5 * grossIncome;
     const { breakdown: monthlyInsurance } = calculateConstructionInsuranceLocal(
         constructionStartDateObj,
@@ -1629,14 +1525,32 @@ const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
 
     newPayments.push({ type: 'proSoluto', value: Math.max(0, finalProSolutoValue), date: proSolutoDate });
 
-    replace(newPayments);
+    // ⭐ CORREÇÃO: Usar setTimeout para quebrar o ciclo síncrono
+    setTimeout(() => {
+      replace(newPayments);
+      
+      toast({
+          title: "✅ Condição Mínima Aplicada",
+          description: `Fluxo ajustado: Sinal Ato ${centsToBrl(finalSinalAto * 100)}${campaignBonusValue > 0 ? ` + Bônus Campanha ${centsToBrl(campaignBonusValue * 100)}` : ''}`
+      });
 
+      // ⭐ CORREÇÃO: Executar submit após um delay para garantir que o estado foi atualizado
+      setTimeout(() => {
+        form.handleSubmit(onSubmit)();
+      }, 200);
+    }, 100);
+
+  } catch (error) {
+    console.error('❌ Erro no cálculo da condição mínima:', error);
     toast({
-        title: "✅ Condição Mínima Aplicada",
-        description: `Fluxo ajustado: Sinal Ato ${centsToBrl(finalSinalAto * 100)}${campaignBonusValue > 0 ? ` + Bônus Campanha ${centsToBrl(campaignBonusValue * 100)}` : ''}`
+      variant: "destructive",
+      title: "❌ Erro no Cálculo",
+      description: "Ocorreu um erro ao calcular a condição mínima. Tente novamente."
     });
-
-    setTimeout(() => form.handleSubmit(onSubmit)(), 100);
+  } finally {
+    // ⭐ CORREÇÃO: Resetar flag de processamento
+    isProcessingRef.current = false;
+  }
 };
 
     const handleGeneratePdf = async () => {
