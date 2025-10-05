@@ -1450,32 +1450,48 @@ useEffect(() => {
     let finalSinalAto = sinalAtoCalculado;
     let campaignBonusValue = 0;
 
-    // 3. Lógica para campanha ATIVADA vs DESATIVADA
+    // ⭐⭐ CORREÇÃO CRÍTICA: Lógica corrigida para campanha sinal
     if (isSinalCampaignActive) {
         if (sinalAtoCalculado < sinalAtoMinimoPermitido) {
+            // Caso 1: Sinal Ato calculado é menor que o mínimo permitido
             finalSinalAto = sinalAtoMinimoPermitido;
             finalProSolutoValue = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto;
         } else {
-            const excedente = sinalAtoCalculado - sinalAtoMinimoPermitido;
+            // Caso 2: Sinal Ato calculado é maior ou igual ao mínimo - VERIFICAR EXCEDENTE REAL
+            const excedenteReal = sinalAtoCalculado - sinalAtoMinimoPermitido;
             
-            if (sinalCampaignLimitPercent !== undefined && sinalCampaignLimitPercent >= 0) {
-                const limitInCurrency = valorFinalVenda * (sinalCampaignLimitPercent / 100);
-                campaignBonusValue = Math.min(excedente, limitInCurrency);
+            if (excedenteReal > 0 && sinalCampaignLimitPercent !== undefined && sinalCampaignLimitPercent >= 0) {
+                const limiteMaximoBonus = valorFinalVenda * (sinalCampaignLimitPercent / 100);
+                
+                // ⭐⭐ CORREÇÃO: Aplicar bônus APENAS sobre o excedente real, sem forçar Sinal Ato para o mínimo
+                campaignBonusValue = Math.min(excedenteReal, limiteMaximoBonus);
+                
+                // ⭐⭐ CORREÇÃO: Reduzir APENAS o valor do bônus do Sinal Ato calculado
+                finalSinalAto = sinalAtoCalculado - campaignBonusValue;
+                
+                // Garantir que o Sinal Ato final nunca fique abaixo do mínimo
+                if (finalSinalAto < sinalAtoMinimoPermitido) {
+                    campaignBonusValue = sinalAtoCalculado - sinalAtoMinimoPermitido;
+                    finalSinalAto = sinalAtoMinimoPermitido;
+                }
+                
+                // Recalcular Pró-Soluto considerando o bônus aplicado
+                finalProSolutoValue = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto - campaignBonusValue;
             } else {
-                campaignBonusValue = excedente;
+                // Sem excedente real ou sem limite definido - manter cálculo normal
+                finalSinalAto = sinalAtoCalculado;
+                finalProSolutoValue = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto;
             }
-            
-            finalSinalAto = sinalAtoMinimoPermitido;
-            finalProSolutoValue = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto - campaignBonusValue;
         }
     } else {
+        // Campanha desativada - apenas garantir mínimo
         if (sinalAtoCalculado < sinalAtoMinimoPermitido) {
             finalSinalAto = sinalAtoMinimoPermitido;
             finalProSolutoValue = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto;
         }
     }
 
-    // ⭐⭐ VERIFICAÇÃO FINAL CORRIGIDA - VERSÃO MELHORADA
+    // ⭐⭐ VERIFICAÇÃO FINAL CORRIGIDA
     const totalFluxo = sumOfOtherPayments + finalSinalAto + finalProSolutoValue + bonusAdimplenciaValue + campaignBonusValue;
     const valorEsperado = appraisalValue > saleValue ? appraisalValue : saleValue;
 
@@ -1577,31 +1593,24 @@ useEffect(() => {
         const reducaoProSoluto = excessoValor / fatorCorrecao;
         
         finalProSolutoValue = Math.max(0, finalProSolutoValue - reducaoProSoluto);
-        finalSinalAto += reducaoProSoluto;
+        
+        // ⭐⭐ CORREÇÃO: Distribuir ajuste entre Sinal Ato e bônus de forma inteligente
+        if (isSinalCampaignActive && campaignBonusValue > 0) {
+            // Reduzir primeiro do bônus campanha se possível
+            const reducaoBonus = Math.min(reducaoProSoluto, campaignBonusValue);
+            campaignBonusValue -= reducaoBonus;
+            finalSinalAto += (reducaoProSoluto - reducaoBonus);
+        } else {
+            finalSinalAto += reducaoProSoluto;
+        }
         
         console.log('✅ Pró-Soluto ajustado:', {
             novoPercentual: formatPercentage(calcularProSolutoCorrigido(finalProSolutoValue) / valorFinalVenda),
             finalProSolutoValue,
             finalSinalAto,
+            campaignBonusValue,
             reducaoProSoluto
         });
-
-        // Se campanha ativada, converter parte em bônus campanha se possível
-        if (isSinalCampaignActive && finalSinalAto > sinalAtoMinimoPermitido) {
-            const excedenteSinalAto = finalSinalAto - sinalAtoMinimoPermitido;
-            
-            if (sinalCampaignLimitPercent !== undefined && sinalCampaignLimitPercent >= 0) {
-                const limitInCurrency = valorFinalVenda * (sinalCampaignLimitPercent / 100);
-                const bonusAdicional = Math.min(excedenteSinalAto, limitInCurrency - campaignBonusValue);
-                
-                if (bonusAdicional > 0) {
-                    campaignBonusValue += bonusAdicional;
-                    finalSinalAto -= bonusAdicional;
-                    // Ajustar proporcionalmente o Pró-Soluto para manter o fluxo
-                    finalProSolutoValue -= bonusAdicional;
-                }
-            }
-        }
     }
 
     // ⭐ VERIFICAÇÃO FINAL DE CONSISTÊNCIA
@@ -1614,7 +1623,11 @@ useEffect(() => {
         valorEsperado,
         diferenca: totalFluxoFinal - valorEsperado,
         percentualProSoluto: formatPercentage(percentualVerificacao),
-        dentroDoLimite: percentualVerificacao <= limiteProSoluto
+        dentroDoLimite: percentualVerificacao <= limiteProSoluto,
+        sinalAtoFinal: finalSinalAto,
+        sinalAtoMinimo: sinalAtoMinimoPermitido,
+        bonusCampanha: campaignBonusValue,
+        excedenteReal: finalSinalAto - sinalAtoMinimoPermitido
     });
 
     // Ajuste final se ainda houver discrepância (margem muito pequena)
@@ -1660,7 +1673,7 @@ useEffect(() => {
 
     toast({
         title: "✅ Condição Mínima Aplicada",
-        description: "O fluxo de pagamento foi ajustado para maximizar o pró-soluto dentro das regras."
+        description: `Fluxo ajustado: Sinal Ato ${centsToBrl(finalSinalAto * 100)}${campaignBonusValue > 0 ? ` + Bônus Campanha ${centsToBrl(campaignBonusValue * 100)}` : ''}`
     });
 
     setTimeout(() => form.handleSubmit(onSubmit)(), 100);
