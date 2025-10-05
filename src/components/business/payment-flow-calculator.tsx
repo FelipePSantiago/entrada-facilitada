@@ -324,6 +324,14 @@ interface ExtractPdfResponse {
   financingValue: number;
 }
 
+// Interface para dados extraídos
+interface ExtractedData {
+  grossIncome?: number;
+  simulationInstallmentValue?: number;
+  appraisalValue?: number;
+  financingValue?: number;
+}
+
 export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinalCampaignLimitPercent, isTutorialOpen, setIsTutorialOpen }: PaymentFlowCalculatorProps) {
   const [results, setResults] = useState<Results | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -386,6 +394,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   
   const hasSinal1 = watchedPayments.some(p => p.type === 'sinal1');
   const hasSinal2 = watchedPayments.some(p => p.type === 'sinal2');
+  
+  // ⭐ CORREÇÃO: Extrair expressão complexa para variável
+  const financingPaymentsCount = watchedPayments.filter(p => p.type === 'financiamento').length;
   
   const availablePaymentFields = paymentFieldOptions.filter(opt => {
     if (["bonusAdimplencia", "bonusCampanha"].includes(opt.value)) return false;
@@ -548,7 +559,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     watchedAppraisalValue,
     watchedPayments.length,
     selectedProperty?.id,
-    deliveryDateObj?.getTime()
+    deliveryDateObj?.getTime(),
+    replace,
+    watchedPayments,
+    financingPaymentsCount // ⭐ CORREÇÃO: Adicionar dependência
   ]);
   
   // ⭐ CORREÇÃO: useEffect do Bônus Adimplência com controle global
@@ -625,13 +639,23 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       completeOperation();
       console.error('Erro no cálculo do bônus:', error);
     }
-  }, [watchedAppraisalValue, watchedSaleValue, watchedPayments.length, selectedProperty, deliveryDateObj, append, remove, replace]);
+  }, [
+    watchedAppraisalValue, 
+    watchedSaleValue, 
+    watchedPayments.length, 
+    selectedProperty, 
+    deliveryDateObj, 
+    append, 
+    remove, 
+    replace,
+    watchedPayments // ⭐ CORREÇÃO: Adicionar dependência
+  ]);
 
   // ⭐ CORREÇÃO: useEffect simplificado para financiamento
   useEffect(() => {
     const hasFinancing = watchedPayments.some(p => p.type === 'financiamento');
     console.log('🏦 Status do Financiamento:', hasFinancing ? 'Presente' : 'Ausente');
-  }, [watchedPayments.filter(p => p.type === 'financiamento').length]);
+  }, [financingPaymentsCount]); // ⭐ CORREÇÃO: Usar variável extraída
   
   useEffect(() => {
     if (!selectedProperty) return;
@@ -749,6 +773,16 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         }
         return;
     }
+
+    // ⭐ CORREÇÃO: Validar arquivo
+    if (!validateFileSize(file)) {
+      toast({ variant: 'destructive', title: '❌ Arquivo Muito Grande', description: 'O arquivo deve ter no máximo 15MB.' });
+      return;
+    }
+    if (!validateMimeType(file, ['application/pdf', 'image/jpeg', 'image/png'])) {
+      toast({ variant: 'destructive', title: '❌ Arquivo Inválido', description: 'Por favor, envie um PDF ou imagem.' });
+      return;
+    }
   
     setIsExtracting(true);
     
@@ -782,7 +816,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
           console.log('📊 Dados extraídos:', response.data);
           
           if (response.data) {
-            await processExtractedData(response.data);
+            await processExtractedData(response.data as ExtractedData);
           } else {
             throw new Error('Nenhum dado retornado pela função');
           }
@@ -836,8 +870,8 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     };
   };
 
-  // FUNÇÃO CORRIGIDA: processExtractedData
-  const processExtractedData = async (extractedData: any) => {
+  // FUNÇÃO CORRIGIDA: processExtractedData com tipagem adequada
+  const processExtractedData = async (extractedData: ExtractedData) => {
     console.log('🎉 Processando dados extraídos:', extractedData);
     
     try {
@@ -1417,7 +1451,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       const sinalAtoMinimoPermitido = 0.05 * valorFinalVenda;
       
       // ⭐⭐ CORREÇÃO CRÍTICA: Primeiro calcula como se campanha estivesse DESATIVADA
-      let sinalAtoCalculadoSemCampanha = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue;
+      const sinalAtoCalculadoSemCampanha = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue; // ⭐ CORREÇÃO: usar const
       
       let finalSinalAto = sinalAtoCalculadoSemCampanha;
       let finalProSolutoComCampanha = finalProSolutoValue;

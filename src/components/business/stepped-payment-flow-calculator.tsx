@@ -246,6 +246,14 @@ interface SteppedPaymentFlowCalculatorProps {
     setIsTutorialOpen: (isOpen: boolean) => void;
 }
 
+// Interface para dados extraídos
+interface ExtractedData {
+  grossIncome?: number;
+  simulationInstallmentValue?: number;
+  appraisalValue?: number;
+  financingValue?: number;
+}
+
 export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive, sinalCampaignLimitPercent, isTutorialOpen, setIsTutorialOpen }: SteppedPaymentFlowCalculatorProps) {
   const [results, setResults] = useState<Results | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -308,6 +316,9 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
   
   const hasSinal1 = watchedPayments.some((p: PaymentField) => p.type === 'sinal1');
   const hasSinal2 = watchedPayments.some((p: PaymentField) => p.type === 'sinal2');
+  
+  // ⭐ CORREÇÃO: Extrair expressão complexa para variável
+  const financingPaymentsCount = watchedPayments.filter(p => p.type === 'financiamento').length;
   
   const availablePaymentFields = paymentFieldOptions.filter(opt => {
     if (["bonusAdimplencia", "bonusCampanha"].includes(opt.value)) return false;
@@ -435,7 +446,10 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     watchedAppraisalValue,
     watchedPayments.length,
     selectedProperty?.id,
-    deliveryDateObj?.getTime()
+    deliveryDateObj?.getTime(),
+    replace,
+    watchedPayments,
+    financingPaymentsCount // ⭐ CORREÇÃO: Adicionar dependência
   ]);
   
   // ⭐ CORREÇÃO: useEffect do Bônus Adimplência com controle global
@@ -512,13 +526,23 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
       completeOperation();
       console.error('Erro no cálculo do bônus:', error);
     }
-  }, [watchedAppraisalValue, watchedSaleValue, watchedPayments.length, selectedProperty, deliveryDateObj, append, remove, replace]);
+  }, [
+    watchedAppraisalValue, 
+    watchedSaleValue, 
+    watchedPayments.length, 
+    selectedProperty, 
+    deliveryDateObj, 
+    append, 
+    remove, 
+    replace,
+    watchedPayments // ⭐ CORREÇÃO: Adicionar dependência
+  ]);
 
   // ⭐ CORREÇÃO: useEffect simplificado para financiamento
   useEffect(() => {
     const hasFinancing = watchedPayments.some(p => p.type === 'financiamento');
     console.log('🏦 Status do Financiamento:', hasFinancing ? 'Presente' : 'Ausente');
-  }, [watchedPayments.filter(p => p.type === 'financiamento').length]);
+  }, [financingPaymentsCount]); // ⭐ CORREÇÃO: Usar variável extraída
   
   useEffect(() => {
     if (!selectedProperty) return;
@@ -1069,7 +1093,7 @@ const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
           const response = await extractPdfFunction(fileData);
           
           if (response?.data) {
-            await processExtractedData(response.data);
+            await processExtractedData(response.data as ExtractedData);
           } else {
             throw new Error('Resposta vazia da Cloud Function');
           }
@@ -1133,7 +1157,7 @@ const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
   };
   
   // Função auxiliar para processar os dados extraídos - ATUALIZADA
-  const processExtractedData = async (extractedData: any) => {
+  const processExtractedData = async (extractedData: ExtractedData) => {
     console.log('🎉 Processando dados extraídos:', extractedData);
     
     try {
@@ -1403,7 +1427,7 @@ const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
       const sinalAtoMinimoPermitido = 0.05 * valorFinalVenda;
       
       // ⭐⭐ CORREÇÃO CRÍTICA: Primeiro calcula como se campanha estivesse DESATIVADA
-      let sinalAtoCalculadoSemCampanha = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue;
+      const sinalAtoCalculadoSemCampanha = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue; // ⭐ CORREÇÃO: usar const
       
       let finalSinalAto = sinalAtoCalculadoSemCampanha;
       let finalProSolutoComCampanha = finalProSolutoValue;
