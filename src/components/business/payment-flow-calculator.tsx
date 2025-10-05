@@ -6,7 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { getAuth } from "firebase/auth";
-import { centsToBrl } from "@/lib/business/formatters";
 import { formatPercentage, centsToBrl } from "@/lib/business/formatters";
 import {
   Select,
