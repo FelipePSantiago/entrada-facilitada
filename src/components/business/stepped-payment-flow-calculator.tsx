@@ -5,7 +5,6 @@ import { useForm, useFieldArray, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { getAuth } from "firebase/auth";
 import * as z from "zod";
-import { centsToBrl } from "@/lib/business/formatters";
 import {
   Select,
   SelectContent,
