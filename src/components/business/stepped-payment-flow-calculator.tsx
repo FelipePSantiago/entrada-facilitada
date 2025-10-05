@@ -1348,7 +1348,7 @@ const handleAddPaymentField = async (value: string) => {
         ? PRO_SOLUTO_LIMITS.ESPECIAL 
         : (isReservaParque ? PRO_SOLUTO_LIMITS.ESPECIAL : PRO_SOLUTO_LIMITS.NORMAL);
 
-    // 1. Encontrar valor máximo do Pró-Soluto
+    // 1. Encontrar valor máximo do Pró-Soluto (igual quando campanha está desativada)
     const incomeLimit = 0.5 * grossIncome;
     const { breakdown: monthlyInsurance } = calculateConstructionInsuranceLocal(
         constructionStartDateObj,
@@ -1395,7 +1395,6 @@ const handleAddPaymentField = async (value: string) => {
     }
     const proSolutoByIncome = pvOfMaxInstallments;
     
-    // ⭐ CORREÇÃO: Usar o mesmo limite em todo o cálculo
     const maxProSolutoCorrigido = limiteProSoluto * saleValue;
     
     let correctionFactor = 1;
@@ -1430,51 +1429,67 @@ const handleAddPaymentField = async (value: string) => {
     const valorFinalVenda = saleValue - descontoValue;
     const sinalAtoMinimoPermitido = 0.05 * valorFinalVenda;
     
-    const sinalAtoCalculado = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue;
+    // ⭐⭐ CORREÇÃO CRÍTICA: Primeiro calcula como se campanha estivesse DESATIVADA
+    let sinalAtoCalculadoSemCampanha = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue;
     
-    let finalSinalAto = sinalAtoCalculado;
+    let finalSinalAto = sinalAtoCalculadoSemCampanha;
+    let finalProSolutoComCampanha = finalProSolutoValue;
     let campaignBonusValue = 0;
 
-    // ⭐⭐ CORREÇÃO CRÍTICA: Lógica corrigida para campanha sinal
+    // ⭐⭐ CORREÇÃO CRÍTICA: Lógica corrigida seguindo exatamente a descrição
     if (isSinalCampaignActive) {
-        if (sinalAtoCalculado < sinalAtoMinimoPermitido) {
-            // Caso 1: Sinal Ato calculado é menor que o mínimo permitido
+        console.log('🔍 Cálculo com Campanha Sinal Ativa:');
+        console.log('Sinal Ato Calculado (sem campanha):', sinalAtoCalculadoSemCampanha);
+        console.log('Sinal Ato Mínimo Permitido:', sinalAtoMinimoPermitido);
+        
+        if (sinalAtoCalculadoSemCampanha <= sinalAtoMinimoPermitido) {
+            // Caso 1: Sinal Ato calculado é menor ou igual ao mínimo permitido
+            console.log('📉 Sinal Ato menor/igual ao mínimo - aplicando mínimo');
             finalSinalAto = sinalAtoMinimoPermitido;
-            finalProSolutoValue = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto;
+            finalProSolutoComCampanha = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto;
         } else {
-            // Caso 2: Sinal Ato calculado é maior ou igual ao mínimo - VERIFICAR EXCEDENTE REAL
-            const excedenteReal = sinalAtoCalculado - sinalAtoMinimoPermitido;
+            // Caso 2: Sinal Ato calculado é maior que o mínimo - calcular excedente
+            const excedente = sinalAtoCalculadoSemCampanha - sinalAtoMinimoPermitido;
+            console.log('📈 Excedente calculado:', excedente);
             
-            if (excedenteReal > 0 && sinalCampaignLimitPercent !== undefined && sinalCampaignLimitPercent >= 0) {
+            if (sinalCampaignLimitPercent !== undefined && sinalCampaignLimitPercent >= 0) {
                 const limiteMaximoBonus = valorFinalVenda * (sinalCampaignLimitPercent / 100);
+                console.log('💰 Limite máximo do bônus:', limiteMaximoBonus);
                 
-                // ⭐⭐ CORREÇÃO: Aplicar bônus APENAS sobre o excedente real, sem forçar Sinal Ato para o mínimo
-                campaignBonusValue = Math.min(excedenteReal, limiteMaximoBonus);
-                
-                // ⭐⭐ CORREÇÃO: Reduzir APENAS o valor do bônus do Sinal Ato calculado
-                finalSinalAto = sinalAtoCalculado - campaignBonusValue;
-                
-                // Garantir que o Sinal Ato final nunca fique abaixo do mínimo
-                if (finalSinalAto < sinalAtoMinimoPermitido) {
-                    campaignBonusValue = sinalAtoCalculado - sinalAtoMinimoPermitido;
-                    finalSinalAto = sinalAtoMinimoPermitido;
+                if (excedente <= limiteMaximoBonus) {
+                    // Caso 2A: Excedente é menor ou igual ao limite máximo
+                    console.log('✅ Excedente dentro do limite - aplicando bônus completo');
+                    campaignBonusValue = excedente;
+                    // ⭐⭐ Bônus é subtraído do Pró-Soluto, não do Sinal Ato
+                    finalProSolutoComCampanha = finalProSolutoValue - campaignBonusValue;
+                    finalSinalAto = sinalAtoCalculadoSemCampanha; // Mantém Sinal Ato calculado
+                } else {
+                    // Caso 2B: Excedente é maior que o limite máximo
+                    console.log('⚠️ Excedente excede limite - aplicando limite máximo');
+                    campaignBonusValue = limiteMaximoBonus;
+                    // ⭐⭐ Bônus é subtraído do Pró-Soluto
+                    finalProSolutoComCampanha = finalProSolutoValue - campaignBonusValue;
+                    // ⭐⭐ Diferença entre excedente e limite é subtraída do Sinal Ato
+                    const diferencaExcedente = excedente - limiteMaximoBonus;
+                    finalSinalAto = sinalAtoCalculadoSemCampanha - diferencaExcedente;
                 }
-                
-                // Recalcular Pró-Soluto considerando o bônus aplicado
-                finalProSolutoValue = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto - campaignBonusValue;
-            } else {
-                // Sem excedente real ou sem limite definido - manter cálculo normal
-                finalSinalAto = sinalAtoCalculado;
-                finalProSolutoValue = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto;
             }
         }
+        
+        console.log('🎯 Resultado final:');
+        console.log('Sinal Ato Final:', finalSinalAto);
+        console.log('Bônus Campanha:', campaignBonusValue);
+        console.log('Pró-Soluto Final:', finalProSolutoComCampanha);
     } else {
-        // Campanha desativada - apenas garantir mínimo
-        if (sinalAtoCalculado < sinalAtoMinimoPermitido) {
+        // Campanha desativada - lógica original
+        if (sinalAtoCalculadoSemCampanha < sinalAtoMinimoPermitido) {
             finalSinalAto = sinalAtoMinimoPermitido;
-            finalProSolutoValue = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto;
+            finalProSolutoComCampanha = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto;
         }
     }
+
+    // Usar o Pró-Soluto ajustado pela campanha
+    finalProSolutoValue = finalProSolutoComCampanha;
 
     // ⭐⭐ VERIFICAÇÃO FINAL CORRIGIDA
     const totalFluxo = sumOfOtherPayments + finalSinalAto + finalProSolutoValue + bonusAdimplenciaValue + campaignBonusValue;
@@ -1514,7 +1529,6 @@ const handleAddPaymentField = async (value: string) => {
         const proSolutoAjustado = finalProSolutoValue + ajuste;
         const proSolutoCorrigidoAjustado = calcularProSolutoCorrigido(proSolutoAjustado);
         
-        // ⭐ CORREÇÃO CRÍTICA: Usar valorFinalVenda em vez de saleValue
         const percentualAjustado = valorFinalVenda > 0 ? proSolutoCorrigidoAjustado / valorFinalVenda : 0;
         
         if (percentualAjustado <= limiteProSoluto) {
@@ -1530,28 +1544,11 @@ const handleAddPaymentField = async (value: string) => {
 
     // ⭐⭐ SEGUNDA VERIFICAÇÃO CRÍTICA: Garantir que Pró-Soluto está dentro dos limites
     const proSolutoCorrigidoFinal = calcularProSolutoCorrigido(finalProSolutoValue);
-    
-    // ⭐ CORREÇÃO CRÍTICA: Usar valorFinalVenda para cálculo do percentual
     const percentualFinal = valorFinalVenda > 0 ? proSolutoCorrigidoFinal / valorFinalVenda : 0;
 
-    console.log('🔍 VERIFICAÇÃO DE LIMITES:', {
-        proSolutoCorrigidoFinal,
-        valorFinalVenda,
-        percentualFinal: formatPercentage(percentualFinal),
-        limiteProSoluto: formatPercentage(limiteProSoluto),
-        conditionType,
-        isReservaParque
-    });
-
     if (percentualFinal > limiteProSoluto) {
-        console.warn('🚨 Pró-Soluto final excede limite! Ajustando...', {
-            percentualFinal: formatPercentage(percentualFinal),
-            limite: formatPercentage(limiteProSoluto),
-            proSolutoCorrigidoFinal,
-            valorFinalVenda
-        });
+        console.warn('🚨 Pró-Soluto final excede limite! Ajustando...');
         
-        // ⭐ CORREÇÃO PRECISA: Calcular exatamente quanto reduzir
         const valorLimiteProSolutoCorrigido = limiteProSoluto * valorFinalVenda;
         const excessoValor = proSolutoCorrigidoFinal - valorLimiteProSolutoCorrigido;
         
@@ -1578,49 +1575,26 @@ const handleAddPaymentField = async (value: string) => {
         const reducaoProSoluto = excessoValor / fatorCorrecao;
         
         finalProSolutoValue = Math.max(0, finalProSolutoValue - reducaoProSoluto);
-        
-        // ⭐⭐ CORREÇÃO: Distribuir ajuste entre Sinal Ato e bônus de forma inteligente
-        if (isSinalCampaignActive && campaignBonusValue > 0) {
-            // Reduzir primeiro do bônus campanha se possível
-            const reducaoBonus = Math.min(reducaoProSoluto, campaignBonusValue);
-            campaignBonusValue -= reducaoBonus;
-            finalSinalAto += (reducaoProSoluto - reducaoBonus);
-        } else {
-            finalSinalAto += reducaoProSoluto;
-        }
-        
-        console.log('✅ Pró-Soluto ajustado:', {
-            novoPercentual: formatPercentage(calcularProSolutoCorrigido(finalProSolutoValue) / valorFinalVenda),
-            finalProSolutoValue,
-            finalSinalAto,
-            campaignBonusValue,
-            reducaoProSoluto
-        });
+        finalSinalAto += reducaoProSoluto;
     }
 
     // ⭐ VERIFICAÇÃO FINAL DE CONSISTÊNCIA
     const totalFluxoFinal = sumOfOtherPayments + finalSinalAto + finalProSolutoValue + bonusAdimplenciaValue + campaignBonusValue;
-    const proSolutoCorrigidoVerificacao = calcularProSolutoCorrigido(finalProSolutoValue);
-    const percentualVerificacao = valorFinalVenda > 0 ? proSolutoCorrigidoVerificacao / valorFinalVenda : 0;
 
     console.log('✅ VERIFICAÇÃO FINAL:', {
         totalFluxoFinal,
         valorEsperado,
         diferenca: totalFluxoFinal - valorEsperado,
-        percentualProSoluto: formatPercentage(percentualVerificacao),
-        dentroDoLimite: percentualVerificacao <= limiteProSoluto,
         sinalAtoFinal: finalSinalAto,
         sinalAtoMinimo: sinalAtoMinimoPermitido,
         bonusCampanha: campaignBonusValue,
-        excedenteReal: finalSinalAto - sinalAtoMinimoPermitido
+        proSolutoFinal: finalProSolutoValue
     });
 
     // Ajuste final se ainda houver discrepância (margem muito pequena)
     if (Math.abs(totalFluxoFinal - valorEsperado) > 0.01) {
         const ajusteFinal = valorEsperado - totalFluxoFinal;
         finalSinalAto += ajusteFinal;
-        
-        console.log('🔧 Ajuste final aplicado:', { ajusteFinal, finalSinalAto });
     }
 
     // 5. Atualizar fluxo de pagamento
