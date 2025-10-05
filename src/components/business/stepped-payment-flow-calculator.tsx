@@ -1,5 +1,3 @@
-[file name]: stepped-payment-flow-calculator.tsx
-[file content begin]
 "use client";
 
 import { useRef, useState, useMemo, useEffect } from "react";
@@ -2456,4 +2454,3 @@ const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     </>
   );
 }
-[file content end]

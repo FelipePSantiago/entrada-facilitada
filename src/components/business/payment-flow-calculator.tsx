@@ -1,5 +1,3 @@
-[file name]: payment-flow-calculator.tsx
-[file content begin]
 'use client';
 
 import { useState, useEffect, useRef, useMemo, memo } from "react";
@@ -2417,4 +2415,3 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     </>
   );
 }
-[file content end]
