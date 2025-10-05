@@ -3,8 +3,6 @@
 import { useRef, useState, useMemo, useEffect } from "react";
 import { useForm, useFieldArray, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ExtractPricingOutput } from "@/types";
-import { getExtractDataFromSimulationPdfAction } from "@/actions";
 import { getAuth } from "firebase/auth";
 import * as z from "zod";
 import {

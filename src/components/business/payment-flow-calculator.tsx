@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useMemo, memo } from "react";
 import { useForm, useFieldArray, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { ExtractPricingOutput } from "@/types";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { getAuth } from "firebase/auth";
 import {
