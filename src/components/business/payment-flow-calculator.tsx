@@ -446,6 +446,68 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     });
   }, [allUnits, statusFilter, floorFilter, typologyFilter, sunPositionFilter]);
 
+  // ⭐⭐ CORREÇÃO: Função auxiliar para verificação robusta da campanha
+  const shouldApplyCampaignBonus = (isSinalCampaignActive: boolean, sinalCampaignLimitPercent?: number): boolean => {
+    const isActive = isSinalCampaignActive && 
+                    sinalCampaignLimitPercent !== undefined && 
+                    sinalCampaignLimitPercent > 0;
+    
+    console.log('🔍 Verificação da Campanha:', {
+        isSinalCampaignActive,
+        sinalCampaignLimitPercent,
+        isActive
+    });
+    
+    return isActive;
+  };
+
+    // ⭐⭐ CORREÇÃO: Função para aplicar lógica da campanha sinal em qualquer cálculo
+    const applyCampaignLogic = (
+      sinalAtoCalculado: number,
+      sinalAtoMinimo: number,
+      finalProSolutoValue: number,
+      valorFinalVenda: number,
+      sinalCampaignLimitPercent?: number
+    ): { finalSinalAto: number; finalProSoluto: number; campaignBonus: number } => {
+      
+      let finalSinalAto = sinalAtoCalculado;
+      let finalProSoluto = finalProSolutoValue;
+      let campaignBonus = 0;
+  
+      const isCampaignActive = shouldApplyCampaignBonus(isSinalCampaignActive, sinalCampaignLimitPercent);
+  
+      if (isCampaignActive) {
+        console.log('🎯 Aplicando lógica da campanha no cálculo...');
+        
+        const limiteMaximoBonus = valorFinalVenda * (sinalCampaignLimitPercent! / 100);
+  
+        if (sinalAtoCalculado <= sinalAtoMinimo) {
+          // Caso 1: Sinal Ato <= Mínimo
+          finalSinalAto = sinalAtoMinimo;
+          finalProSoluto = finalProSolutoValue; // Pró-Soluto se ajusta automaticamente
+          campaignBonus = 0;
+        } else {
+          // Caso 2: Sinal Ato > Mínimo - aplicar bônus
+          const excedente = sinalAtoCalculado - sinalAtoMinimo;
+          
+          if (excedente <= limiteMaximoBonus) {
+            // Caso 2A: Excedente dentro do limite
+            campaignBonus = excedente;
+            finalProSoluto = finalProSolutoValue - campaignBonus;
+            finalSinalAto = sinalAtoCalculado;
+          } else {
+            // Caso 2B: Excedente excede limite
+            campaignBonus = limiteMaximoBonus;
+            finalProSoluto = finalProSolutoValue - campaignBonus;
+            const diferencaExcedente = excedente - limiteMaximoBonus;
+            finalSinalAto = sinalAtoCalculado - diferencaExcedente;
+          }
+        }
+      }
+  
+      return { finalSinalAto, finalProSoluto, campaignBonus };
+    };
+
   // ⭐ CORREÇÃO: Funções auxiliares para controle global de processamento
   const canProceedWithOperation = (operationName: string, minDelayMs = 500): boolean => {
     const now = Date.now();
@@ -505,20 +567,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
 
     return () => clearInterval(interval);
   }, [toast]);
-
-  // Filtro para seguro de obras (mostrar apenas a partir da data do sinal)
-  const sinalAtoDate = useMemo(() => {
-    const sinal = watchedPayments.find(p => p.type === 'sinalAto');
-    return sinal ? startOfMonth(sinal.date) : startOfMonth(new Date());
-  }, [watchedPayments]);
-
-  const filteredInsuranceBreakdown = useMemo(() => {
-    if (!results?.monthlyInsuranceBreakdown) return [];
-    return results.monthlyInsuranceBreakdown.filter(item => {
-      const itemDate = startOfMonth(item.date);
-      return itemDate > sinalAtoDate;
-    });
-  }, [results?.monthlyInsuranceBreakdown, sinalAtoDate]);
 
   // ⭐⭐ CORREÇÃO: useEffect do Bônus Adimplência FIXO
   useEffect(() => {
@@ -1056,15 +1104,60 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     }
 
     // ⭐⭐ CORREÇÃO: Recalcular Pró-Soluto para ajustar ao fluxo considerando valores FIXOS
-    const sumOfOtherPayments = values.payments.reduce((acc, payment) => {
-      if (!['proSoluto', 'bonusAdimplencia', 'bonusCampanha'].includes(payment.type)) {
-        return acc + (payment.value || 0);
-      }
-      return acc;
-    }, 0);
-
-    let proSolutoValue = values.appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue;
-    proSolutoValue = Math.max(0, proSolutoValue);
+        // ⭐⭐ CORREÇÃO: Recalcular Pró-Soluto considerando campanha
+        const sumOfOtherPayments = values.payments.reduce((acc, payment) => {
+          if (!['proSoluto', 'bonusAdimplencia', 'bonusCampanha'].includes(payment.type)) {
+            return acc + (payment.value || 0);
+          }
+          return acc;
+        }, 0);
+    
+        let proSolutoValue = values.appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue;
+        proSolutoValue = Math.max(0, proSolutoValue);
+    
+        console.log('🔄 Pró-Soluto recalculado com valores fixos:', {
+          appraisalValue: values.appraisalValue,
+          sumOfOtherPayments: sumOfOtherPayments,
+          bonusAdimplenciaValue: bonusAdimplenciaValue,
+          proSolutoValue: proSolutoValue
+        });
+    
+        // ⭐⭐ NOVA CORREÇÃO: Aplicar lógica da campanha sinal também no cálculo manual
+        const descontoValue = values.payments.find(p => p.type === 'desconto')?.value || 0;
+        const valorFinalVenda = values.saleValue - descontoValue;
+        const sinalAtoMinimoPermitido = 0.05 * valorFinalVenda;
+    
+        console.log('🎯 Aplicando campanha sinal no cálculo manual:', {
+          sinalAtoInformado: centsToBrl(sinalAtoValue * 100),
+          sinalAtoMinimo: centsToBrl(sinalAtoMinimoPermitido * 100),
+          valorFinalVenda: centsToBrl(valorFinalVenda * 100),
+          campanhaAtiva: shouldApplyCampaignBonus(isSinalCampaignActive, sinalCampaignLimitPercent)
+        });
+    
+        let finalSinalAto = sinalAtoValue;
+        let finalProSolutoValue = proSolutoValue;
+        let campaignBonusValue = 0;
+    
+        // ⭐⭐ APLICAR LÓGICA DA CAMPANHA
+        if (shouldApplyCampaignBonus(isSinalCampaignActive, sinalCampaignLimitPercent)) {
+          const resultadoCampanha = applyCampaignLogic(
+            sinalAtoValue,
+            sinalAtoMinimoPermitido,
+            proSolutoValue,
+            valorFinalVenda,
+            sinalCampaignLimitPercent
+          );
+          
+          finalSinalAto = resultadoCampanha.finalSinalAto;
+          finalProSolutoValue = resultadoCampanha.finalProSoluto;
+          campaignBonusValue = resultadoCampanha.campaignBonus;
+    
+          console.log('🎁 Resultado da campanha no cálculo manual:', {
+            sinalAtoFinal: centsToBrl(finalSinalAto * 100),
+            proSolutoFinal: centsToBrl(finalProSolutoValue * 100),
+            bonusCampanha: centsToBrl(campaignBonusValue * 100)
+          });
+        };
 
     console.log('🔄 Pró-Soluto recalculado com valores fixos:', {
       appraisalValue: values.appraisalValue,
@@ -1073,7 +1166,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       proSolutoValue: proSolutoValue
     });
 
-    const financedAmount = proSolutoValue;
+    const financedAmount = finalProSolutoValue;
     const installments = values.installments ?? 0;
 
     if (financedAmount <= 0 && hasProSoluto) {
@@ -1491,9 +1584,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         });
 
         // ⭐⭐ VERIFICAÇÃO ROBUSTA DA CAMPANHA
-        const isCampaignReallyActive = isSinalCampaignActive && 
-                                      sinalCampaignLimitPercent !== undefined && 
-                                      sinalCampaignLimitPercent > 0;
+        const isCampaignReallyActive = shouldApplyCampaignBonus(isSinalCampaignActive, sinalCampaignLimitPercent);
 
         console.log('🔍 Verificação final da campanha:', {
             isCampaignReallyActive,
@@ -1503,51 +1594,61 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         });
 
         if (isCampaignReallyActive) {
-            console.log('🎯 Cálculo com Campanha Sinal Ativa - Limite:', sinalCampaignLimitPercent + '%');
-            console.log('Sinal Ato Calculado (sem campanha):', centsToBrl(sinalAtoCalculadoSemCampanha * 100));
-            console.log('Sinal Ato Mínimo Permitido:', centsToBrl(sinalAtoMinimoPermitido * 100));
+            console.log('🎯🎯🎯 Cálculo com Campanha Sinal Ativa - Limite:', sinalCampaignLimitPercent + '%');
             
+            const limiteMaximoBonus = valorFinalVenda * (sinalCampaignLimitPercent! / 100);
+            console.log('💰💰💰 Limite máximo do bônus:', centsToBrl(limiteMaximoBonus * 100));
+
             if (sinalAtoCalculadoSemCampanha <= sinalAtoMinimoPermitido) {
-                // Caso 1: Sinal Ato calculado é menor ou igual ao mínimo permitido
-                console.log('📉 Sinal Ato menor/igual ao mínimo - aplicando mínimo');
+                // ⭐⭐ CASO 1: Sinal Ato é menor ou igual ao mínimo
+                console.log('🚫🚫🚫 ENTROU NO CASO 1 - Sinal Ato <= Mínimo - BÔNUS SERÁ ZERO');
                 finalSinalAto = sinalAtoMinimoPermitido;
                 finalProSolutoComCampanha = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto;
+                // ⭐⭐ CORREÇÃO: No Caso 1, bônus campanha é zero (comportamento correto)
+                campaignBonusValue = 0;
             } else {
-                // Caso 2: Sinal Ato calculado é maior que o mínimo - calcular excedente
-                const excedente = sinalAtoCalculadoSemCampanha - sinalAtoMinimoPermitido;
-                console.log('📈 Excedente calculado:', centsToBrl(excedente * 100));
+                // ⭐⭐ CASO 2: Sinal Ato é maior que o mínimo - calcular excedente
+                console.log('🎯🎯🎯 ENTROU NO CASO 2 - Sinal Ato > Mínimo - DEVERIA APLICAR BÔNUS');
                 
-                if (sinalCampaignLimitPercent !== undefined && sinalCampaignLimitPercent >= 0) {
-                    const limiteMaximoBonus = valorFinalVenda * (sinalCampaignLimitPercent / 100);
-                    console.log('💰 Limite máximo do bônus:', centsToBrl(limiteMaximoBonus * 100));
+                const excedente = sinalAtoCalculadoSemCampanha - sinalAtoMinimoPermitido;
+                console.log('📈📈📈 Excedente calculado:', centsToBrl(excedente * 100));
+
+                // ⭐⭐ DEBUG DETALHADO DO CASO 2
+                console.log('🔍🔍🔍 DEBUG CASO 2 - Valores de entrada:', {
+                    sinalAtoCalculadoSemCampanha: centsToBrl(sinalAtoCalculadoSemCampanha * 100),
+                    sinalAtoMinimoPermitido: centsToBrl(sinalAtoMinimoPermitido * 100),
+                    excedenteCalculado: centsToBrl(excedente * 100),
+                    limiteMaximoBonus: centsToBrl(limiteMaximoBonus * 100),
+                    isExcedenteWithinLimit: excedente <= limiteMaximoBonus
+                });
+
+                if (excedente <= limiteMaximoBonus) {
+                    // Caso 2A: Excedente é menor ou igual ao limite máximo
+                    console.log('✅✅✅ CASO 2A - Excedente dentro do limite - APLICANDO BÔNUS COMPLETO');
+                    campaignBonusValue = excedente;
+                    finalProSolutoComCampanha = finalProSolutoValue - campaignBonusValue;
+                    finalSinalAto = sinalAtoCalculadoSemCampanha; // Mantém Sinal Ato calculado
                     
-                    if (excedente <= limiteMaximoBonus) {
-                        // Caso 2A: Excedente é menor ou igual ao limite máximo
-                        console.log('✅ Excedente dentro do limite - aplicando bônus completo');
-                        campaignBonusValue = excedente;
-                        // ⭐⭐ Bônus é subtraído do Pró-Soluto, não do Sinal Ato
-                        finalProSolutoComCampanha = finalProSolutoValue - campaignBonusValue;
-                        finalSinalAto = sinalAtoCalculadoSemCampanha; // Mantém Sinal Ato calculado
-                    } else {
-                        // Caso 2B: Excedente é maior que o limite máximo
-                        console.log('⚠️ Excedente excede limite - aplicando limite máximo');
-                        campaignBonusValue = limiteMaximoBonus;
-                        // ⭐⭐ Bônus é subtraído do Pró-Soluto
-                        finalProSolutoComCampanha = finalProSolutoValue - campaignBonusValue;
-                        // ⭐⭐ Diferença entre excedente e limite é subtraída do Sinal Ato
-                        const diferencaExcedente = excedente - limiteMaximoBonus;
-                        finalSinalAto = sinalAtoCalculadoSemCampanha - diferencaExcedente;
-                    }
+                    console.log('💰💰💰 BÔNUS CAMPANHA DEFINIDO:', centsToBrl(campaignBonusValue * 100));
+                } else {
+                    // Caso 2B: Excedente é maior que o limite máximo
+                    console.log('⚠️⚠️⚠️ CASO 2B - Excedente excede limite - APLICANDO LIMITE MÁXIMO');
+                    campaignBonusValue = limiteMaximoBonus;
+                    finalProSolutoComCampanha = finalProSolutoValue - campaignBonusValue;
+                    const diferencaExcedente = excedente - limiteMaximoBonus;
+                    finalSinalAto = sinalAtoCalculadoSemCampanha - diferencaExcedente;
+                    
+                    console.log('💰💰💰 BÔNUS CAMPANHA DEFINIDO:', centsToBrl(campaignBonusValue * 100));
                 }
             }
             
-            console.log('🎯 Resultado final com campanha:');
+            console.log('🎯🎯🎯 Resultado final com campanha:');
             console.log('Sinal Ato Final:', centsToBrl(finalSinalAto * 100));
             console.log('Bônus Campanha:', centsToBrl(campaignBonusValue * 100));
             console.log('Pró-Soluto Final:', centsToBrl(finalProSolutoComCampanha * 100));
         } else {
             // Campanha desativada - lógica original
-            console.log('🚫 Campanha NÃO ativa - usando lógica padrão');
+            console.log('🚫🚫🚫 Campanha NÃO ativa - usando lógica padrão');
             if (sinalAtoCalculadoSemCampanha < sinalAtoMinimoPermitido) {
                 finalSinalAto = sinalAtoMinimoPermitido;
                 finalProSolutoComCampanha = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalSinalAto;
@@ -1558,7 +1659,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         // Usar o Pró-Soluto ajustado pela campanha
         finalProSolutoValue = finalProSolutoComCampanha;
 
-        console.log('🔢 Valores finais antes das verificações:', {
+        console.log('🔢🔢🔢 Valores finais antes das verificações:', {
             finalSinalAto: centsToBrl(finalSinalAto * 100),
             finalProSolutoValue: centsToBrl(finalProSolutoValue * 100),
             campaignBonusValue: centsToBrl(campaignBonusValue * 100),
@@ -1569,7 +1670,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         const totalFluxo = sumOfOtherPayments + finalSinalAto + finalProSolutoValue + bonusAdimplenciaValue + campaignBonusValue;
         const valorEsperado = appraisalValue; // ⭐ CORREÇÃO: Sempre usar appraisalValue como referência
 
-        console.log('🧮 Verificação de consistência:', {
+        console.log('🧮🧮🧮 Verificação de consistência:', {
             totalFluxo: centsToBrl(totalFluxo * 100),
             valorEsperado: centsToBrl(valorEsperado * 100),
             diferenca: centsToBrl((totalFluxo - valorEsperado) * 100)
@@ -1601,14 +1702,14 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
 
         // ⭐ PRIMEIRA VERIFICAÇÃO: Ajustar discrepância no fluxo total
         if (Math.abs(totalFluxo - valorEsperado) > 0.01) {
-            console.warn('⚠️ Discrepância no fluxo:', { 
+            console.warn('⚠️⚠️⚠️ Discrepância no fluxo:', { 
                 totalFluxo: centsToBrl(totalFluxo * 100), 
                 valorEsperado: centsToBrl(valorEsperado * 100), 
                 diferenca: centsToBrl((totalFluxo - valorEsperado) * 100) 
             });
             
             const ajuste = valorEsperado - totalFluxo;
-            console.log('🔧 Aplicando ajuste:', centsToBrl(ajuste * 100));
+            console.log('🔧🔧🔧 Aplicando ajuste:', centsToBrl(ajuste * 100));
             
             // Tentar ajuste no Pró-Soluto primeiro
             const proSolutoAjustado = finalProSolutoValue + ajuste;
@@ -1619,10 +1720,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             if (percentualAjustado <= limiteProSoluto) {
                 // ✅ Ajuste seguro no Pró-Soluto
                 finalProSolutoValue = proSolutoAjustado;
-                console.log('✅ Ajuste aplicado no Pró-Soluto');
+                console.log('✅✅✅ Ajuste aplicado no Pró-Soluto');
             } else {
                 // ❌ Ajustar no Sinal Ato se Pró-Soluto violaria limite
-                console.warn('⚠️ Ajuste no Pró-Soluto violaria limite, ajustando no Sinal Ato');
+                console.warn('⚠️⚠️⚠️ Ajuste no Pró-Soluto violaria limite, ajustando no Sinal Ato');
                 finalSinalAto += ajuste;
             }
         }
@@ -1631,7 +1732,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         const proSolutoCorrigidoFinal = calcularProSolutoCorrigido(finalProSolutoValue);
         const percentualFinal = valorFinalVenda > 0 ? proSolutoCorrigidoFinal / valorFinalVenda : 0;
 
-        console.log('📐 Verificação de limites do Pró-Soluto:', {
+        console.log('📐📐📐 Verificação de limites do Pró-Soluto:', {
             proSolutoCorrigidoFinal: centsToBrl(proSolutoCorrigidoFinal * 100),
             percentualFinal: formatPercentage(percentualFinal),
             limiteProSoluto: formatPercentage(limiteProSoluto),
@@ -1639,7 +1740,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         });
 
         if (percentualFinal > limiteProSoluto) {
-            console.warn('🚨 Pró-Soluto final excede limite! Ajustando...');
+            console.warn('🚨🚨🚨 Pró-Soluto final excede limite! Ajustando...');
             
             const valorLimiteProSolutoCorrigido = limiteProSoluto * valorFinalVenda;
             const excessoValor = proSolutoCorrigidoFinal - valorLimiteProSolutoCorrigido;
@@ -1669,7 +1770,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             finalProSolutoValue = Math.max(0, finalProSolutoValue - reducaoProSoluto);
             finalSinalAto += reducaoProSoluto;
 
-            console.log('🔧 Ajuste por limite excedido:', {
+            console.log('🔧🔧🔧 Ajuste por limite excedido:', {
                 excessoValor: centsToBrl(excessoValor * 100),
                 reducaoProSoluto: centsToBrl(reducaoProSoluto * 100),
                 finalProSolutoValueAjustado: centsToBrl(finalProSolutoValue * 100),
@@ -1680,7 +1781,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         // ⭐ VERIFICAÇÃO FINAL DE CONSISTÊNCIA
         const totalFluxoFinal = sumOfOtherPayments + finalSinalAto + finalProSolutoValue + bonusAdimplenciaValue + campaignBonusValue;
 
-        console.log('✅ VERIFICAÇÃO FINAL:', {
+        console.log('✅✅✅ VERIFICAÇÃO FINAL:', {
             totalFluxoFinal: centsToBrl(totalFluxoFinal * 100),
             valorEsperado: centsToBrl(valorEsperado * 100),
             diferenca: centsToBrl((totalFluxoFinal - valorEsperado) * 100),
@@ -1695,7 +1796,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         if (Math.abs(totalFluxoFinal - valorEsperado) > 0.01) {
             const ajusteFinal = valorEsperado - totalFluxoFinal;
             finalSinalAto += ajusteFinal;
-            console.log('🔧 Ajuste final aplicado:', centsToBrl(ajusteFinal * 100));
+            console.log('🔧🔧🔧 Ajuste final aplicado:', centsToBrl(ajusteFinal * 100));
         }
 
         // 5. Atualizar fluxo de pagamento
@@ -1712,15 +1813,25 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 value: bonusAdimplenciaValue, // ⭐ VALOR FIXO calculado acima
                 date: bonusDate 
             });
-            console.log('💰 Bônus Adimplência adicionado ao fluxo:', centsToBrl(bonusAdimplenciaValue * 100));
+            console.log('💰💰💰 Bônus Adimplência adicionado ao fluxo:', centsToBrl(bonusAdimplenciaValue * 100));
         }
 
         if (finalSinalAto > 0) {
             newPayments.push({ type: 'sinalAto', value: Math.max(0, finalSinalAto), date: new Date() });
         }
         
+        // ⭐⭐ VERIFICAÇÃO CRÍTICA: Adicionar bônus campanha apenas se maior que zero
+        console.log('🎁🎁🎁 STATUS FINAL DO BÔNUS CAMPANHA:', {
+            campaignBonusValue: centsToBrl(campaignBonusValue * 100),
+            isGreaterThanZero: campaignBonusValue > 0,
+            shouldAddToPayments: campaignBonusValue > 0
+        });
+
         if (campaignBonusValue > 0) {
+            console.log('➕➕➕ ADICIONANDO BÔNUS CAMPANHA AO FLUXO');
             newPayments.push({ type: 'bonusCampanha', value: campaignBonusValue, date: new Date() });
+        } else {
+            console.log('🚫🚫🚫 BÔNUS CAMPANHA NÃO ADICIONADO - valor zero ou negativo');
         }
         
         let proSolutoDate = new Date();
@@ -1731,7 +1842,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
 
         newPayments.push({ type: 'proSoluto', value: Math.max(0, finalProSolutoValue), date: proSolutoDate });
 
-        console.log('🎉 Fluxo final gerado:', newPayments.map(p => ({
+        console.log('🎉🎉🎉 Fluxo final gerado:', newPayments.map(p => ({
             type: p.type,
             value: centsToBrl(p.value * 100),
             date: format(p.date, 'dd/MM/yyyy')
@@ -1758,7 +1869,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         }, 100);
 
     } catch (error) {
-        console.error('❌ Erro no cálculo da condição mínima:', error);
+        console.error('❌❌❌ Erro no cálculo da condição mínima:', error);
         toast({
             variant: "destructive",
             title: "❌ Erro no Cálculo",
@@ -1823,6 +1934,20 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       { name: "Restante", value: 100 - (results.proSolutoCommitmentPercentage * 100), fill: "hsl(var(--muted))" },
     ];
   }, [results]);
+
+  // Filtro para seguro de obras (mostrar apenas a partir da data do sinal)
+  const sinalAtoDate = useMemo(() => {
+    const sinal = watchedPayments.find(p => p.type === 'sinalAto');
+    return sinal ? startOfMonth(sinal.date) : startOfMonth(new Date());
+  }, [watchedPayments]);
+
+  const filteredInsuranceBreakdown = useMemo(() => {
+    if (!results?.monthlyInsuranceBreakdown) return [];
+    return results.monthlyInsuranceBreakdown.filter(item => {
+      const itemDate = startOfMonth(item.date);
+      return itemDate > sinalAtoDate;
+    });
+  }, [results?.monthlyInsuranceBreakdown, sinalAtoDate]);
 
   return (
     <>
