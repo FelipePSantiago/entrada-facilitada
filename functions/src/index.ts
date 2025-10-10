@@ -8,6 +8,7 @@
 import { onCall, type CallableRequest } from "firebase-functions/v2/https";
 import * as functions from "firebase-functions";
 import * as actions from "./actions";
+import { processSumupPayment } from "./sumup";
 
 const ensureAuth = (request: CallableRequest) => {
     if (!request.auth || !request.auth.uid) {
@@ -19,8 +20,11 @@ const ensureAuth = (request: CallableRequest) => {
     return request.auth.uid;
 };
 
+// CORRECT OPTIONS: Enable CORS for browser requests and set the function to be publicly invocable.
+const publicOptions = { cors: true, invoker: 'public' };
+
 // VERSÃO PRODUÇÃO: Cloud Function otimizada
-export const extractDataFromSimulationPdfAction = onCall(async (request: CallableRequest) => {
+export const extractDataFromSimulationPdfAction = onCall(publicOptions, async (request: CallableRequest) => {
     try {
         // Validar autenticação
         ensureAuth(request);
@@ -65,64 +69,75 @@ export const extractDataFromSimulationPdfAction = onCall(async (request: Callabl
     }
 });
 
+export const processSumupPaymentAction = onCall({
+    ...publicOptions,
+    secrets: ["SUMUP_APIKEY"],
+}, (request: CallableRequest) => {
+    // A autenticação pode ser opcional para um pagamento, dependendo dos seus requisitos
+    // Se o usuário DEVE estar logado para pagar, descomente a linha abaixo:
+    // ensureAuth(request);
+    return processSumupPayment(request);
+});
+
+
 // Demais funções mantêm a autenticação padrão
-export const savePropertyAction = onCall((request: CallableRequest) => {
+export const savePropertyAction = onCall(publicOptions, (request: CallableRequest) => {
     ensureAuth(request);
     return actions.savePropertyAction(request.data);
 });
 
-export const batchCreatePropertiesAction = onCall((request: CallableRequest) => {
+export const batchCreatePropertiesAction = onCall(publicOptions, (request: CallableRequest) => {
     ensureAuth(request);
     return actions.batchCreatePropertiesAction(request.data);
 });
 
-export const deletePropertyAction = onCall((request: CallableRequest) => {
+export const deletePropertyAction = onCall(publicOptions, (request: CallableRequest) => {
     ensureAuth(request);
     return actions.deletePropertyAction(request.data);
 });
 
-export const deleteAllPropertiesAction = onCall((request: CallableRequest) => {
+export const deleteAllPropertiesAction = onCall(publicOptions, (request: CallableRequest) => {
     ensureAuth(request);
     return actions.deleteAllPropertiesAction(request.data);
 });
 
-export const updatePropertyPricingAction = onCall((request: CallableRequest) => {
+export const updatePropertyPricingAction = onCall(publicOptions, (request: CallableRequest) => {
     ensureAuth(request);
     return actions.updatePropertyPricingAction(request.data);
 });
 
-export const deletePropertyPricingAction = onCall((request: CallableRequest) => {
+export const deletePropertyPricingAction = onCall(publicOptions, (request: CallableRequest) => {
     ensureAuth(request);
     return actions.deletePropertyPricingAction(request.data);
 });
 
-export const generateTwoFactorSecretAction = onCall((request: CallableRequest) => {
+export const generateTwoFactorSecretAction = onCall(publicOptions, (request: CallableRequest) => {
     const uid = ensureAuth(request);
     return actions.generateTwoFactorSecretAction(uid);
 });
 
-export const verifyAndEnableTwoFactorAction = onCall((request: CallableRequest) => {
+export const verifyAndEnableTwoFactorAction = onCall(publicOptions, (request: CallableRequest) => {
     const uid = ensureAuth(request);
     return actions.verifyAndEnableTwoFactorAction({ ...request.data, uid });
 });
 
-export const getTwoFactorSecretAction = onCall((request: CallableRequest) => {
+export const getTwoFactorSecretAction = onCall(publicOptions, (request: CallableRequest) => {
     const uid = ensureAuth(request);
     return actions.getTwoFactorSecretAction(uid);
 });
 
-export const verifyTokenAction = onCall((request: CallableRequest) => {
+export const verifyTokenAction = onCall(publicOptions, (request: CallableRequest) => {
     const uid = ensureAuth(request);
     const { token } = request.data;
     return actions.verifyTokenAction({ uid, token });
 });
 
-export const handleUnitStatusChangeAction = onCall((request: CallableRequest) => {
+export const handleUnitStatusChangeAction = onCall(publicOptions, (request: CallableRequest) => {
     ensureAuth(request);
     return actions.handleUnitStatusChangeAction(request.data);
 });
 
-export const updatePropertyAvailabilityAction = onCall((request: CallableRequest) => {
+export const updatePropertyAvailabilityAction = onCall(publicOptions, (request: CallableRequest) => {
     ensureAuth(request);
     return actions.updatePropertyAvailabilityAction(request.data);
 });

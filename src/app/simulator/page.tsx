@@ -74,7 +74,7 @@ const ClientOnly: React.FC<{children: React.ReactNode}> = ({ children }) => {
 export default function SimulatorPage() {
     const { isFullyAuthenticated, authLoading, properties, propertiesLoading } = useAuth();
     const [isSinalCampaignActive, setIsSinalCampaignActive] = useState(false);
-    const [sinalCampaignLimitPercent, setSinalCampaignLimitPercent] = useState<number | null>(5);
+    const [sinalCampaignLimitPercent, setSinalCampaignLimitPercent] = useState<number | null>(5.5);
     const [isTutorialOpen, setIsTutorialOpen] = useState(false);
     const [activeCalculator, setActiveCalculator] = useState<CalculatorType>('linear');
 
@@ -130,7 +130,7 @@ export default function SimulatorPage() {
                 </div>
 
                 <ClientOnly>
-                    {activeCalculator === 'linear' && (
+                    <div style={{ display: activeCalculator === 'linear' ? 'block' : 'none' }}>
                         <PaymentFlowCalculator 
                             properties={properties}
                             isSinalCampaignActive={isSinalCampaignActive}
@@ -138,8 +138,8 @@ export default function SimulatorPage() {
                             isTutorialOpen={isTutorialOpen}
                             setIsTutorialOpen={setIsTutorialOpen}
                         />
-                    )}
-                    {activeCalculator === 'stepped' && (
+                    </div>
+                    <div style={{ display: activeCalculator === 'stepped' ? 'block' : 'none' }}>
                         <SteppedPaymentFlowCalculator 
                            properties={properties}
                            isSinalCampaignActive={isSinalCampaignActive}
@@ -147,7 +147,7 @@ export default function SimulatorPage() {
                            isTutorialOpen={isTutorialOpen}
                            setIsTutorialOpen={setIsTutorialOpen}
                         />
-                    )}
+                    </div>
                 </ClientOnly>
             </div>
         </div>

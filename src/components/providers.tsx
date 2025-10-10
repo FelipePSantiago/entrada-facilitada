@@ -14,7 +14,7 @@ interface ProvidersProps {
   children: React.ReactNode;
 }
 
-const PUBLIC_PATHS = ['/login', '/signup', '/plans', '/pix-payment', '/forgot-password', '/'];
+const PUBLIC_PATHS = ['/login', '/signup', '/plans', '/pix-payment', '/forgot-password', '/', '/sumup-payment', '/sumup-payment/success', '/api/sumup/payment'];
 const AUTH_ONLY_PATHS = ['/setup-2fa', '/verify-2fa'];
 
 export function Providers({ children }: ProvidersProps) {

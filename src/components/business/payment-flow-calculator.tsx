@@ -1125,7 +1125,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         // ⭐⭐ NOVA CORREÇÃO: Aplicar lógica da campanha sinal também no cálculo manual
         const descontoValue = values.payments.find(p => p.type === 'desconto')?.value || 0;
         const valorFinalVenda = values.saleValue - descontoValue;
-        const sinalAtoMinimoPermitido = 0.05 * valorFinalVenda;
+        const sinalAtoMinimoPermitido = 0.055 * valorFinalVenda;
     
         console.log('🎯 Aplicando campanha sinal no cálculo manual:', {
           sinalAtoInformado: centsToBrl(sinalAtoValue * 100),
@@ -1565,7 +1565,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         // ⭐⭐ CORREÇÃO: Desconto NÃO afeta o Bônus Adimplência (já calculado acima)
         const descontoValue = existingPayments.find(p => p.type === 'desconto')?.value || 0;
         const valorFinalVenda = saleValue - descontoValue;
-        const sinalAtoMinimoPermitido = 0.05 * valorFinalVenda;
+        const sinalAtoMinimoPermitido = 0.055 * valorFinalVenda;
         
         // ⭐⭐ CORREÇÃO CRÍTICA: Usar bonusAdimplenciaValue JÁ CALCULADO (não recalcular)
         const sinalAtoCalculadoSemCampanha = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue;
