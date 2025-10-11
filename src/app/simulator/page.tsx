@@ -74,10 +74,16 @@ const ClientOnly: React.FC<{children: React.ReactNode}> = ({ children }) => {
 export default function SimulatorPage() {
     const { isFullyAuthenticated, authLoading, properties, propertiesLoading } = useAuth();
     const [isSinalCampaignActive, setIsSinalCampaignActive] = useState(false);
-    const [sinalCampaignLimitPercent, setSinalCampaignLimitPercent] = useState<number | null>(5.5);
+    const [sinalCampaignLimitPercent, setSinalCampaignLimitPercent] = useState<number | null>(null);
     const [isTutorialOpen, setIsTutorialOpen] = useState(false);
     const [activeCalculator, setActiveCalculator] = useState<CalculatorType>('linear');
 
+    const handleCampaignToggle = (checked: boolean) => {
+        setIsSinalCampaignActive(checked);
+        if (!checked) {
+            setSinalCampaignLimitPercent(null);
+        }
+    }
 
     if (authLoading || !isFullyAuthenticated || propertiesLoading) {
         return (
@@ -113,7 +119,7 @@ export default function SimulatorPage() {
                     <div className="flex flex-wrap items-center justify-start sm:justify-end gap-4">
                         <SinalCampaignToggle 
                             isSinalCampaignActive={isSinalCampaignActive}
-                            onCheckedChange={setIsSinalCampaignActive}
+                            onCheckedChange={handleCampaignToggle}
                             sinalCampaignLimitPercent={sinalCampaignLimitPercent}
                             onLimitChange={setSinalCampaignLimitPercent}
                         />

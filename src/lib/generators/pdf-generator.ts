@@ -1,3 +1,4 @@
+
 import type { Property, PdfFormValues, PdfResults, PaymentField, PDFPageData } from "../../types";
 import { format, parseISO, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -356,6 +357,22 @@ export async function generatePdf(
             }
         });
         currentY = (doc.lastAutoTable?.finalY ?? currentY) + 10;
+    }
+
+    // --- Seção Corretor Responsável ---
+    if (formValues.brokerName || formValues.brokerCreci) {
+        currentY = addSectionTitle(doc, "Corretor Responsável", currentY);
+        doc.setFont(FONT_NORMAL);
+        doc.setFontSize(10);
+        doc.setTextColor(COLOR_DARK_TEXT);
+        if(formValues.brokerName) {
+            doc.text(`Nome: ${formValues.brokerName}`, PAGE_MARGIN, currentY);
+            currentY += 7;
+        }
+        if(formValues.brokerCreci) {
+            doc.text(`CRECI: ${formValues.brokerCreci}`, PAGE_MARGIN, currentY);
+            currentY += 7;
+        }
     }
 
     // --- Adiciona o footer em todas as páginas ---
