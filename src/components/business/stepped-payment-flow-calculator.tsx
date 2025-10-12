@@ -110,7 +110,7 @@ const UnitSelectorDialogContent = dynamic(() => import('./unit-selector-dialog')
 });
 
 // Cache para cálculos de seguro escalonado
-const steppedInsuranceCache = new Map<string, { total: number; breakdown: MonthlyInsurance[] }>();
+const steppedInsuranceCache = new Map<string, { total: number; breakdown: MonthlyInsurance[]; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
 const paymentFieldSchema = z.object({
@@ -179,8 +179,8 @@ const paymentFieldOptions: { value: PaymentFieldType; label: string }[] = [
   { value: "financiamento", label: "Financiamento" },
 ] as const;
 
-// Memoizar função de status badge
-const getStatusBadgeClass = useMemo(() => (status: UnitStatus) => {
+// Função auxiliar para status badge (movida para fora do componente)
+const getStatusBadgeClass = (status: UnitStatus) => {
   switch (status) {
     case 'Disponível':
       return 'border-primary/50 bg-primary/10 text-primary hover:shadow-lg hover:border-primary';
@@ -193,7 +193,7 @@ const getStatusBadgeClass = useMemo(() => (status: UnitStatus) => {
     default:
       return 'border-border bg-muted/80';
   }
-}, []);
+};
 
 interface UnitCardProps {
     unit: CombinedUnit;
@@ -304,7 +304,7 @@ const calculateSteppedConstructionInsurance = (
     const cacheKey = `${constructionStartDate.getTime()}-${deliveryDate.getTime()}-${caixaInstallmentValue}-${periods.join('-')}-${installments.join('-')}`;
     const cached = steppedInsuranceCache.get(cacheKey);
     
-    if (cached && Date.now() - (cached as any).timestamp < CACHE_TTL) {
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
         return cached;
     }
     
