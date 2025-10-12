@@ -46,11 +46,7 @@ export default function PlansPage() {
   const [paymentMethod, setPaymentMethod] = useState("creditCard")
 
   const handleSubscription = () => {
-    if (paymentMethod === 'creditCard') {
-      router.push(`/signup?plan=${selectedPlan}&paymentMethod=${paymentMethod}`);
-    } else {
-      router.push(`/pix-payment?plan=${selectedPlan}`);
-    }
+    router.push(`/signup?plan=${selectedPlan}&paymentMethod=${paymentMethod}`);
   };
 
   return (

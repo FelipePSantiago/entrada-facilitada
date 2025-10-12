@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
+  images: {
+    unoptimized: true,
+  },
   // Your existing configuration
   webpack: (config, { isServer }) => {
     // Prevent bundling of 'original-fs' on the client

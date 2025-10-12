@@ -51,6 +51,9 @@ function PixPaymentPageContent() {
                 Enviar Comprovante via WhatsApp
             </a>
         </Button>
+        <Button asChild className="w-full">
+          <Link href="/signup">Ir para o Cadastro</Link>
+        </Button>
         <Button variant="ghost" asChild className="w-full">
             <Link href="/login">Ir para Login</Link>
         </Button>
