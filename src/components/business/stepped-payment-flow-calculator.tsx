@@ -53,27 +53,27 @@ import {
   ShieldCheck,
   Upload,
   Loader2,
-  FileText,
-  CreditCard,
   Users,
-  Download,
   AlertCircle,
   MapPin,
   CheckCircle2,
   Sparkles,
+  ChevronRight,
+  FileText,
+  CreditCard,
   ListOrdered,
   User,
   Briefcase,
+  Download,
   Grid3X3,
   Ruler,
   Sun,
   Car,
   Tag,
+  TrendingUp,
 } from "lucide-react";
 import { addDays, addMonths, differenceInMonths, format, lastDayOfMonth, startOfMonth, parseISO, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { Property, Unit, CombinedUnit, UnitStatus, PaymentField, Results, MonthlyInsurance, FormValues, PdfFormValues, PaymentFieldType, Tower } from "@/types";
-import { cn } from "@/lib/utils";
 import {
   Accordion,
   AccordionContent,
@@ -95,19 +95,25 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { DatePicker } from "@/components/ui/date-picker";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { generatePdf } from "@/lib/generators/pdf-generator";
-import React from 'react';
-import { InteractiveTutorial } from "@/components/common/interactive-tutorial";
+import React, { Fragment } from 'react';
+import type { Property, Unit, CombinedUnit, PaymentField, Results, FormValues, PdfFormValues, PaymentFieldType, Tower, MonthlyInsurance } from "@/types";
 import { ResultChart, type ChartData } from "@/components/business/result-chart";
-import { PaymentTimeline } from "@/components/business/payment-timeline";
 import { validateFileSize, validateMimeType } from "@/lib/validators";
+import { Skeleton } from '../ui/skeleton';
 import dynamic from 'next/dynamic';
-import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from "@/lib/utils";
 
 // Carregamento lazy para melhor performance
 const UnitSelectorDialogContent = dynamic(() => import('./unit-selector-dialog').then(mod => mod.UnitSelectorDialogContent), {
   loading: () => <div className="p-4"><Skeleton className="h-64 w-full" /></div>,
   ssr: false,
 });
+
+const InteractiveTutorial = dynamic(() => import('@/components/common/interactive-tutorial').then(mod => mod.InteractiveTutorial), {
+    ssr: false,
+});
+
+import { PaymentTimeline } from "@/components/business/payment-timeline"; 
 
 // Cache para cálculos de seguro escalonado
 const steppedInsuranceCache = new Map<string, { total: number; breakdown: MonthlyInsurance[]; timestamp: number }>();
@@ -140,11 +146,7 @@ const formSchema = z.object({
   financingParticipants: z.coerce.number().int().min(1, "Selecione o número de participantes.").max(4),
   payments: z.array(paymentFieldSchema),
   conditionType: z.enum(["padrao", "especial"]),
-  installments: z.coerce
-    .number()
-    .int()
-    .min(1, { message: "Mínimo de 1 parcela." })
-    .optional(),
+  installments: z.coerce.number().int().min(1, { message: "Mínimo de 1 parcela." }).optional(),
   notaryFees: z.coerce.number().optional(),
   notaryPaymentMethod: z.enum(["creditCard", "bankSlip"]),
   notaryInstallments: z.coerce.number().int().optional(),
@@ -174,13 +176,13 @@ const paymentFieldOptions: { value: PaymentFieldType; label: string }[] = [
   { value: "proSoluto", label: "Pró-Soluto" },
   { value: "bonusAdimplencia", label: "Bônus Adimplência" },
   { value: "desconto", label: "Desconto" },
-  { value: "bonusCampanha", label: "Bônus Campanha" },
+  { value: "bonusCampanha", label: "Bônus de Campanha" },
   { value: "fgts", label: "FGTS" },
   { value: "financiamento", label: "Financiamento" },
 ] as const;
 
-// Função auxiliar para status badge (movida para fora do componente)
-const getStatusBadgeClass = (status: UnitStatus) => {
+// Memoizar função de status badge
+const getStatusBadgeClass = useMemo(() => (status: string) => {
   switch (status) {
     case 'Disponível':
       return 'border-primary/50 bg-primary/10 text-primary hover:shadow-lg hover:border-primary';
@@ -193,7 +195,7 @@ const getStatusBadgeClass = (status: UnitStatus) => {
     default:
       return 'border-border bg-muted/80';
   }
-};
+}, []);
 
 interface UnitCardProps {
     unit: CombinedUnit;
@@ -288,6 +290,54 @@ const CurrencyFormField = memo(({ name, label, control, readOnly = false, placeh
 });
 CurrencyFormField.displayName = 'CurrencyFormField';
 
+// Função otimizada de cálculo de seguro de obras com cache
+const calculateConstructionInsuranceLocal = (
+  constructionStartDate: Date | null,
+  deliveryDate: Date | null,
+  caixaInstallmentValue: number
+): { total: number; breakdown: MonthlyInsurance[] } => {
+    if (!constructionStartDate || !deliveryDate || !isValid(constructionStartDate) || !isValid(deliveryDate) || constructionStartDate > deliveryDate || caixaInstallmentValue <= 0) {
+        return { total: 0, breakdown: [] };
+    }
+
+    // Gerar chave de cache
+    const cacheKey = `${constructionStartDate.getTime()}-${deliveryDate.getTime()}-${caixaInstallmentValue}`;
+    const cached = steppedInsuranceCache.get(cacheKey);
+    
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        return { total: cached.total, breakdown: cached.breakdown };
+    }
+    
+    const totalMonths = differenceInMonths(deliveryDate, constructionStartDate);
+    if (totalMonths < 0) return { total: 0, breakdown: [] };
+
+    let totalPayable = 0;
+    const breakdown: MonthlyInsurance[] = [];
+    const today = new Date();
+    
+    for (let i = 0; i <= totalMonths; i++) {
+        const monthDate = addMonths(constructionStartDate, i);
+        const progressRate = totalMonths > 0 ? i / totalMonths : 1;
+        const insuranceValue = progressRate * caixaInstallmentValue;
+
+        if (monthDate >= today) {
+            totalPayable += insuranceValue;
+        }
+
+        breakdown.push({
+            month: format(monthDate, "MMMM/yyyy", { locale: ptBR }),
+            value: insuranceValue,
+            date: monthDate,
+            isPayable: monthDate >= today,
+            progressRate,
+        });
+    }
+
+    const result = { total: totalPayable, breakdown, timestamp: Date.now() };
+    steppedInsuranceCache.set(cacheKey, result);
+    return result;
+};
+
 // Função otimizada de cálculo de seguro de obras escalonado com cache
 const calculateSteppedConstructionInsurance = (
   constructionStartDate: Date | null,
@@ -305,7 +355,7 @@ const calculateSteppedConstructionInsurance = (
     const cached = steppedInsuranceCache.get(cacheKey);
     
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        return cached;
+        return { total: cached.total, breakdown: cached.breakdown };
     }
     
     const totalMonths = differenceInMonths(deliveryDate, constructionStartDate);
@@ -354,24 +404,32 @@ interface SteppedPaymentFlowCalculatorProps {
     setIsTutorialOpen: (isOpen: boolean) => void;
 }
 
+// Interface para dados extraídos
+interface ExtractedData {
+  grossIncome?: number;
+  simulationInstallmentValue?: number;
+  appraisalValue?: number;
+  financingValue?: number;
+}
+
 export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive, sinalCampaignLimitPercent, isTutorialOpen, setIsTutorialOpen }: SteppedPaymentFlowCalculatorProps) {
   const [results, setResults] = useState<Results | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
-  const [isDataExtracted, setIsDataExtracted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const [isUnitSelectorOpen, setIsUnitSelectorOpen] = useState(false);
   const [isSaleValueLocked, setIsSaleValueLocked] = useState(false);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [brokerName, setBrokerName] = useState('');
-  const [brokerCreci, setBrokerCreci] = useState('');
   
   const [allUnits, setAllUnits] = useState<CombinedUnit[]>([]);
-  const [statusFilter, setStatusFilter] = useState<UnitStatus | "Todos">("Disponível");
+  const [statusFilter, setStatusFilter] = useState<"Disponível" | "Vendido" | "Reservado" | "Indisponível" | "Todos">("Disponível");
   const [floorFilter, setFloorFilter] = useState<string>("Todos");
   const [typologyFilter, setTypologyFilter] = useState<string>("Todos");
   const [sunPositionFilter, setSunPositionFilter] = useState<string>("Todos");
+  
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [brokerName, setBrokerName] = useState('');
+  const [brokerCreci, setBrokerCreci] = useState('');
 
   // Sistema global de controle de processamento otimizado
   const globalProcessingRef = useRef({
@@ -429,16 +487,27 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
 
       if (opt.value === 'sinal2' && !hasSinal1) return false;
       if (opt.value === 'sinal3' && (!hasSinal1 || !hasSinal2)) return false;
-      if (opt.value === 'proSoluto' && financingPaymentsCount > 0) return false;
-
       return true;
     });
-  }, [watchedPayments, hasSinal1, hasSinal2, financingPaymentsCount]);
+  }, [watchedPayments, hasSinal1, hasSinal2]);
 
   // Memoizar propriedade selecionada
   const selectedProperty = useMemo(() => {
     return properties.find(p => p.id === watchedPropertyId);
   }, [properties, watchedPropertyId]);
+
+  // Memoizar datas
+  const deliveryDateObj = useMemo(() => {
+    if (!selectedProperty?.deliveryDate) return null;
+    const date = parseISO(selectedProperty.deliveryDate);
+    return isValid(date) ? date : null;
+  }, [selectedProperty]);
+
+  const constructionStartDateObj = useMemo(() => {
+    if (!selectedProperty?.constructionStartDate) return null;
+    const date = parseISO(selectedProperty.constructionStartDate);
+    return isValid(date) ? date : null;
+  }, [selectedProperty]);
 
   // Memoizar unidades filtradas
   const filteredUnits = useMemo(() => {
@@ -461,146 +530,1787 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     return { floors, typologies, sunPositions };
   }, [allUnits]);
 
+  // Memoizar propriedades filtradas
+  const filteredProperties = useMemo(() => {
+    return (properties || []).filter(p => p.brand === 'Direcional');
+  }, [properties]);
+
+  // Função auxiliar para verificação robusta da campanha
+  const shouldApplyCampaignBonus = useCallback((isSinalCampaignActive: boolean, sinalCampaignLimitPercent?: number): boolean => {
+    const isActive = isSinalCampaignActive && 
+                    sinalCampaignLimitPercent !== undefined && 
+                    sinalCampaignLimitPercent > 0;
+    
+    console.log('🔍 Verificação da Campanha:', {
+        isSinalCampaignActive,
+        sinalCampaignLimitPercent,
+        isActive
+    });
+    
+    return isActive;
+  }, []);
+
+  // Função para aplicar lógica da campanha sinal em qualquer cálculo
+  const applyCampaignLogic = useCallback((
+    sinalAtoCalculado: number,
+    sinalAtoMinimo: number,
+    finalProSolutoValue: number,
+    valorFinalVenda: number,
+    sinalCampaignLimitPercent?: number
+  ): { finalSinalAto: number; finalProSoluto: number; campaignBonus: number } => {
+    
+    let finalSinalAto = sinalAtoCalculado;
+    let finalProSoluto = finalProSolutoValue;
+    let campaignBonus = 0;
+
+    const isCampaignActive = shouldApplyCampaignBonus(isSinalCampaignActive, sinalCampaignLimitPercent);
+
+    if (isCampaignActive) {
+      console.log('🎯 Aplicando lógica da campanha no cálculo...');
+      
+      const limiteMaximoBonus = valorFinalVenda * (sinalCampaignLimitPercent! / 100);
+
+      if (sinalAtoCalculado <= sinalAtoMinimo) {
+        // Caso 1: Sinal Ato <= Mínimo
+        finalSinalAto = sinalAtoMinimo;
+        finalProSoluto = finalProSolutoValue; // Pró-Soluto se ajusta automaticamente
+        campaignBonus = 0;
+      } else {
+        // Caso 2: Sinal Ato > Mínimo - aplicar bônus
+        const excedente = sinalAtoCalculado - sinalAtoMinimo;
+        
+        if (excedente <= limiteMaximoBonus) {
+          // Caso 2A: Excedente dentro do limite
+          campaignBonus = excedente;
+          finalProSoluto = finalProSolutoValue - campaignBonus;
+          finalSinalAto = sinalAtoCalculado;
+        } else {
+          // Caso 2B: Excedente excede limite
+          campaignBonus = limiteMaximoBonus;
+          finalProSoluto = finalProSolutoValue - campaignBonus;
+          const diferencaExcedente = excedente - limiteMaximoBonus;
+          finalSinalAto = sinalAtoCalculado - diferencaExcedente;
+        }
+      }
+    }
+
+    return { finalSinalAto, finalProSoluto, campaignBonus };
+  }, [isSinalCampaignActive, shouldApplyCampaignBonus]);
+
+  // Funções auxiliares para controle global de processamento
+  const canProceedWithOperation = useCallback((operationName: string, minDelayMs = 500): boolean => {
+    const now = Date.now();
+    const { isProcessing, lastOperation, timestamp } = globalProcessingRef.current;
+    
+    // Permitir operações relacionadas executarem em sequência
+    const relatedOperations = [
+        ['pro-soluto-auto', 'bonus-adimplencia', 'minimum-condition'],
+        ['bonus-adimplencia', 'pro-soluto-auto', 'add-payment-field']
+    ];
+    
+    const isRelated = relatedOperations.some(group => 
+        group.includes(operationName) && group.includes(lastOperation)
+    );
+    
+    // Se já está processando uma operação relacionada, permitir
+    if (isProcessing && isRelated) {
+        console.log(`🔄 Operação relacionada ${operationName} permitida durante ${lastOperation}`);
+        return true;
+    }
+    
+    // Se já está processando e foi recente, bloquear
+    if (isProcessing && (now - timestamp) < minDelayMs) {
+        console.log(`⏸️ Operação ${operationName} bloqueada - ${lastOperation} em andamento`);
+        return false;
+    }
+    
+    // Marcar como processando
+    globalProcessingRef.current = {
+        isProcessing: true,
+        lastOperation: operationName,
+        timestamp: now
+    };
+    
+    return true;
+  }, []);
+
+  const completeOperation = useCallback(() => {
+    globalProcessingRef.current.isProcessing = false;
+  }, []);
+
+  // useEffect de emergência para detectar loops
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (globalProcessingRef.current.isProcessing && 
+          (Date.now() - globalProcessingRef.current.timestamp) > 5000) {
+        console.error('🚨 LOOP DETECTADO - Resetando processamento:', globalProcessingRef.current);
+        globalProcessingRef.current.isProcessing = false;
+        
+        toast({
+          variant: "destructive",
+          title: "🔄 Sistema Reiniciado",
+          description: "Foi detectado um loop infinito. O sistema foi reiniciado."
+        });
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [toast]);
+
+  // FUNÇÃO CORRIGIDA: processExtractedData com tipagem adequada (MOVIDO PARA CIMA)
+  const processExtractedData = useCallback(async (extractedData: ExtractedData) => {
+    console.log('🎉 Processando dados extraídos:', extractedData);
+    
+    try {
+        // Preencher campos básicos
+        if (extractedData.grossIncome) {
+            setValue('grossIncome', extractedData.grossIncome, { shouldValidate: true });
+            console.log('✅ Renda preenchida:', extractedData.grossIncome);
+        }
+        
+        if (extractedData.simulationInstallmentValue) {
+            setValue('simulationInstallmentValue', extractedData.simulationInstallmentValue, { shouldValidate: true });
+            console.log('✅ Parcela preenchida:', extractedData.simulationInstallmentValue);
+        }
+        
+        // NÃO preencher saleValue automaticamente - usuário deve informar manualmente
+        if (extractedData.appraisalValue && !isSaleValueLocked) {
+            setValue('appraisalValue', extractedData.appraisalValue, { shouldValidate: true });
+            console.log('✅ Avaliação preenchida:', extractedData.appraisalValue);
+        }
+        
+        // Adicionar ou atualizar financiamento
+        if (extractedData.financingValue) {
+            const financingPayment: PaymentField = {
+                type: "financiamento",
+                value: extractedData.financingValue,
+                date: deliveryDateObj || new Date(),
+            };
+            
+            const financingIndex = watchedPayments.findIndex(p => p.type === 'financiamento');
+            if (financingIndex > -1) {
+                const newPayments = [...watchedPayments];
+                newPayments[financingIndex] = financingPayment;
+                replace(newPayments);
+                console.log('🔄 Financiamento atualizado:', extractedData.financingValue);
+            } else {
+                append(financingPayment);
+                console.log('➕ Financiamento adicionado:', extractedData.financingValue);
+            }
+            
+            console.log('🎯 Dados de financiamento processados. O bônus será calculado quando o valor de venda for informado.');
+        }
+        
+        toast({ 
+            title: '✅ Dados Extraídos com Sucesso!', 
+            description: 'Os campos de renda e parcela foram preenchidos. Informe o Valor de Venda para completar a simulação.' 
+        });
+        
+    } catch (error) {
+        console.error('❌ Erro ao processar dados:', error);
+        throw error;
+    }
+  }, [setValue, isSaleValueLocked, deliveryDateObj, watchedPayments, replace, append, toast]);
+
   // Otimizar extração de PDF com debounce
-  const extractPdfData = useCallback(async (file: File) => {
-    if (globalProcessingRef.current.isProcessing) {
+  const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files?.length) return;
+    const file = event.target.files[0];
+    
+    const auth = getAuth();
+    
+    // VERIFICAÇÃO CRÍTICA: Se não há unidade selecionada, exigir valor de venda manual
+    if (!getValues('selectedUnit') && (!getValues('saleValue') || getValues('saleValue') <= 0)) {
+        toast({
+            variant: "destructive",
+            title: "❌ Valor de Venda Obrigatório",
+            description: "Para fazer upload do PDF, primeiro informe o Valor de Venda manualmente."
+        });
+        
+        // Focar no campo de valor de venda
+        const saleValueInput = document.getElementById('sale-value-input');
+        if (saleValueInput) {
+            saleValueInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            (saleValueInput as HTMLElement).focus();
+        }
+        
+        // Limpar o input de arquivo
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
+        return;
+    }
+    
+    if (!auth.currentUser) {
+      toast({ variant: "destructive", title: "❌ Faça login primeiro" });
+      return;
+    }
+  
+    if (!validateFileSize(file)) {
+      toast({ variant: 'destructive', title: '❌ Arquivo Muito Grande', description: 'O arquivo deve ter no máximo 15MB.' });
+      return;
+    }
+    if (!validateMimeType(file, ['application/pdf', 'image/jpeg', 'image/png'])) {
+      toast({ variant: 'destructive', title: '❌ Arquivo Inválido', description: 'Por favor, envie um PDF ou imagem.' });
+      return;
+    }
+  
+    setIsExtracting(true);
+    
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    
+    reader.onload = async () => {
+        const fileAsDataURL = reader.result as string;
+
+        if (!fileAsDataURL || !fileAsDataURL.startsWith('data:')) {
+            toast({
+                variant: 'destructive',
+                title: '❌ Erro ao Processar Arquivo',
+                description: 'Não foi possível ler o arquivo. Tente novamente.'
+            });
+            setIsExtracting(false);
+            return;
+        }
+  
+        try {
+          // Obter token de autenticação
+          const currentUser = auth.currentUser;
+          if (!currentUser) {
+            throw new Error('Usuário não autenticado');
+          }
+          
+          const idToken = await currentUser.getIdToken();
+          
+          // Preparar dados para envio
+          const fileData = {
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+            dataUrl: fileAsDataURL,
+            idToken: idToken
+          };
+
+          // Chamar Cloud Function
+          const functions = getFunctions();
+          const functionsWithRegion = getFunctions(undefined, 'us-central1');
+          const extractPdfFunction = httpsCallable(functionsWithRegion, 'extractDataFromSimulationPdfAction');
+          
+          const response = await extractPdfFunction(fileData);
+          
+          if (response?.data) {
+            await processExtractedData(response.data as ExtractedData);
+          } else {
+            throw new Error('Resposta vazia da Cloud Function');
+          }
+          
+        } catch (error: any) {
+          console.error('Erro na extração de PDF:', error);
+          
+          // Tratamento específico de erros
+          if (error.code === 'unauthenticated' || error.message?.includes('unauthenticated')) {
+            toast({
+              variant: 'destructive',
+              title: '❌ Erro de Autenticação',
+              description: 'Faça login novamente e tente outra vez.'
+            });
+            return;
+          }
+          
+          if (error.code === 'permission-denied') {
+            toast({
+              variant: 'destructive',
+              title: '❌ Permissão Negada',
+              description: 'Você não tem permissão para usar esta função.'
+            });
+            return;
+          }
+
+          if (error.code === 'invalid-argument') {
+            toast({
+              variant: 'destructive',
+              title: '❌ Dados Inválidos',
+              description: 'O arquivo enviado é inválido ou corrompido.'
+            });
+            return;
+          }
+
+          // Erro genérico
+          toast({
+            variant: 'destructive',
+            title: '❌ Erro na Extração',
+            description: 'Não foi possível extrair os dados do PDF. Verifique o formato do arquivo.'
+          });
+        } finally {
+          setIsExtracting(false);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+          }
+        }
+    };
+    
+    reader.onerror = () => {
+      setIsExtracting(false);
+      toast({ 
+        variant: 'destructive', 
+        title: '❌ Erro ao Ler Arquivo',
+        description: 'Não foi possível ler o arquivo. Tente novamente.' 
+      });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    };
+  }, [getValues, toast, processExtractedData]);
+
+  // useEffect do Bônus Adimplência FIXO
+  useEffect(() => {
+    if (!selectedProperty || !deliveryDateObj) return;
+    
+    // Verificar processamento global
+    if (!canProceedWithOperation('bonus-adimplencia-fixo')) return;
+
+    const hasFinancing = watchedPayments.some(p => p.type === 'financiamento');
+    const appraisalValue = watchedAppraisalValue || 0;
+    const saleValue = watchedSaleValue || 0;
+
+    console.log('🔍 Calculando Bônus Adimplência FIXO:', {
+      hasFinancing,
+      appraisalValue,
+      saleValue,
+      difference: appraisalValue - saleValue
+    });
+
+    try {
+      // Bônus Adimplência FIXO baseado APENAS em appraisalValue e saleValue
+      const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
+      
+      // Só adicionar/atualizar bônus se houver financiamento E valor positivo
+      if (hasFinancing && bonusAdimplenciaValue > 0) {
+        let bonusDate = deliveryDateObj;
+        if (new Date() > bonusDate) {
+          bonusDate = lastDayOfMonth(addMonths(new Date(), 1));
+        }
+        
+        const bonusPayment: PaymentField = {
+          type: "bonusAdimplencia",
+          value: bonusAdimplenciaValue, // VALOR FIXO
+          date: bonusDate,
+        };
+
+        const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusAdimplencia');
+        
+        if (bonusIndex > -1) {
+          // Atualizar APENAS se o valor mudou significativamente
+          if (Math.abs(watchedPayments[bonusIndex].value - bonusAdimplenciaValue) > 1) {
+            const newPayments = [...watchedPayments];
+            newPayments[bonusIndex] = bonusPayment;
+            
+            setTimeout(() => {
+              replace(newPayments);
+              completeOperation();
+            }, 100);
+          } else {
+            completeOperation();
+          }
+        } else {
+          // Adicionar bônus se não existe
+          setTimeout(() => {
+            append(bonusPayment);
+            completeOperation();
+          }, 100);
+        }
+      } else {
+        // Remover bônus se não atender às condições
+        const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusAdimplencia');
+        if (bonusIndex > -1) {
+          setTimeout(() => {
+            remove(bonusIndex);
+            completeOperation();
+          }, 100);
+        } else {
+          completeOperation();
+        }
+      }
+    } catch (error) {
+      completeOperation();
+      console.error('Erro no cálculo do bônus adimplência fixo:', error);
+    }
+  }, [
+    watchedAppraisalValue, 
+    watchedSaleValue, 
+    watchedPayments.length, 
+    selectedProperty, 
+    deliveryDateObj, 
+    append, 
+    remove, 
+    replace,
+    watchedPayments,
+    canProceedWithOperation,
+    completeOperation
+  ]);
+
+  // useEffect simplificado para financiamento
+  useEffect(() => {
+    const hasFinancing = watchedPayments.some(p => p.type === 'financiamento');
+    console.log('🏦 Status do Financiamento:', hasFinancing ? 'Presente' : 'Ausente');
+  }, [financingPaymentsCount]);
+  
+  // useEffect para taxas de cartório
+  useEffect(() => {
+    if (!selectedProperty) return;
+    const baseFee = getNotaryFee(watchedAppraisalValue);
+    const participants = watchedFinancingParticipants || 0;
+    const additionalFee = participants > 1 ? (participants - 1) * 110 : 0;
+    const totalFee = baseFee > 0 ? baseFee + additionalFee : 0;
+    setValue('notaryFees', totalFee, { shouldValidate: true });
+  }, [watchedAppraisalValue, watchedFinancingParticipants, setValue, selectedProperty]);
+
+  // useEffect para parcelas de cartório
+  useEffect(() => {
+    setValue('notaryInstallments', undefined, { shouldValidate: true });
+  }, [watchedNotaryPaymentMethod, setValue]);
+
+  // Função para calcular parcela de preço
+  const calculatePriceInstallment = useCallback((
+    principal: number,
+    installments: number,
+    deliveryDate: Date | null,
+    payments: PaymentField[]
+  ) => {
+    if (principal <= 0 || installments <= 0 || !deliveryDate) return { installment: 0, total: 0 };
+
+    const rateBeforeDelivery = 0.005; 
+    const rateAfterDelivery = 0.015; 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const deliveryMonth = startOfMonth(deliveryDate);
+
+    let gracePeriodMonths = 1;
+    if (payments.some((p) => p.type === "sinal1")) gracePeriodMonths++;
+    if (payments.some((p) => p.type === "sinal2")) gracePeriodMonths++;
+    if (payments.some((p) => p.type === "sinal3")) gracePeriodMonths++;
+
+    if (deliveryDate < today) {
+      const monthsSinceDelivery = differenceInMonths(today, deliveryDate);
+      gracePeriodMonths += monthsSinceDelivery;
+    }
+
+    let annuityFactor = 0;
+
+    for (let i = 1; i <= installments; i++) {
+      let discountFactor = 1;
+      for (let j = 1; j <= i; j++) {
+        const pastInstallmentDate = addMonths(today, j);
+        const pastInstallmentMonth = startOfMonth(pastInstallmentDate);
+        const pastRate = pastInstallmentMonth < deliveryMonth ? rateBeforeDelivery : rateAfterDelivery;
+        discountFactor /= 1 + pastRate;
+      }
+      annuityFactor += discountFactor;
+    }
+
+    if (annuityFactor === 0) return { installment: 0, total: principal };
+
+    const baseInstallment = principal / annuityFactor;
+    
+    let correctedInstallment = baseInstallment;
+    for (let i = 0; i < gracePeriodMonths; i++) {
+      const graceMonthDate = addMonths(today, i);
+      const graceMonth = startOfMonth(graceMonthDate);
+      const rate = graceMonth < deliveryMonth ? rateBeforeDelivery : rateAfterDelivery;
+      correctedInstallment *= (1 + rate);
+    }
+    
+    return { installment: correctedInstallment, total: correctedInstallment * installments };
+  }, []);
+
+  // Função para calcular parcelas escalonadas
+  const calculateSteppedInstallments = useCallback((
+    principal: number,
+    totalInstallments: number,
+    deliveryDate: Date | null,
+    payments: PaymentField[]
+  ) => {
+    if (principal <= 0 || totalInstallments <= 0 || !deliveryDate) {
+      return { installments: [0, 0, 0, 0], total: 0, periodLengths: [0, 0, 0, 0] };
+    }
+    
+    const rateBeforeDelivery = 0.005;
+    const rateAfterDelivery = 0.015;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const deliveryMonth = startOfMonth(deliveryDate);
+
+    let gracePeriodMonths = 1;
+    if (payments.some((p) => p.type === "sinal1")) gracePeriodMonths++;
+    if (payments.some((p) => p.type === "sinal2")) gracePeriodMonths++;
+    if (payments.some((p) => p.type === "sinal3")) gracePeriodMonths++;
+    if (deliveryDate < today) {
+      gracePeriodMonths += differenceInMonths(today, deliveryDate);
+    }
+
+    let correctedPrincipal = principal;
+    for (let i = 0; i < gracePeriodMonths; i++) {
+      const graceMonthDate = addMonths(today, i);
+      const graceMonth = startOfMonth(graceMonthDate);
+      const rate = graceMonth < deliveryMonth ? rateBeforeDelivery : rateAfterDelivery;
+      correctedPrincipal *= (1 + rate);
+    }
+
+    const basePeriodLength = Math.floor(totalInstallments / 4);
+    const remainder = totalInstallments % 4;
+    const periodLengths = [
+      basePeriodLength + (remainder > 0 ? 1 : 0),
+      basePeriodLength + (remainder > 1 ? 1 : 0),
+      basePeriodLength + (remainder > 2 ? 1 : 0),
+      basePeriodLength,
+    ];
+
+    const factors = [1, 0.75, 0.5, 0.25];
+    let totalAnnuityFactor = 0;
+
+    let installmentCounter = 0;
+    for (let p = 0; p < 4; p++) {
+      for (let i = 0; i < periodLengths[p]; i++) {
+        installmentCounter++;
+        
+        let discountFactor = 1;
+        for (let j = 1; j <= installmentCounter; j++) {
+          const pastInstallmentDate = addMonths(today, j);
+          const pastInstallmentMonth = startOfMonth(pastInstallmentDate);
+          const pastRate = pastInstallmentMonth < deliveryMonth ? rateBeforeDelivery : rateAfterDelivery;
+          discountFactor /= (1 + pastRate);
+        }
+        totalAnnuityFactor += factors[p] * discountFactor;
+      }
+    }
+
+    if (totalAnnuityFactor === 0) {
+      return { installments: [0, 0, 0, 0], total: correctedPrincipal, periodLengths };
+    }
+
+    const firstInstallment = correctedPrincipal / totalAnnuityFactor;
+    const steppedInstallments = factors.map(factor => firstInstallment * factor);
+    const totalPaid = steppedInstallments.reduce((acc, val, idx) => acc + val * periodLengths[idx], 0);
+
+    return { installments: steppedInstallments, total: totalPaid, periodLengths };
+  }, []);
+
+  // Função para calcular parcela de cartório
+  const calculateNotaryInstallment = useCallback((
+    total: number,
+    installments: number,
+    method: 'creditCard' | 'bankSlip'
+  ) => {
+    if (!total || !installments) return 0;
+
+    if (method === 'creditCard') {
+      return total / installments;
+    } else { 
+      const monthlyRate = 0.015;
+      if (monthlyRate <= 0) return total / installments;
+      const installmentValue = (total * monthlyRate * Math.pow(1 + monthlyRate, installments)) / (Math.pow(1 + monthlyRate, installments) - 1);
+      return installmentValue;
+    }
+  }, []);
+
+  // Função para calcular taxa
+  const calculateRate = useCallback((nper: number, pmt: number, pv: number): number => {
+    if (nper <= 0 || pmt <= 0 || pv <= 0) return 0;
+
+    const maxIterations = 200; 
+    const precision = 1e-10; 
+    let initialRate = 0.01; 
+
+    for (let i = 0; i < maxIterations; i++) {
+      try {
+        const g = Math.pow(1 + initialRate, nper);
+        const g_deriv = nper * Math.pow(1 + initialRate, nper - 1);
+
+        if (!isFinite(g) || !isFinite(g_deriv)) {
+          initialRate /= 2;
+          continue;
+        }
+
+        const f = pv * g - pmt * (g - 1) / initialRate;
+        const f_deriv = pv * g_deriv - pmt * (g_deriv * initialRate - (g - 1)) / (initialRate * initialRate);
+        
+        if (Math.abs(f_deriv) < 1e-12) { 
+          break;
+        }
+
+        const newRate = initialRate - f / f_deriv;
+
+        if (Math.abs(newRate - initialRate) < precision) {
+          return newRate;
+        }
+        initialRate = newRate;
+
+      } catch {
+        break;
+      }
+    }
+    
+    return initialRate; 
+  }, []);
+
+  // onSubmit com Bônus Adimplência FIXO e Sinal Ato FIXO
+  const onSubmit = useCallback((values: FormValues) => {
+    clearErrors();
+
+    if (!selectedProperty || !deliveryDateObj || !constructionStartDateObj) {
+      setError("propertyId", { message: "Selecione um imóvel para continuar." });
+      return;
+    }
+    
+    // Calcular Bônus Adimplência FIXO baseado APENAS em appraisalValue e saleValue
+    const bonusAdimplenciaValue = values.appraisalValue > values.saleValue ? values.appraisalValue - values.saleValue : 0;
+    
+    console.log('💰 Bônus Adimplência FIXO no cálculo manual:', {
+      appraisalValue: values.appraisalValue,
+      saleValue: values.saleValue,
+      bonusAdimplenciaValue,
+      hasFinancing: values.payments.some(p => p.type === 'financiamento')
+    });
+
+    // Manter Sinal Ato FIXO (valor informado pelo usuário)
+    const sinalAtoPayment = values.payments.find(p => p.type === 'sinalAto');
+    const sinalAtoValue = sinalAtoPayment?.value || 0;
+    
+    console.log('📝 Sinal Ato FIXO mantido do usuário:', centsToBrl(sinalAtoValue * 100));
+
+    const proSolutoPayment = values.payments.find(p => p.type === 'proSoluto');
+    const hasProSoluto = !!proSolutoPayment;
+
+    if (hasProSoluto && values.installments !== undefined && values.installments > 0) {
+      const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
+      let maxInstallments;
+      if (isReservaParque) {
+        maxInstallments = values.conditionType === 'especial' ? 66 : 60;
+      } else {
+        maxInstallments = values.conditionType === 'especial' ? 66 : 52;
+      }
+      if (values.installments > maxInstallments) {
+        setError("installments", { message: `Número de parcelas excede o limite de ${maxInstallments} para a condição selecionada.` });
+        return;
+      }
+    }
+
+    // Recalcular Pró-Soluto para ajustar ao fluxo considerando valores FIXOS
+    const sumOfOtherPayments = values.payments.reduce((acc, payment) => {
+      if (!['proSoluto', 'bonusAdimplencia', 'bonusCampanha'].includes(payment.type)) {
+        return acc + (payment.value || 0);
+      }
+      return acc;
+    }, 0);
+
+    let proSolutoValue = values.appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue;
+    proSolutoValue = Math.max(0, proSolutoValue);
+
+    console.log('🔄 Pró-Soluto recalculado com valores fixos:', {
+      appraisalValue: values.appraisalValue,
+      sumOfOtherPayments: sumOfOtherPayments,
+      bonusAdimplenciaValue: bonusAdimplenciaValue,
+      proSolutoValue: proSolutoValue
+    });
+
+    // NOVA CORREÇÃO: Aplicar lógica da campanha sinal também no cálculo manual
+    const descontoValue = values.payments.find(p => p.type === 'desconto')?.value || 0;
+    const valorFinalVenda = values.saleValue - descontoValue;
+    const sinalAtoMinimoPermitido = 0.055 * valorFinalVenda;
+
+    console.log('🎯 Aplicando campanha sinal no cálculo manual:', {
+      sinalAtoInformado: centsToBrl(sinalAtoValue * 100),
+      sinalAtoMinimo: centsToBrl(sinalAtoMinimoPermitido * 100),
+      valorFinalVenda: centsToBrl(valorFinalVenda * 100),
+      campanhaAtiva: shouldApplyCampaignBonus(isSinalCampaignActive, sinalCampaignLimitPercent)
+    });
+
+    let finalSinalAto = sinalAtoValue;
+    let finalProSolutoValue = proSolutoValue;
+    let campaignBonusValue = 0;
+
+    // APLICAR LÓGICA DA CAMPANHA
+    if (shouldApplyCampaignBonus(isSinalCampaignActive, sinalCampaignLimitPercent)) {
+      const resultadoCampanha = applyCampaignLogic(
+        sinalAtoValue,
+        sinalAtoMinimoPermitido,
+        proSolutoValue,
+        valorFinalVenda,
+        sinalCampaignLimitPercent
+      );
+      
+      finalSinalAto = resultadoCampanha.finalSinalAto;
+      finalProSolutoValue = resultadoCampanha.finalProSoluto;
+      campaignBonusValue = resultadoCampanha.campaignBonus;
+
+      console.log('🎁 Resultado da campanha no cálculo manual:', {
+        sinalAtoFinal: centsToBrl(finalSinalAto * 100),
+        proSolutoFinal: centsToBrl(finalProSolutoValue * 100),
+        bonusCampanha: centsToBrl(campaignBonusValue * 100)
+      });
+    };
+
+    const financedAmount = finalProSolutoValue;
+    const installments = values.installments ?? 0;
+
+    if (financedAmount <= 0 && hasProSoluto) {
+      setResults({
+        summary: { remaining: 0, okTotal: true },
+        financedAmount: 0,
+        steppedInstallments: [0, 0, 0, 0],
+        periodLengths: [0,0,0,0],
+        totalWithInterest: 0,
+        totalConstructionInsurance: 0,
+        monthlyInsuranceBreakdown: [],
+        incomeCommitmentPercentage: 0,
+        proSolutoCommitmentPercentage: 0,
+        averageInterestRate: 0,
+        notaryInstallmentValue: undefined,
+        incomeError: undefined,
+        proSolutoError: undefined,
+      });
       return;
     }
 
-    globalProcessingRef.current = {
-      isProcessing: true,
-      lastOperation: 'pdf_extraction',
-      timestamp: Date.now()
+    if(hasProSoluto && !installments) {
+      setError("installments", { message: "Número de parcelas é obrigatório para Pró-Soluto."})
+      return;
+    }
+    
+    const { installments: steppedInstallments, total, periodLengths } = calculateSteppedInstallments(
+      financedAmount,
+      installments,
+      deliveryDateObj,
+      values.payments
+    );
+      
+    const incomeCommitmentPercentage = values.grossIncome > 0
+      ? (values.simulationInstallmentValue + steppedInstallments[0]) / values.grossIncome
+      : 0;
+
+    let proSolutoCorrigido = financedAmount;
+    if (hasProSoluto) {
+      const today = new Date();
+      
+      let currentGracePeriodMonths = 1;
+      const hasSinal1 = values.payments.some(p => p.type === 'sinal1');
+      const hasSinal2 = values.payments.some(p => p.type === 'sinal2');
+      if (hasSinal1) currentGracePeriodMonths++;
+      if (hasSinal2) currentGracePeriodMonths++;
+      if (!hasSinal1) currentGracePeriodMonths = 1;
+
+      if (deliveryDateObj < today) {
+        const monthsSinceDelivery = differenceInMonths(today, deliveryDateObj);
+        currentGracePeriodMonths += monthsSinceDelivery;
+      }
+
+      for (let i = 0; i < currentGracePeriodMonths; i++) {
+        const installmentDate = addMonths(today, i);
+        const installmentMonth = startOfMonth(installmentDate);
+        const deliveryMonth = startOfMonth(deliveryDateObj);
+        const interestRate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
+        proSolutoCorrigido *= (1 + interestRate);
+      }
+    }
+    
+    const proSolutoCommitmentPercentage = values.saleValue > 0
+      ? proSolutoCorrigido / values.saleValue
+      : 0;
+
+    let notaryInstallmentValue: number | undefined = undefined;
+    if (values.notaryFees && values.notaryInstallments && watchedNotaryPaymentMethod) {
+      notaryInstallmentValue = calculateNotaryInstallment(
+        values.notaryFees,
+        values.notaryInstallments,
+        watchedNotaryPaymentMethod
+      );
+    }
+
+    let incomeError: string | undefined = undefined;
+    let proSolutoError: string | undefined = undefined;
+
+    if (incomeCommitmentPercentage > 0.5) {
+      incomeError = "Comprometimento de renda excede 50%.";
+    }
+
+    if(hasProSoluto) {
+      const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
+      let proSolutoLimit;
+      let proSolutoLimitPercent;
+
+      if (isReservaParque) {
+        proSolutoLimit = 0.18;
+        proSolutoLimitPercent = '18%';
+      } else {
+        proSolutoLimit = values.conditionType === 'especial' ? 0.18 : 0.15;
+        proSolutoLimitPercent = values.conditionType === 'especial' ? '18%' : '15%';
+      }
+
+      if (proSolutoCommitmentPercentage > proSolutoLimit) {
+        proSolutoError = `Pró-Soluto excede o limite de ${proSolutoLimitPercent} do valor de venda.`;
+      }
+    }
+
+    const { total: totalConstructionInsurance, breakdown: monthlyInsuranceBreakdown } = 
+      calculateSteppedConstructionInsurance(
+        constructionStartDateObj,
+        deliveryDateObj,
+        values.simulationInstallmentValue,
+        periodLengths,
+        steppedInstallments
+      );
+
+    const averageInterestRate = calculateRate(installments, steppedInstallments[0], financedAmount);
+
+    const summary = {
+      remaining: values.appraisalValue - (values.payments.reduce((sum, p) => sum + p.value, 0) + bonusAdimplenciaValue),
+      okTotal: values.appraisalValue <= (values.payments.reduce((sum, p) => sum + p.value, 0) + bonusAdimplenciaValue)
     };
 
-    try {
-      setIsExtracting(true);
-      
-      if (!validateFileSize(file) || !validateMimeType(file)) {
-        throw new Error('Arquivo inválido');
-      }
+    setResults({
+      summary,
+      financedAmount,
+      steppedInstallments,
+      periodLengths,
+      totalWithInterest: total,
+      totalConstructionInsurance,
+      monthlyInsuranceBreakdown,
+      incomeCommitmentPercentage,
+      proSolutoCommitmentPercentage,
+      averageInterestRate,
+      notaryInstallmentValue,
+      incomeError,
+      proSolutoError,
+    });
 
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      const functions = getFunctions();
-      const extractDataFromSimulationPdf = httpsCallable(functions, 'extractDataFromSimulationPdfAction');
-      
-      const result = await extractDataFromSimulationPdf({ dataUrl });
-
-      if (result.grossIncome > 0) {
-        setValue('grossIncome', result.grossIncome);
-        setIsDataExtracted(true);
-      }
-      if (result.simulationInstallmentValue > 0) {
-        setValue('simulationInstallmentValue', result.simulationInstallmentValue);
-      }
-      if (result.appraisalValue > 0) {
-        setValue('appraisalValue', result.appraisalValue);
-        if (!isSaleValueLocked) {
-          setValue('saleValue', result.appraisalValue);
-        }
-      }
-
-      toast({
-        title: "Dados extraídos com sucesso!",
-        description: "Os valores foram preenchidos automaticamente.",
-      });
-
-    } catch (error: any) {
-      console.error('Erro na extração de PDF:', error);
-      toast({
-        title: "Erro ao extrair dados",
-        description: error.message || "Não foi possível processar o PDF.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsExtracting(false);
-      globalProcessingRef.current.isProcessing = false;
+    if (resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [setValue, isSaleValueLocked, toast]);
+  }, [
+    clearErrors, 
+    selectedProperty, 
+    deliveryDateObj, 
+    constructionStartDateObj, 
+    setError, 
+    centsToBrl, 
+    shouldApplyCampaignBonus, 
+    isSinalCampaignActive, 
+    sinalCampaignLimitPercent, 
+    applyCampaignLogic, 
+    calculateSteppedInstallments, 
+    calculateNotaryInstallment, 
+    calculateSteppedConstructionInsurance, 
+    calculateRate, 
+    setResults, 
+    resultsRef
+  ]);
 
   // Otimizar geração de PDF
   const handleGeneratePdf = useCallback(async () => {
-    if (isGeneratingPdf) return;
+    if (!results || !selectedProperty) {
+      toast({
+        title: "Dados incompletos",
+        description: "Realize uma simulação antes de gerar o PDF.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsGeneratingPdf(true);
 
     try {
-      setIsGeneratingPdf(true);
+      const formValues = form.getValues();
       
-      const formValues = getValues();
-      const pdfFormValues: PdfFormValues = {
-        ...formValues,
+      // Preparar dados para o PDF
+      const pdfData: PdfFormValues = {
+        // Dados do imóvel
+        propertyName: selectedProperty.name,
+        propertyAddress: selectedProperty.address,
+        propertyType: selectedProperty.type,
+        
+        // Dados financeiros
+        appraisalValue: formValues.appraisalValue,
+        saleValue: formValues.saleValue,
+        grossIncome: formValues.grossIncome,
+        simulationInstallmentValue: formValues.simulationInstallmentValue,
+        
+        // Dados do financiamento
+        financedAmount: results.financedAmount,
+        steppedInstallments: results.steppedInstallments,
+        periodLengths: results.periodLengths,
+        totalWithInterest: results.totalWithInterest,
+        averageInterestRate: results.averageInterestRate,
+        
+        // Dados do corretor
         brokerName,
         brokerCreci,
+        
+        // Pagamentos
+        payments: formValues.payments,
+        
+        // Dados adicionais
+        conditionType: formValues.conditionType,
+        installments: formValues.installments,
+        notaryFees: formValues.notaryFees,
+        notaryPaymentMethod: formValues.notaryPaymentMethod,
+        notaryInstallments: formValues.notaryInstallments,
+        
+        // Datas
+        deliveryDate: selectedProperty.deliveryDate,
+        constructionStartDate: selectedProperty.constructionStartDate,
+        
+        // Data de geração
+        generatedAt: new Date().toISOString(),
       };
 
-      await generatePdf(pdfFormValues, results!, selectedProperty!);
-
+      await generatePdf(pdfData);
+      
       toast({
-        title: "PDF gerado com sucesso!",
-        description: "A proposta foi baixada no seu dispositivo.",
+        title: "PDF gerado com sucesso",
+        description: "O arquivo foi baixado para o seu dispositivo.",
       });
-
-    } catch (error: any) {
-      console.error('Erro na geração de PDF:', error);
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
       toast({
         title: "Erro ao gerar PDF",
-        description: error.message || "Não foi possível gerar o PDF.",
-        variant: "destructive",
+        description: "Ocorreu um erro ao gerar o arquivo. Tente novamente.",
+        variant: "destructive"
       });
     } finally {
       setIsGeneratingPdf(false);
     }
-  }, [isGeneratingPdf, getValues, brokerName, brokerCreci, results, selectedProperty, toast]);
+  }, [results, selectedProperty, form, brokerName, brokerCreci, toast]);
 
-  // Limpar cache quando componente for desmontado
-  useEffect(() => {
-    return () => {
-      steppedInsuranceCache.clear();
-    };
-  }, []);
-
-  // Otimizar carregamento de unidades
-  useEffect(() => {
-    if (selectedProperty && selectedProperty.pricing && selectedProperty.availability) {
-      const combinedUnits = selectedProperty.pricing.map(pricing => {
-        const unit = selectedProperty.availability?.towers
-          .flatMap(tower => tower.floors)
-          .flatMap(floor => floor.units)
-          .find(u => u.unitId === pricing.unitId);
-        
-        return unit ? { ...pricing, ...unit } : pricing;
-      });
-      
-      setAllUnits(combinedUnits);
-    }
-  }, [selectedProperty]);
+  // Preparar dados para o gráfico - CORREÇÃO DO TIPO
+  const chartData: ChartData[] = useMemo(() => {
+    if (!results) return [];
+    
+    const labels = ["Financiado", "Juros", "Entrada", "Taxas"];
+    const data = [
+      results.financedAmount,
+      results.totalWithInterest - results.financedAmount,
+      form.getValues("saleValue") - results.financedAmount,
+      (form.getValues("notaryFees") || 0)
+    ];
+    
+    const colors = [
+      "#3b82f6", // blue-500
+      "#ef4444", // red-500
+      "#10b981", // green-500
+      "#f59e0b"  // amber-500
+    ];
+    
+    return labels.map((label, index) => ({
+      name: label,
+      value: data[index],
+      fill: colors[index]
+    }));
+  }, [results, form]);
 
   return (
-    <div className="w-full space-y-6">
-      {/* Implementação do formulário escalonado */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
-            Simulador de Fluxo Escalonado
-          </CardTitle>
-          <CardDescription>
-            Configure parcelas que aumentam ao longo do tempo
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Campos do formulário escalonado */}
-        </CardContent>
-      </Card>
+    <div className="container mx-auto py-6 px-4 max-w-7xl">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Calculadora de Fluxo de Pagamento Escalonado</h1>
+          <p className="text-muted-foreground">
+            Simule o financiamento do seu imóvel com pagamentos escalonados e visualize o fluxo de pagamentos
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setIsTutorialOpen(true)}
+          >
+            <HelpCircle className="h-4 w-4 mr-2" />
+            Tutorial
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building className="h-5 w-5" />
+                Seleção de Imóvel
+              </CardTitle>
+              <CardDescription>
+                Selecione o imóvel que deseja simular o financiamento
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Form {...form}>
+                <FormField
+                  control={form.control}
+                  name="propertyId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Empreendimento</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione um empreendimento" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {filteredProperties.map((property) => (
+                            <SelectItem key={property.id} value={property.id}>
+                              {property.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                {selectedProperty && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium">Endereço</Label>
+                        <p className="text-sm text-muted-foreground">{selectedProperty.address}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Data de Entrega</Label>
+                        <p className="text-sm text-muted-foreground">
+                          {selectedProperty.deliveryDate ? format(parseISO(selectedProperty.deliveryDate), "dd/MM/yyyy", { locale: ptBR }) : "Não informada"}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsUnitSelectorOpen(true)}
+                      className="w-full"
+                    >
+                      <Grid3X3 className="h-4 w-4 mr-2" />
+                      Selecionar Unidade
+                    </Button>
+                    
+                    {form.getValues("selectedUnit") && (
+                      <Alert>
+                        <CheckCircle2 className="h-4 w-4" />
+                        <AlertTitle>Unidade Selecionada</AlertTitle>
+                        <AlertDescription>
+                          {form.getValues("selectedUnit")}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                )}
+              </Form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5" />
+                Dados Financeiros
+              </CardTitle>
+              <CardDescription>
+                Informe os valores para simulação do financiamento
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Form {...form}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <CurrencyFormField
+                    name="appraisalValue"
+                    label="Valor de Avaliação"
+                    control={form.control}
+                    id="appraisal-value-input"
+                  />
+                  
+                  <CurrencyFormField
+                    name="saleValue"
+                    label="Valor de Venda"
+                    control={form.control}
+                    id="sale-value-input"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <CurrencyFormField
+                    name="grossIncome"
+                    label="Renda Bruta Mensal"
+                    control={form.control}
+                  />
+                  
+                  <CurrencyFormField
+                    name="simulationInstallmentValue"
+                    label="Valor da Parcela Simulada"
+                    control={form.control}
+                  />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="financingParticipants"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Participantes no Financiamento</FormLabel>
+                        <Select onValueChange={(value) => field.onChange(parseInt(value))} defaultValue={field.value?.toString()}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o número de participantes" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="1">1</SelectItem>
+                            <SelectItem value="2">2</SelectItem>
+                            <SelectItem value="3">3</SelectItem>
+                            <SelectItem value="4">4</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={form.control}
+                    name="conditionType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tipo de Condição</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o tipo de condição" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="padrao">Padrão</SelectItem>
+                            <SelectItem value="especial">Especial</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </Form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Pagamentos
+              </CardTitle>
+              <CardDescription>
+                Adicione os pagamentos para a simulação
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Form {...form}>
+                <div className="space-y-4">
+                  {fields.map((field, index) => (
+                    <div key={field.id} className="flex items-center gap-2 p-4 border rounded-lg">
+                      <div className="flex-1 space-y-2">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                          <FormField
+                            control={form.control}
+                            name={`payments.${index}.type`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Tipo</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Selecione o tipo" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {paymentFieldOptions.map((option) => (
+                                      <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name={`payments.${index}.value`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Valor (R$)</FormLabel>
+                                <FormControl>
+                                  <CurrencyInput
+                                    value={field.value * 100}
+                                    onValueChange={(cents) => field.onChange(cents === null ? 0 : cents / 100)}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name={`payments.${index}.date`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Data</FormLabel>
+                                <FormControl>
+                                  <DatePicker
+                                    value={field.value ? field.value.toISOString() : ''}
+                                    onChange={(date) => field.onChange(date ? new Date(date) : undefined)}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+                      
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => remove(index)}
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  
+                  <div className="flex flex-wrap gap-2">
+                    {availablePaymentFields.map((option) => (
+                      <Button
+                        key={option.value}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => append({
+                          type: option.value,
+                          value: 0,
+                          date: new Date()
+                        })}
+                      >
+                        <PlusCircle className="h-4 w-4 mr-2" />
+                        {option.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </Form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Taxas de Cartório
+              </CardTitle>
+              <CardDescription>
+                Configure as taxas de cartório para o financiamento
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Form {...form}>
+                <div className="space-y-4">
+                  <CurrencyFormField
+                    name="notaryFees"
+                    label="Taxas de Cartório"
+                    control={form.control}
+                    readOnly={true}
+                  />
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="notaryPaymentMethod"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Método de Pagamento</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione o método de pagamento" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="creditCard">Cartão de Crédito</SelectItem>
+                              <SelectItem value="bankSlip">Boleto</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="notaryInstallments"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Parcelas</FormLabel>
+                          <Select onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)} defaultValue={field.value?.toString()}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione o número de parcelas" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {form.watch("notaryPaymentMethod") === "creditCard" ? (
+                                <>
+                                  <SelectItem value="1">1x</SelectItem>
+                                  <SelectItem value="2">2x</SelectItem>
+                                  <SelectItem value="3">3x</SelectItem>
+                                  <SelectItem value="4">4x</SelectItem>
+                                  <SelectItem value="5">5x</SelectItem>
+                                  <SelectItem value="6">6x</SelectItem>
+                                  <SelectItem value="7">7x</SelectItem>
+                                  <SelectItem value="8">8x</SelectItem>
+                                  <SelectItem value="9">9x</SelectItem>
+                                  <SelectItem value="10">10x</SelectItem>
+                                  <SelectItem value="11">11x</SelectItem>
+                                  <SelectItem value="12">12x</SelectItem>
+                                </>
+                              ) : (
+                                <>
+                                  <SelectItem value="36">36x</SelectItem>
+                                  <SelectItem value="40">40x</SelectItem>
+                                </>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  {form.watch("notaryFees") && form.watch("notaryInstallments") && (
+                    <div className="p-4 bg-muted rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium">Valor da Parcela</span>
+                        <span className="text-sm font-bold">
+                          {centsToBrl(
+                            calculateNotaryInstallment(
+                              form.getValues("notaryFees") || 0,
+                              form.getValues("notaryInstallments") || 1,
+                              form.getValues("notaryPaymentMethod")
+                            ) * 100
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                Importar Dados
+              </CardTitle>
+              <CardDescription>
+                Importe dados de um arquivo PDF ou imagem para preencher automaticamente os campos
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-muted-foreground/25 rounded-lg">
+                <Upload className="h-10 w-10 text-muted-foreground mb-4" />
+                <div className="text-center">
+                  <p className="text-sm font-medium mb-2">
+                    Arraste e solte um arquivo ou clique para selecionar
+                  </p>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    PDF, JPG ou PNG (máx. 15MB)
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isExtracting}
+                  >
+                    {isExtracting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Extraindo dados...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4 mr-2" />
+                        Selecionar Arquivo
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={form.handleSubmit(onSubmit)}
+              disabled={isCalculating}
+              size="lg"
+            >
+              {isCalculating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Calculando...
+                </>
+              ) : (
+                <>
+                  <Calculator className="h-4 w-4 mr-2" />
+                  Calcular Simulação
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+        
+        <div className="space-y-6">
+          {results && (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calculator className="h-5 w-5" />
+                    Resultados
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Valor Financiado</p>
+                      <p className="text-2xl font-bold">{centsToBrl(results.financedAmount * 100)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Prazo</p>
+                      <p className="text-2xl font-bold">{form.getValues("installments")} meses</p>
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">1ª Parcela</p>
+                    <div className="text-2xl font-bold">{centsToBrl((results.steppedInstallments?.[0] || 0) * 100)}</div>
+                  </div>
+                  
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Última Parcela</p>
+                    <div className="text-2xl font-bold">{centsToBrl((results.steppedInstallments?.[3] || 0) * 100)}</div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Total de Juros</p>
+                      <p className="text-xl font-bold">{centsToBrl((results.totalWithInterest - results.financedAmount) * 100)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Taxa de Juros Efetiva</p>
+                      <p className="text-xl font-bold">{formatPercentage(results.averageInterestRate)}</p>
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm font-medium text-muted-foreground">Entrada</span>
+                      <span className="font-medium">{centsToBrl(form.getValues("saleValue") * 100 - results.financedAmount * 100)}</span>
+                    </div>
+                    
+                    <div className="flex justify-between">
+                      <span className="text-sm font-medium text-muted-foreground">Taxas Cartoriais</span>
+                      <span className="font-medium">{centsToBrl((form.getValues("notaryFees") || 0) * 100)}</span>
+                    </div>
+                    
+                    <Separator />
+                    
+                    <div className="flex justify-between">
+                      <span className="font-medium">Total a Pagar</span>
+                      <span className="font-bold">
+                        {centsToBrl(
+                          (results.totalWithInterest + 
+                          (form.getValues("saleValue") * 100 - results.financedAmount * 100) + 
+                          (form.getValues("notaryFees") || 0) * 100
+                          )
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {results.incomeError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Atenção</AlertTitle>
+                      <AlertDescription>
+                        {results.incomeError}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  
+                  {results.proSolutoError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Atenção</AlertTitle>
+                      <AlertDescription>
+                        {results.proSolutoError}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+                <CardFooter>
+                  <Button
+                    onClick={handleGeneratePdf}
+                    disabled={isGeneratingPdf}
+                    className="w-full"
+                  >
+                    {isGeneratingPdf ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Gerando PDF...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        Gerar PDF
+                      </>
+                    )}
+                  </Button>
+                </CardFooter>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Parcelas Escalonadas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {results.steppedInstallments?.map((installment, index) => (
+                      <div key={index} className="flex justify-between">
+                        <span className="text-sm font-medium text-muted-foreground">
+                          Período {index + 1} ({results.periodLengths?.[index] || 0} parcelas)
+                        </span>
+                        <span className="font-medium">{centsToBrl(installment * 100)}</span>
+                      </div>
+                    )) || []}
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <PieChart className="h-5 w-5" />
+                    Distribuição de Pagamentos
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResultChart data={chartData} />
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Fluxo de Pagamentos
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <PaymentTimeline items={watchedPayments} />
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
+      </div>
+      
+      <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Selecionar Unidade</DialogTitle>
+            <DialogDescription>
+              Escolha uma unidade para continuar com a simulação
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="status-filter">Status:</Label>
+                <Select value={statusFilter} onValueChange={(value: "Disponível" | "Vendido" | "Reservado" | "Indisponível" | "Todos") => setStatusFilter(value)}>
+                  <SelectTrigger id="status-filter" className="w-[180px]">
+                    <SelectValue placeholder="Filtrar por status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Todos</SelectItem>
+                    <SelectItem value="Disponível">Disponível</SelectItem>
+                    <SelectItem value="Vendido">Vendido</SelectItem>
+                    <SelectItem value="Reservado">Reservado</SelectItem>
+                    <SelectItem value="Indisponível">Indisponível</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="floor-filter">Andar:</Label>
+                <Select value={floorFilter} onValueChange={setFloorFilter}>
+                  <SelectTrigger id="floor-filter" className="w-[180px]">
+                    <SelectValue placeholder="Filtrar por andar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Todos</SelectItem>
+                    {filterOptions.floors.map((floor) => (
+                      <SelectItem key={floor} value={floor}>
+                        {floor}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="typology-filter">Tipologia:</Label>
+                <Select value={typologyFilter} onValueChange={setTypologyFilter}>
+                  <SelectTrigger id="typology-filter" className="w-[180px]">
+                    <SelectValue placeholder="Filtrar por tipologia" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Todos</SelectItem>
+                    {filterOptions.typologies.map((typology) => (
+                      <SelectItem key={typology} value={typology}>
+                        {typology}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="sun-position-filter">Posição Solar:</Label>
+                <Select value={sunPositionFilter} onValueChange={setSunPositionFilter}>
+                  <SelectTrigger id="sun-position-filter" className="w-[180px]">
+                    <SelectValue placeholder="Filtrar por posição solar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Todos</SelectItem>
+                    {filterOptions.sunPositions.map((sunPosition) => (
+                      <SelectItem key={sunPosition} value={sunPosition}>
+                        {sunPosition}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredUnits.map((unit) => (
+                <UnitCard
+                  key={`${unit.block}-${unit.unitNumber}`}
+                  unit={unit}
+                  isReservaParque={selectedProperty?.enterpriseName.includes('Reserva Parque Clube') || false}
+                  onUnitSelect={(unit) => {
+                    setValue('selectedUnit', `${unit.block} - Unidade ${unit.unitNumber}`);
+                    setValue('saleValue', unit.saleValue / 100);
+                    setValue('appraisalValue', unit.appraisalValue / 100);
+                    setIsUnitSelectorOpen(false);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      <InteractiveTutorial 
+        isOpen={isTutorialOpen}
+        onClose={() => setIsTutorialOpen(false)}
+        tutorialSteps={[
+          {
+            title: "Bem-vindo à Calculadora de Fluxo de Pagamento Escalonado",
+            content: "Esta ferramenta ajuda você a simular o financiamento do seu imóvel com pagamentos escalonados e visualizar o fluxo de pagamentos.",
+            target: ".container"
+          },
+          {
+            title: "Seleção de Imóvel",
+            content: "Selecione o empreendimento e a unidade que deseja simular o financiamento.",
+            target: '[data-testid="property-selection"]'
+          },
+          {
+            title: "Dados Financeiros",
+            content: "Informe os valores de avaliação, venda, renda e parcela simulada.",
+            target: '[data-testid="financial-data"]'
+          },
+          {
+            title: "Pagamentos",
+            content: "Adicione os pagamentos como entrada, sinal, financiamento, etc.",
+            target: '[data-testid="payments"]'
+          },
+          {
+            title: "Taxas de Cartório",
+            content: "Configure as taxas de cartório e o método de pagamento.",
+            target: '[data-testid="notary-fees"]'
+          },
+          {
+            title: "Importar Dados",
+            content: "Importe dados de um arquivo PDF ou imagem para preencher automaticamente os campos.",
+            target: '[data-testid="import-data"]'
+          },
+          {
+            title: "Resultados",
+            content: "Visualize os resultados do cálculo, incluindo parcelas escalonadas, total de juros e taxa efetiva.",
+            target: '[data-testid="results"]'
+          },
+          {
+            title: "Parcelas Escalonadas",
+            content: "Veja as parcelas escalonadas por período.",
+            target: '[data-testid="stepped-installments"]'
+          },
+          {
+            title: "Gráfico de Distribuição",
+            content: "Veja a distribuição dos pagamentos em formato de gráfico.",
+            target: '[data-testid="chart"]'
+          },
+          {
+            title: "Fluxo de Pagamentos",
+            content: "Visualize o cronograma de pagamentos ao longo do tempo.",
+            target: '[data-testid="payment-timeline"]'
+          },
+          {
+            title: "Gerar PDF",
+            content: "Exporte os resultados da simulação em formato PDF.",
+            target: '[data-testid="generate-pdf"]'
+          }
+        ]}
+      />
     </div>
   );
 }
-
-// Componente TrendingUp para importação
-const TrendingUp = memo(() => <Repeat className="h-4 w-4" />);
-TrendingUp.displayName = 'TrendingUp';
