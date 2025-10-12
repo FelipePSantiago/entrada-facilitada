@@ -7,6 +7,7 @@ import { authenticator } from 'otplib';
 import { parseExcel } from "./parsers/excel-parser";
 import { getErrorMessage, getValue } from './utils';
 import pdf from 'pdf-parse';
+import { PropertyCache, UserCache, PdfExtractionCache, createFileHash, withCache } from './cache';
 
 // --- ATENÇÃO: FLAG PARA RESET DE 2FA ---
 // Defina como `true` UMA ÚNICA VEZ para forçar todos os usuários a reconfigurarem o 2FA no próximo login.
@@ -20,48 +21,49 @@ const adminEmails = [
 ];
 
 /**
- * Extrai dados de um PDF de simulação da Caixa.
+ * Extrai dados de um PDF de simulação da Caixa com cache
  */
-export async function extractDataFromSimulationPdfAction(
-  data: { file: string }
-): Promise<ExtractPricingOutput> {
-  try {
-    const { file: fileAsDataURL } = data;
-    if (!fileAsDataURL) throw new Error("Nenhum arquivo enviado.");
+export const extractDataFromSimulationPdfAction = withCache(
+  async (fileHash: string) => `pdf_extraction:${fileHash}`,
+  async (data: { file: string }): Promise<ExtractPricingOutput> => {
+    try {
+      const { file: fileAsDataURL } = data;
+      if (!fileAsDataURL) throw new Error("Nenhum arquivo enviado.");
 
-    const base64Data = fileAsDataURL.split(',')[1];
-    if (!base64Data) throw new Error("Formato de Data URL inválido.");
+      const base64Data = fileAsDataURL.split(',')[1];
+      if (!base64Data) throw new Error("Formato de Data URL inválido.");
 
-    const pdfBuffer = Buffer.from(base64Data, 'base64');
-    const pdfData = await pdf(pdfBuffer);
-    const pdfText = pdfData.text;
-    
-    const extractValue = (regex: RegExp) => {
-        const match = pdfText.match(regex);
-        if (match && match[1]) {
-            const cleanedValue = match[1].replace(/\./g, '').replace(',', '.');
-            return parseFloat(cleanedValue) || 0;
-        }
-        return 0;
-    };
-    
-    const grossIncome = extractValue(/Renda Familiar:[\s\S]*?R\$\s*([\d.,]+)/i);
-    const simulationInstallmentValue = extractValue(/Primeira Prestação[\s\S]*?R\$\s*([\d.,]+)/i);
-    const appraisalValue = extractValue(/Valor do imóvel:[\s\S]*?R\$\s*([\d.,]+)/i);
-    const financingValue = extractValue(/Valor de Financiamento[\s\S]*?R\$\s*([\d.,]+)/i);
+      const pdfBuffer = Buffer.from(base64Data, 'base64');
+      const pdfData = await pdf(pdfBuffer);
+      const pdfText = pdfData.text;
+      
+      const extractValue = (regex: RegExp) => {
+          const match = pdfText.match(regex);
+          if (match && match[1]) {
+              const cleanedValue = match[1].replace(/\./g, '').replace(',', '.');
+              return parseFloat(cleanedValue) || 0;
+          }
+          return 0;
+      };
+      
+      const grossIncome = extractValue(/Renda Familiar:[\s\S]*?R\$\s*([\d.,]+)/i);
+      const simulationInstallmentValue = extractValue(/Primeira Prestação[\s\S]*?R\$\s*([\d.,]+)/i);
+      const appraisalValue = extractValue(/Valor do imóvel:[\s\S]*?R\$\s*([\d.,]+)/i);
+      const financingValue = extractValue(/Valor de Financiamento[\s\S]*?R\$\s*([\d.,]+)/i);
 
-    return {
-      grossIncome,
-      simulationInstallmentValue,
-      appraisalValue,
-      financingValue,
-    };
-  } catch (error) {
-    console.error("Erro ao extrair dados do PDF:", getErrorMessage(error));
-    throw new Error(`Não foi possível extrair os dados do PDF: ${getErrorMessage(error)}`);
-  }
-}
-
+      return {
+        grossIncome,
+        simulationInstallmentValue,
+        appraisalValue,
+        financingValue,
+      };
+    } catch (error) {
+      console.error("Erro ao extrair dados do PDF:", getErrorMessage(error));
+      throw new Error(`Não foi possível extrair os dados do PDF: ${getErrorMessage(error)}`);
+    }
+  },
+  30 * 60 * 1000 // 30 minutos
+);
 
 /**
  * Verifica um token TOTP em relação a um segredo.
@@ -86,9 +88,20 @@ async function verifyAdmin(idToken: string | undefined) {
     
     try {
         const decodedToken = await adminAuth.verifyIdToken(idToken);
-        const userDoc = await adminDb.collection('users').doc(decodedToken.uid).get();
+        
+        // Tentar obter do cache primeiro
+        let userDoc = UserCache.getUser(decodedToken.uid);
+        
+        if (!userDoc) {
+            const userDocSnapshot = await adminDb.collection('users').doc(decodedToken.uid).get();
+            if (!userDocSnapshot.exists) {
+                throw new Error('Forbidden: User document not found.');
+            }
+            userDoc = userDocSnapshot.data() as AppUser;
+            UserCache.setUser(decodedToken.uid, userDoc);
+        }
 
-        if (!userDoc.exists || !userDoc.data()?.isAdmin) {
+        if (!userDoc.isAdmin) {
             throw new Error('Forbidden: User is not an administrator.');
         }
         return decodedToken.uid;
@@ -98,7 +111,37 @@ async function verifyAdmin(idToken: string | undefined) {
     }
 }
 
+/**
+ * Obtém propriedades com cache
+ */
+export const getPropertiesAction = withCache(
+  async () => 'properties:list',
+  async (): Promise<Property[]> => {
+    try {
+      // Tentar obter do cache primeiro
+      let cachedProperties = PropertyCache.getProperties();
+      if (cachedProperties) {
+        return cachedProperties;
+      }
 
+      const propertiesSnapshot = await adminDb.collection("properties").get();
+      const properties = propertiesSnapshot.docs.map(doc => doc.data() as Property);
+      
+      // Armazenar no cache
+      PropertyCache.setProperties(properties);
+      
+      return properties;
+    } catch (error: unknown) {
+      console.error("Error in getPropertiesAction: ", getErrorMessage(error));
+      throw new Error(`Não foi possível obter os empreendimentos: ${getErrorMessage(error)}`);
+    }
+  },
+  10 * 60 * 1000 // 10 minutos
+);
+
+/**
+ * Salva propriedade com invalidação de cache
+ */
 export async function savePropertyAction(
   values: PropertyFormValues & { idToken?: string }
 ): Promise<void> {
@@ -117,7 +160,7 @@ export async function savePropertyAction(
     
     let deliveryD = values.deliveryDate;
     if (deliveryD) {
-        deliveryD = format(parseISO(deliveryD), 'yyyy-MM-dd');
+        deliveryD = format(parseISO(deliveryDate), 'yyyy-MM-dd');
     } else {
       const startDateObj = parseISO(startDate);
       const deliveryDateObj = addYears(startDateObj, 2);
@@ -133,6 +176,10 @@ export async function savePropertyAction(
     };
 
     await propertyRef.set(dataToSave, { merge: true });
+
+    // Invalidar cache
+    PropertyCache.invalidateProperty(values.id);
+    PropertyCache.invalidateAll();
 
   } catch (error: unknown) {
     console.error("Error in savePropertyAction: ", getErrorMessage(error));
@@ -205,6 +252,9 @@ export async function batchCreatePropertiesAction(
         }
     }
     
+    // Invalidar cache
+    PropertyCache.invalidateAll();
+    
     return { addedCount };
 
   } catch (error: unknown) {
@@ -220,6 +270,11 @@ export async function deletePropertyAction(data: { propertyId: string, idToken: 
     if (!propertyId) throw new Error("ID do empreendimento não fornecido.");
     const propertyRef = adminDb.collection("properties").doc(propertyId);
     await propertyRef.delete();
+    
+    // Invalidar cache
+    PropertyCache.invalidateProperty(propertyId);
+    PropertyCache.invalidateAll();
+    
   } catch (error: unknown) {
     console.error("Error in deletePropertyAction: ", getErrorMessage(error));
     throw new Error(`Não foi possível remover o empreendimento: ${getErrorMessage(error)}`);
@@ -243,6 +298,9 @@ export async function deleteAllPropertiesAction(data: { idToken: string }): Prom
     });
 
     await batch.commit();
+
+    // Invalidar cache
+    PropertyCache.invalidateAll();
 
     return { deletedCount: snapshot.size };
 
@@ -343,6 +401,11 @@ export async function updatePropertyPricingAction(
       availability: newAvailability,
       lastPriceUpdate: FieldValue.serverTimestamp(),
     });
+
+    // Invalidar cache
+    PropertyCache.invalidateProperty(propertyId);
+    PropertyCache.setUnitPricing(propertyId, fullPricingDataInCents);
+
   } catch (error: unknown) {
     console.error("Error in updatePropertyPricingAction: ", getErrorMessage(error));
     throw new Error(`Não foi possível atualizar a tabela de preços: ${getErrorMessage(error)}`);
@@ -360,6 +423,10 @@ export async function deletePropertyPricingAction(data: { propertyId: string, id
           availability: FieldValue.delete(),
           lastPriceUpdate: FieldValue.delete(),
       });
+      
+      // Invalidar cache
+      PropertyCache.invalidateProperty(propertyId);
+      
     } catch(error: unknown) {
       console.error("Error in deletePropertyPricingAction: ", getErrorMessage(error));
       throw new Error(`Não foi possível remover a tabela de preços: ${getErrorMessage(error)}`);
@@ -414,6 +481,10 @@ export const verifyAndEnableTwoFactorAction = async (data: { uid: string, secret
         if (isValid) {
             const userDocRef = adminDb.collection("users").doc(uid);
             await userDocRef.set({ twoFactorURI: secretUri, twoFactorEnabled: true }, { merge: true });
+            
+            // Invalidar cache do usuário
+            UserCache.invalidateUser(uid);
+            
             return true;
         } else {
             return false;
@@ -425,7 +496,6 @@ export const verifyAndEnableTwoFactorAction = async (data: { uid: string, secret
     }
 };
 
-
 /**
  * Obtém o segredo 2FA de um usuário, criando o perfil no Firestore se for um novo usuário.
  */
@@ -434,194 +504,179 @@ export const getTwoFactorSecretAction = async (uid: string): Promise<string | nu
         if (typeof uid !== 'string' || !uid) {
             throw new Error("UID do usuário inválido ou não fornecido.");
         }
-        const userDocRef = adminDb.collection("users").doc(uid);
-        let userDoc = await userDocRef.get();
+
+        // Tentar obter do cache primeiro
+        let userDoc = UserCache.getUser(uid);
         
-        if (!userDoc.exists) {
-            console.log(`Documento não encontrado para ${uid}. Criando novo perfil no Firestore.`);
-            const userRecord = await adminAuth.getUser(uid);
-            const userEmail = userRecord.email;
-            if (!userEmail) throw new Error("E-mail não encontrado no Firebase Auth para criar perfil de usuário.");
+        if (!userDoc) {
+            const userDocRef = adminDb.collection("users").doc(uid);
+            const userDocSnapshot = await userDocRef.get();
             
-            await userDocRef.set({
-                email: userEmail,
-                emailLower: userEmail.toLowerCase(),
-                isAdmin: adminEmails.includes(userEmail.toLowerCase()),
-                createdAt: FieldValue.serverTimestamp(),
-            }, { merge: true });
-            
-            // Re-fetch the document after creation
-            userDoc = await userDocRef.get();
-            if (!userDoc.exists) {
-                // This should theoretically not happen, but it's a safeguard.
-                throw new Error("Falha ao criar e re-ler o documento do usuário.");
+            if (!userDocSnapshot.exists) {
+                const userRecord = await adminAuth.getUser(uid);
+                const userEmail = userRecord.email;
+                
+                if (!userEmail) {
+                    throw new Error("E-mail do usuário não encontrado.");
+                }
+                
+                const isAdmin = adminEmails.includes(userEmail);
+                
+                await userDocRef.set({
+                    email: userEmail,
+                    isAdmin,
+                    twoFactorEnabled: false,
+                    createdAt: FieldValue.serverTimestamp(),
+                }, { merge: true });
+                
+                return null;
             }
+            
+            userDoc = userDocSnapshot.data() as AppUser;
+            UserCache.setUser(uid, userDoc);
         }
 
-        const userData = userDoc.data() as AppUser;
-
-        if (SHOULD_RESET_2FA && userData.isAdmin) {
-            console.log(`Resetando 2FA para o usuário: ${uid}`);
-            await userDocRef.update({ twoFactorURI: FieldValue.delete(), twoFactorEnabled: FieldValue.delete() });
-            return null; // Força a reconfiguração
+        if (SHOULD_RESET_2FA && userDoc.twoFactorEnabled) {
+            const userDocRef = adminDb.collection("users").doc(uid);
+            await userDocRef.update({
+                twoFactorEnabled: false,
+                twoFactorURI: FieldValue.delete(),
+            });
+            
+            // Invalidar cache
+            UserCache.invalidateUser(uid);
+            
+            return null;
         }
 
-        return userData?.twoFactorURI || null;
+        return userDoc.twoFactorURI || null;
 
     } catch (error: unknown) {
-        console.error("Erro em getTwoFactorSecretAction:", getErrorMessage(error));
-        throw new Error(`Não foi possível obter o status do 2FA: ${getErrorMessage(error)}`);
+        console.error("Error in getTwoFactorSecretAction: ", getErrorMessage(error));
+        throw new Error(`Não foi possível obter o segredo 2FA: ${getErrorMessage(error)}`);
     }
 };
 
-
-export const handleUnitStatusChangeAction = async (data: { propertyId: string, unitId: string, newStatus: UnitStatus, idToken: string }): Promise<void> => {
-    const { propertyId, unitId, newStatus, idToken } = data;
-    await verifyAdmin(idToken);
-    try {
-      if (!propertyId || !unitId || !newStatus) throw new Error("Dados insuficientes para alterar o status da unidade.");
-      const propertyRef = adminDb.collection("properties").doc(propertyId);
-      
-      const propertyDoc = await propertyRef.get();
-      if (!propertyDoc.exists) {
-          throw new Error(`Empreendimento com ID "${propertyId}" não encontrado.`);
-      }
-
-      const propertyData = propertyDoc.data();
-      if (!propertyData || !propertyData.availability || !Array.isArray(propertyData.availability.towers)) {
-          throw new Error(`Dados de disponibilidade para o empreendimento "${propertyId}" estão ausentes ou malformados.`);
-      }
-      
-      const newAvailabilityData = JSON.parse(JSON.stringify(propertyData.availability));
-      let unitFoundAndChanged = false;
-
-      for (const tower of newAvailabilityData.towers) {
-          if (tower.floors && Array.isArray(tower.floors)) {
-              for (const floor of tower.floors) {
-                  if (floor.units && Array.isArray(floor.units)) {
-                      const unitToUpdate = floor.units.find((unit: Unit) => unit.unitId === unitId);
-                      if (unitToUpdate) {
-                          unitToUpdate.status = newStatus;
-                          unitFoundAndChanged = true;
-                          break; 
-                      }
-                  }
-              }
-              if (unitFoundAndChanged) break;
-          }
-      }
-
-      if (!unitFoundAndChanged) {
-          // It's not an error if the unit is not found, maybe it was deleted, so we just log and return.
-          console.warn(`Unidade com ID "${unitId}" não encontrada no empreendimento "${propertyId}". Nenhuma alteração feita.`);
-          return;
-      }
-      
-      await propertyRef.update({ availability: newAvailabilityData });
-    } catch (error: unknown) {
-      throw new Error(`Não foi possível alterar o status da unidade: ${getErrorMessage(error)}`);
-    }
-}
-
-export async function updatePropertyAvailabilityAction(
-  data: { propertyId: string, fileContent: string, idToken: string }
-): Promise<{ unitsUpdatedCount: number }> {
-  const { propertyId, fileContent, idToken } = data;
-  await verifyAdmin(idToken);
-  try {
-    if (!propertyId) throw new Error("ID do empreendimento não fornecido.");
-
-    const parsedData = parseExcel(fileContent);
-    
-    const availabilityData: AvailabilityData[] = parsedData.map(item => {
-        const statusValue = getValue(item, ['Disponibilidade', 'Status']);
-        const status = String(statusValue) as UnitStatus;
-        
-        // Correção aqui para usar apenas "Unidade"
-        const fullUnitId = String(getValue(item, ['Unidade'])).trim();
-
-        const validStatuses: UnitStatus[] = ["Disponível", "Reservado", "Vendido", "Indisponível"];
-        if (!validStatuses.includes(status)) {
-            throw new Error(`Status inválido encontrado na planilha: "${status}". Use apenas: ${validStatuses.join(', ')}.`);
-        }
-        return { unitId: fullUnitId, status };
-    });
-
-    if (!availabilityData || availabilityData.length === 0) {
-      throw new Error("Nenhum dado de disponibilidade encontrado na planilha.");
-    }
-
-    const propertyRef = adminDb.collection("properties").doc(propertyId);
-    const propertyDoc = await propertyRef.get();
-    if (!propertyDoc.exists) {
-        throw new Error(`Empreendimento com ID "${propertyId}" não encontrado.`);
-    }
-
-    const propertyData = propertyDoc.data();
-    if (!propertyData || !propertyData.availability || !Array.isArray(propertyData.availability.towers)) {
-        throw new Error(`Dados de disponibilidade existentes para o empreendimento "${propertyId}" estão ausentes ou malformados.`);
-    }
-
-    const newAvailabilityData = JSON.parse(JSON.stringify(propertyData.availability));
-    let unitsUpdatedCount = 0;
-
-    const statusMap = new Map(availabilityData.map(item => [item.unitId, item.status]));
-
-    for (const tower of newAvailabilityData.towers) {
-        for (const floor of tower.floors) {
-            for (const unit of floor.units) {
-                const cleanUnitId = unit.unitId;
-                const newStatus = statusMap.get(cleanUnitId);
-                if (newStatus && unit.status !== newStatus) {
-                    unit.status = newStatus;
-                    unitsUpdatedCount++;
-                }
-            }
-        }
-    }
-    
-    if (unitsUpdatedCount > 0) {
-        await propertyRef.update({ availability: newAvailabilityData });
-    }
-
-    return { unitsUpdatedCount };
-
-  } catch (error: unknown) {
-    console.error("Error in updatePropertyAvailabilityAction: ", getErrorMessage(error));
-    throw new Error(`Não foi possível atualizar a disponibilidade via planilha: ${getErrorMessage(error)}`);
-  }
-}
-
-/**
- * Verifica um token TOTP para um usuário.
- * Esta função é chamada a partir do front-end para verificar um token 2FA.
- * @param {string} uid - O ID do usuário.
- * @param {string} token - O token de 6 dígitos.
- * @returns {Promise<boolean>} - Retorna `true` se o token for válido.
- */
 export const verifyTokenAction = async (data: { uid: string, token: string }): Promise<boolean> => {
     const { uid, token } = data;
     try {
-        if (!uid || !token) {
-            throw new Error("UID do usuário e token são obrigatórios.");
+        if (typeof uid !== 'string' || !uid) {
+            throw new Error("UID do usuário inválido ou não fornecido.");
+        }
+        if (typeof token !== 'string' || !token) {
+            throw new Error("Token inválido ou não fornecido.");
         }
 
-        const secretUri = await getTwoFactorSecretAction(uid);
-        if (!secretUri) {
-            throw new Error("O 2FA não está habilitado ou o segredo não foi encontrado para este usuário.");
+        // Tentar obter do cache primeiro
+        let userDoc = UserCache.getUser(uid);
+        
+        if (!userDoc) {
+            const userDocRef = adminDb.collection("users").doc(uid);
+            const userDocSnapshot = await userDocRef.get();
+            
+            if (!userDocSnapshot.exists) {
+                throw new Error("Usuário não encontrado.");
+            }
+            
+            userDoc = userDocSnapshot.data() as AppUser;
+            UserCache.setUser(uid, userDoc);
         }
 
-        const secret = new URL(secretUri).searchParams.get('secret');
-        if (!secret) {
-            throw new Error("Segredo inválido na URI.");
+        if (!userDoc.twoFactorEnabled || !userDoc.twoFactorURI) {
+            throw new Error("2FA não está habilitado para este usuário.");
         }
+
+        const secret = new URL(userDoc.twoFactorURI).searchParams.get('secret');
+        if (!secret) throw new Error("Segredo inválido na URI do usuário.");
 
         return verifyTotp(secret, token);
 
     } catch (error: unknown) {
-        console.error("Erro em verifyTokenAction:", getErrorMessage(error));
-        // Lança o erro para que o front-end possa capturá-lo e exibir uma mensagem.
-        // O erro "internal" sugere que o Firebase está capturando isso.
-        throw new Error(`Internal error: ${getErrorMessage(error)}`);
+        console.error("Error in verifyTokenAction: ", getErrorMessage(error));
+        throw new Error(`Não foi possível verificar o token: ${getErrorMessage(error)}`);
+    }
+};
+
+export const handleUnitStatusChangeAction = async (data: { 
+    propertyId: string, 
+    unitId: string, 
+    newStatus: UnitStatus, 
+    idToken: string 
+}): Promise<void> => {
+    const { propertyId, unitId, newStatus, idToken } = data;
+    await verifyAdmin(idToken);
+    try {
+        if (!propertyId) throw new Error("ID do empreendimento não fornecido.");
+        if (!unitId) throw new Error("ID da unidade não fornecido.");
+        if (!newStatus) throw new Error("Novo status não fornecido.");
+
+        const propertyRef = adminDb.collection("properties").doc(propertyId);
+        const propertyDoc = await propertyRef.get();
+        
+        if (!propertyDoc.exists) {
+            throw new Error("Empreendimento não encontrado.");
+        }
+
+        const property = propertyDoc.data() as Property;
+        if (!property.availability || !property.availability.towers) {
+            throw new Error("Estrutura de disponibilidade não encontrada.");
+        }
+
+        let unitUpdated = false;
+        const updatedTowers = property.availability.towers.map(tower => {
+            const updatedFloors = tower.floors.map(floor => {
+                const updatedUnits = floor.units.map(unit => {
+                    if (unit.unitId === unitId) {
+                        unitUpdated = true;
+                        return { ...unit, status: newStatus };
+                    }
+                    return unit;
+                });
+                return { ...floor, units: updatedUnits };
+            });
+            return { ...tower, floors: updatedFloors };
+        });
+
+        if (!unitUpdated) {
+            throw new Error("Unidade não encontrada.");
+        }
+
+        await propertyRef.update({
+            'availability.towers': updatedTowers
+        });
+
+        // Invalidar cache
+        PropertyCache.invalidateProperty(propertyId);
+
+    } catch (error: unknown) {
+        console.error("Error in handleUnitStatusChangeAction: ", getErrorMessage(error));
+        throw new Error(`Não foi possível alterar o status da unidade: ${getErrorMessage(error)}`);
+    }
+};
+
+export const updatePropertyAvailabilityAction = async (data: { 
+    propertyId: string, 
+    availability: AvailabilityData, 
+    idToken: string 
+}): Promise<void> => {
+    const { propertyId, availability, idToken } = data;
+    await verifyAdmin(idToken);
+    try {
+        if (!propertyId) throw new Error("ID do empreendimento não fornecido.");
+        if (!availability || !availability.towers) {
+            throw new Error("Dados de disponibilidade inválidos.");
+        }
+
+        const propertyRef = adminDb.collection("properties").doc(propertyId);
+        await propertyRef.update({
+            availability: availability
+        });
+
+        // Invalidar cache
+        PropertyCache.invalidateProperty(propertyId);
+
+    } catch (error: unknown) {
+        console.error("Error in updatePropertyAvailabilityAction: ", getErrorMessage(error));
+        throw new Error(`Não foi possível atualizar a disponibilidade: ${getErrorMessage(error)}`);
     }
 };
