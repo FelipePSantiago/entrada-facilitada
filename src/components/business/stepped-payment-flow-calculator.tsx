@@ -1497,7 +1497,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
                 sunPosition: sunPositionFilter, setSunPosition: setSunPositionFilter
                 }}
                 filterOptions={filterOptions}
-                onClose={() => setIsUnitSelectorOpen(false)} // Nova prop
             />
             )}
         </DialogContent>

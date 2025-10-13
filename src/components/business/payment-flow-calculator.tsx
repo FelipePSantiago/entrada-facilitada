@@ -1816,7 +1816,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 setSunPosition: setSunPositionFilter,
               }}
               filterOptions={filterOptions}
-              onClose={() => setIsUnitSelectorOpen(false)} // Nova prop
             />
           )}
         </DialogContent>
