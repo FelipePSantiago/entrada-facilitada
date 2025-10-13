@@ -1,16 +1,18 @@
+import TerserPlugin from 'terser-webpack-plugin';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
   images: {
     unoptimized: true,
   },
-  
+
   // Otimizações de compilador
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
     reactRemoveProperties: process.env.NODE_ENV === 'production',
   },
-  
+
   // Otimizações experimentais
   experimental: {
     optimizeCss: true,
@@ -41,7 +43,7 @@ const nextConfig = {
       '@radix-ui/react-tooltip',
     ],
   },
-  
+
   // Configuração de webpack otimizada
   webpack: (config, { isServer, dev }) => {
     // Prevenir bundling de 'original-fs' no client
@@ -128,7 +130,7 @@ const nextConfig = {
     // Remover console.log em produção
     if (!dev) {
       config.optimization.minimizer.push(
-        new (require('terser-webpack-plugin'))({
+        new TerserPlugin({
           terserOptions: {
             compress: {
               drop_console: true,
@@ -141,7 +143,7 @@ const nextConfig = {
 
     return config;
   },
-  
+
   // Headers de segurança
   async headers() {
     return [
@@ -177,7 +179,7 @@ const nextConfig = {
       },
     ];
   },
-  
+
   // Redirecionamentos
   async redirects() {
     return [
@@ -188,15 +190,12 @@ const nextConfig = {
       },
     ];
   },
-  
+
   // Compressão
   compress: true,
-  
+
   // Powered by header
   poweredByHeader: false,
-  
-  // Análise de bundle
-  analyze: process.env.ANALYZE === 'true',
 };
 
 export default nextConfig;

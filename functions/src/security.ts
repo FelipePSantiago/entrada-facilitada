@@ -5,6 +5,9 @@
 import * as functions from 'firebase-functions';
 import { createRateLimitMiddleware, RATE_LIMIT_CONFIGS, RateLimitKeys } from './rate-limiter';
 
+// Re-exportar RATE_LIMIT_CONFIGS para que ele possa ser usado em outros módulos
+export { RATE_LIMIT_CONFIGS };
+
 // Middleware de rate limiting
 export const withRateLimit = (config: RATE_LIMIT_CONFIGS[keyof RATE_LIMIT_CONFIGS]) => {
   const middleware = createRateLimitMiddleware(config);

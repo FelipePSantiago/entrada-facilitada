@@ -5,7 +5,7 @@
 
 import { onCall, type CallableRequest } from "firebase-functions/v2/https";
 import * as functions from "firebase-functions";
-import * as actions from "./actions-optimized";
+import * as actions from "./actions";
 import { processSumupPayment } from "./sumup";
 import { 
   withSecurity, 
