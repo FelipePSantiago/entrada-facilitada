@@ -378,6 +378,12 @@ export default function AdminPropertiesPage() {
                             Ir para o Simulador
                         </Link>
                     </Button>
+                    <Button variant="outline" asChild>
+                        <Link href="/caixa-simulation">
+                            <Calculator className="mr-2 h-4 w-4" />
+                            Ir para Simulação Caixa
+                        </Link>
+                    </Button>
                 </div>
             </CardHeader>
             <CardContent>

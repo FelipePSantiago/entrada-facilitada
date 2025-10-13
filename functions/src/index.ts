@@ -36,7 +36,7 @@ const allowedOrigins = [
   'http://localhost:3000',
   'https://entrada-facilitada.web.app',
   'https://entrada-facilitada.firebaseapp.com',
-  // Adicionar outras origens conforme necessário
+  'https://*.cloudworkstations.dev',
 ];
 
 // Função de extração de PDF com rate limiting e segurança

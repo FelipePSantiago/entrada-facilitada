@@ -155,13 +155,16 @@ export const validateOrigin = (origin: string | undefined, allowedOrigins: strin
 };
 
 // Rate limiting por IP
-export const getClientIP = (request: any): string => {
-  return request.ip || 
-         request.headers['x-forwarded-for']?.split(',')[0] || 
-         request.headers['x-real-ip'] || 
-         request.connection?.remoteAddress || 
-         'unknown';
+export const getClientIP = (request: functions.https.Request): string => {
+  // Para funções 'onCall', o IP está em `rawRequest`
+  if (request.rawRequest) {
+    return request.rawRequest.ip || 'unknown';
+  }
+  
+  // Para funções HTTPS normais
+  return request.ip || 'unknown';
 };
+
 
 // Middleware de segurança completo
 export const withSecurity = (
@@ -176,9 +179,9 @@ export const withSecurity = (
 ) => {
   return async (request: any) => {
     try {
-      // Validar origem
-      if (options.allowedOrigins) {
-        const origin = request.headers.origin;
+      // Validar origem para funções 'onCall'
+      if (options.allowedOrigins && request.rawRequest) {
+        const origin = request.rawRequest.headers.origin;
         if (!validateOrigin(origin, options.allowedOrigins)) {
           throw new functions.https.HttpsError('permission-denied', 'Origem não permitida');
         }
