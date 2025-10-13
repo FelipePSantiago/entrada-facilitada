@@ -1796,14 +1796,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         />
       </div>
 
+      // No Dialog do UnitSelector, substitua o conteúdo:
       <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
-        <DialogContent className="max-w-full w-full h-full p-4 flex flex-col sm:max-w-7xl sm:h-auto sm:max-h-[90vh] sm:rounded-lg sm:p-6">
-          <DialogHeader>
-            <DialogTitle>Selecione uma Unidade Disponível</DialogTitle>
-            <DialogDescription>
-              Use os filtros para encontrar a unidade desejada e clique para selecioná-la.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-w-full w-full h-full p-0 flex flex-col sm:max-w-none sm:rounded-none">
+          {/* Remove DialogHeader e use o header interno do UnitSelectorDialogContent */}
           {isUnitSelectorOpen && selectedProperty && (
             <UnitSelectorDialogContent
               allUnits={allUnits}
@@ -1821,6 +1817,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 setSunPosition: setSunPositionFilter,
               }}
               filterOptions={filterOptions}
+              onClose={() => setIsUnitSelectorOpen(false)} // Nova prop
             />
           )}
         </DialogContent>

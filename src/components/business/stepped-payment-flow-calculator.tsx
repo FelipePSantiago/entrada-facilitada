@@ -1481,31 +1481,28 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
           )}
       </div>
       
-      <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
-        <DialogContent className="max-w-full w-full h-full p-4 flex flex-col sm:max-w-7xl sm:h-auto sm:max-h-[90vh] sm:rounded-lg sm:p-6">
-            <DialogHeader>
-                <DialogTitle>Selecione uma Unidade Disponível</DialogTitle>
-                <DialogDescription>
-                    Use os filtros para encontrar a unidade desejada e clique para selecioná-la.
-                </DialogDescription>
-            </DialogHeader>
+      // No Dialog do UnitSelector, substitua o conteúdo:
+        <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
+        <DialogContent className="max-w-full w-full h-full p-0 flex flex-col sm:max-w-none sm:rounded-none">
+            {/* Remove DialogHeader e use o header interno do UnitSelectorDialogContent */}
             {isUnitSelectorOpen && selectedProperty && (
-                 <UnitSelectorDialogContent
-                    allUnits={allUnits}
-                    filteredUnits={filteredUnits}
-                    isReservaParque={selectedProperty.enterpriseName.includes('Reserva Parque Clube')}
-                    onUnitSelect={handleUnitSelect}
-                    filters={{ 
-                        status: statusFilter, setStatus: setStatusFilter, 
-                        floor: floorFilter, setFloor: setFloorFilter, 
-                        typology: typologyFilter, setTypology: setTypologyFilter, 
-                        sunPosition: sunPositionFilter, setSunPosition: setSunPositionFilter
-                    }}
-                    filterOptions={filterOptions}
-                 />
+            <UnitSelectorDialogContent
+                allUnits={allUnits}
+                filteredUnits={filteredUnits}
+                isReservaParque={selectedProperty.enterpriseName.includes('Reserva Parque Clube')}
+                onUnitSelect={handleUnitSelect}
+                filters={{ 
+                status: statusFilter, setStatus: setStatusFilter, 
+                floor: floorFilter, setFloor: setFloorFilter, 
+                typology: typologyFilter, setTypology: setTypologyFilter, 
+                sunPosition: sunPositionFilter, setSunPosition: setSunPositionFilter
+                }}
+                filterOptions={filterOptions}
+                onClose={() => setIsUnitSelectorOpen(false)} // Nova prop
+            />
             )}
         </DialogContent>
-      </Dialog>
+        </Dialog>
 
       <div id="root" className="w-full">
         <div className="grid grid-cols-1 gap-8">

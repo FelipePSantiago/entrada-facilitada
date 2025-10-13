@@ -27,8 +27,10 @@ import {
   Ruler,
   Tag,
   Filter,
+  X,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import type { CombinedUnit, UnitStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { centsToBrl } from "@/lib/business/formatters";
@@ -89,6 +91,12 @@ interface UnitCardProps {
 const UnitCard = memo(({ unit, isReservaParque, onUnitSelect }: UnitCardProps) => {
     const unitDisplay = isReservaParque ? `Torre ${unit.block}` : `Bloco ${unit.block}`;
     
+    const handleClick = () => {
+        if (unit.status === 'Disponível') {
+            onUnitSelect(unit);
+        }
+    };
+    
     return (
         <div>
             <Card 
@@ -97,7 +105,7 @@ const UnitCard = memo(({ unit, isReservaParque, onUnitSelect }: UnitCardProps) =
                     getStatusBadgeClass(unit.status),
                     unit.status === 'Disponível' && 'hover:shadow-xl hover:-translate-y-1'
                 )}
-                onClick={() => unit.status === 'Disponível' && onUnitSelect(unit)}
+                onClick={handleClick}
             >
                 <CardHeader className="p-4 pb-2 flex-row justify-between items-start">
                     <div>
@@ -115,12 +123,30 @@ const UnitCard = memo(({ unit, isReservaParque, onUnitSelect }: UnitCardProps) =
                         <span className="font-bold text-lg text-primary">{centsToBrl(unit.saleValue)}</span>
                     </div>
                     <Separator className="my-2"/>
-                    <div className="flex items-center gap-2 text-muted-foreground"><Grid3X3 className="h-4 w-4 text-primary/70"/> <strong className="text-card-foreground/80">Tipologia:</strong> {unit.typology}</div>
-                    <div className="flex items-center gap-2 text-muted-foreground"><Ruler className="h-4 w-4 text-primary/70"/> <strong className="text-card-foreground/80">Área:</strong> {(unit.privateArea).toFixed(2)}m²</div>
-                    <div className="flex items-center gap-2 text-muted-foreground"><Sun className="h-4 w-4 text-primary/70"/> <strong className="text-card-foreground/80">Sol:</strong> {unit.sunPosition}</div>
-                    <div className="flex items-center gap-2 text-muted-foreground"><Car className="h-4 w-4 text-primary/70"/> <strong className="text-card-foreground/80">Vagas:</strong> {unit.parkingSpaces}</div>
-                    <div className="flex items-center gap-2 text-muted-foreground"><Tag className="h-4 w-4 text-primary/70"/> <strong className="text-card-foreground/80">Avaliação:</strong> {centsToBrl(unit.appraisalValue)}</div>
-                    <div className="flex items-center gap-2 text-muted-foreground"><Tag className="h-4 w-4 text-primary/70"/> <strong className="text-card-foreground/80">Bônus:</strong> {centsToBrl(unit.complianceBonus)}</div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <Grid3X3 className="h-4 w-4 text-primary/70"/> 
+                        <strong className="text-card-foreground/80">Tipologia:</strong> {unit.typology}
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <Ruler className="h-4 w-4 text-primary/70"/> 
+                        <strong className="text-card-foreground/80">Área:</strong> {(unit.privateArea).toFixed(2)}m²
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <Sun className="h-4 w-4 text-primary/70"/> 
+                        <strong className="text-card-foreground/80">Sol:</strong> {unit.sunPosition}
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <Car className="h-4 w-4 text-primary/70"/> 
+                        <strong className="text-card-foreground/80">Vagas:</strong> {unit.parkingSpaces}
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <Tag className="h-4 w-4 text-primary/70"/> 
+                        <strong className="text-card-foreground/80">Avaliação:</strong> {centsToBrl(unit.appraisalValue)}
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <Tag className="h-4 w-4 text-primary/70"/> 
+                        <strong className="text-card-foreground/80">Bônus:</strong> {centsToBrl(unit.complianceBonus)}
+                    </div>
                 </CardContent>
             </Card>
         </div>
@@ -135,6 +161,7 @@ export const UnitSelectorDialogContent = ({
   onUnitSelect,
   filters,
   filterOptions,
+  onClose,
 }: {
   allUnits: CombinedUnit[];
   filteredUnits: CombinedUnit[];
@@ -155,20 +182,27 @@ export const UnitSelectorDialogContent = ({
     typologies: string[];
     sunPositions: string[];
   };
+  onClose?: () => void;
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const columns = useResponsiveColumns();
 
-    const unitCounts = useMemo(() => {
-        return allUnits.reduce((acc, unit) => {
-            acc.total++;
-            if (unit.status === 'Disponível') acc.disponivel++;
-            else if (unit.status === 'Vendido') acc.vendido++;
-            else if (unit.status === 'Reservado') acc.reservado++;
-            else if (unit.status === 'Indisponível') acc.indisponivel++;
-            return acc;
-        }, { total: 0, disponivel: 0, vendido: 0, reservado: 0, indisponivel: 0 });
-    }, [allUnits]);
+  const unitCounts = useMemo(() => {
+    return allUnits.reduce((acc, unit) => {
+      acc.total++;
+      if (unit.status === 'Disponível') acc.disponivel++;
+      else if (unit.status === 'Vendido') acc.vendido++;
+      else if (unit.status === 'Reservado') acc.reservado++;
+      else if (unit.status === 'Indisponível') acc.indisponivel++;
+      return acc;
+    }, { 
+      total: 0, 
+      disponivel: 0, 
+      vendido: 0, 
+      reservado: 0, 
+      indisponivel: 0 
+    });
+  }, [allUnits]);
 
   const rowVirtualizer = useVirtualizer({
     count: Math.ceil(filteredUnits.length / columns),
@@ -178,62 +212,136 @@ export const UnitSelectorDialogContent = ({
   });
 
   return (
-    <>
-      <Accordion type="single" collapsible defaultValue="filters" className="w-full">
-        <AccordionItem value="filters">
-          <AccordionTrigger className="py-3 hover:no-underline">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4" />
-              <span className="font-semibold">Filtros e Estatísticas</span>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-1">
-                <Select value={filters.status} onValueChange={(v) => filters.setStatus(v as UnitStatus | 'Todos')}>
-                    <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="Todos">Todos os Status</SelectItem>
-                        <SelectItem value="Disponível">Disponível</SelectItem>
-                        <SelectItem value="Reservado">Reservado</SelectItem>
-                        <SelectItem value="Vendido">Vendido</SelectItem>
-                        <SelectItem value="Indisponível">Indisponível</SelectItem>
-                    </SelectContent>
-                </Select>
-                <Select value={filters.floor} onValueChange={filters.setFloor}>
-                    <SelectTrigger><SelectValue placeholder="Andar" /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="Todos">Todos os Andares</SelectItem>
-                        {filterOptions.floors.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-                <Select value={filters.typology} onValueChange={filters.setTypology}>
-                    <SelectTrigger><SelectValue placeholder="Tipologia" /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="Todos">Todas as Tipologias</SelectItem>
-                        {filterOptions.typologies.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-                <Select value={filters.sunPosition} onValueChange={filters.setSunPosition}>
-                    <SelectTrigger><SelectValue placeholder="Posição Solar" /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="Todos">Todas as Posições</SelectItem>
-                        {filterOptions.sunPositions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-            </div>
-            <Card className="p-3 mt-4">
-              <div className="grid grid-cols-2 sm:grid-cols-5 text-center text-xs gap-2">
-                  <div className="font-bold">Total: <span className="text-primary">{unitCounts.total}</span></div>
-                  <div className="font-bold">Disponíveis: <span className="text-green-600">{unitCounts.disponivel}</span></div>
-                  <div className="font-bold">Vendidos: <span className="text-red-600">{unitCounts.vendido}</span></div>
-                  <div className="font-bold">Reservados: <span className="text-yellow-600">{unitCounts.reservado}</span></div>
-                  <div className="font-bold">Indisponíveis: <span className="text-gray-600">{unitCounts.indisponivel}</span></div>
+    <div className="flex flex-col h-full bg-background">
+      {/* Header fixo */}
+      <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">Selecione uma Unidade</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Use os filtros para encontrar a unidade desejada e clique para selecioná-la.
+            </p>
+          </div>
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="h-8 w-8"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex-shrink-0 border-b p-4">
+        <Accordion type="single" collapsible defaultValue="filters" className="w-full">
+          <AccordionItem value="filters" className="border-none">
+            <AccordionTrigger className="py-2 hover:no-underline">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4" />
+                <span className="font-semibold">Filtros e Estatísticas</span>
               </div>
-            </Card>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
-      <div ref={parentRef} className="flex-grow overflow-y-auto pr-2 -mr-4 mt-4">
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-1">
+                <Select 
+                  value={filters.status} 
+                  onValueChange={(v) => filters.setStatus(v as UnitStatus | 'Todos')}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Todos os Status</SelectItem>
+                    <SelectItem value="Disponível">Disponível</SelectItem>
+                    <SelectItem value="Reservado">Reservado</SelectItem>
+                    <SelectItem value="Vendido">Vendido</SelectItem>
+                    <SelectItem value="Indisponível">Indisponível</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <Select 
+                  value={filters.floor} 
+                  onValueChange={filters.setFloor}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Andar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Todos os Andares</SelectItem>
+                    {filterOptions.floors.map(f => (
+                      <SelectItem key={f} value={f}>{f}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select 
+                  value={filters.typology} 
+                  onValueChange={filters.setTypology}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tipologia" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Todas as Tipologias</SelectItem>
+                    {filterOptions.typologies.map(t => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select 
+                  value={filters.sunPosition} 
+                  onValueChange={filters.setSunPosition}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Posição Solar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Todas as Posições</SelectItem>
+                    {filterOptions.sunPositions.map(s => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <Card className="p-3 mt-4">
+                <div className="grid grid-cols-2 sm:grid-cols-5 text-center text-xs gap-2">
+                  <div className="font-bold">
+                    Total: <span className="text-primary">{unitCounts.total}</span>
+                  </div>
+                  <div className="font-bold">
+                    Disponíveis: <span className="text-green-600">{unitCounts.disponivel}</span>
+                  </div>
+                  <div className="font-bold">
+                    Vendidos: <span className="text-red-600">{unitCounts.vendido}</span>
+                  </div>
+                  <div className="font-bold">
+                    Reservados: <span className="text-yellow-600">{unitCounts.reservado}</span>
+                  </div>
+                  <div className="font-bold">
+                    Indisponíveis: <span className="text-gray-600">{unitCounts.indisponivel}</span>
+                  </div>
+                </div>
+              </Card>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
+
+      {/* Grid de unidades com scroll */}
+      <div 
+        ref={parentRef} 
+        className="flex-grow overflow-y-auto p-4"
+        style={{ 
+          height: 'calc(100vh - 200px)',
+          minHeight: '400px'
+        }}
+      >
         <div
           style={{
             height: `${rowVirtualizer.getTotalSize()}px`,
@@ -242,44 +350,53 @@ export const UnitSelectorDialogContent = ({
           }}
         >
           {rowVirtualizer.getVirtualItems().map((virtualRow: VirtualRow) => {
-              const rowIndex = virtualRow.index;
-              const unitsInRow = filteredUnits.slice(rowIndex * columns, rowIndex * columns + columns);
+            const rowIndex = virtualRow.index;
+            const unitsInRow = filteredUnits.slice(
+              rowIndex * columns, 
+              rowIndex * columns + columns
+            );
 
-              return (
-                   <div
-                      key={virtualRow.key}
-                      style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          height: `${virtualRow.size}px`,
-                          transform: `translateY(${virtualRow.start}px)`,
-                          display: 'grid',
-                          gridTemplateColumns: `repeat(${columns}, 1fr)`,
-                          gap: '1rem',
-                          paddingBottom: '1rem'
-                      }}
-                   >
-                      {unitsInRow.map((unit) => (
-                           <UnitCard 
-                              key={unit.unitId} 
-                              unit={unit} 
-                              isReservaParque={isReservaParque} 
-                              onUnitSelect={onUnitSelect}
-                          />
-                      ))}
-                   </div>
-              )
+            return (
+              <div
+                key={virtualRow.key}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: `${virtualRow.size}px`,
+                  transform: `translateY(${virtualRow.start}px)`,
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                  gap: '1rem',
+                  paddingBottom: '1rem'
+                }}
+              >
+                {unitsInRow.map((unit) => (
+                  <UnitCard 
+                    key={unit.unitId} 
+                    unit={unit} 
+                    isReservaParque={isReservaParque} 
+                    onUnitSelect={onUnitSelect}
+                  />
+                ))}
+              </div>
+            );
           })}
         </div>
-         {filteredUnits.length === 0 && (
-              <div className="text-center py-10 text-muted-foreground">
-                  <p>Nenhuma unidade encontrada com os filtros selecionados.</p>
-                  <p className="text-xs">Verifique se as tabelas de disponibilidade e preços foram carregadas.</p>
-              </div>
-          )}
+        
+        {filteredUnits.length === 0 && (
+          <div className="text-center py-10 text-muted-foreground">
+            <p className="text-lg font-medium mb-2">Nenhuma unidade encontrada</p>
+            <p className="text-sm">
+              Não foram encontradas unidades com os filtros selecionados.
+            </p>
+            <p className="text-xs mt-1">
+              Verifique se as tabelas de disponibilidade e preços foram carregadas corretamente.
+            </p>
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
-}
+};
