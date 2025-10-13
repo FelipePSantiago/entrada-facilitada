@@ -1746,7 +1746,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     }
   }, [selectedProperty]);
 
-  // CORREÇÃO: Preparar dados para o gráfico - ajustar para o tipo correto
+  // CORREÇÃO: Preparar dados para o gráfico - ajustar para o tipo corretos
   const chartData = useMemo(() => {
     if (!results) return { data: [], value: 0 };
 
@@ -1796,7 +1796,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         />
       </div>
 
-      // No Dialog do UnitSelector, substitua o conteúdo:
       <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
         <DialogContent className="max-w-full w-full h-full p-0 flex flex-col sm:max-w-none sm:rounded-none">
           {/* Remove DialogHeader e use o header interno do UnitSelectorDialogContent */}

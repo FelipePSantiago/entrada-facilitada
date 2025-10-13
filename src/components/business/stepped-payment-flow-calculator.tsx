@@ -1481,7 +1481,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
           )}
       </div>
       
-      // No Dialog do UnitSelector, substitua o conteúdo:
         <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
         <DialogContent className="max-w-full w-full h-full p-0 flex flex-col sm:max-w-none sm:rounded-none">
             {/* Remove DialogHeader e use o header interno do UnitSelectorDialogContent */}

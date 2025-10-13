@@ -27,10 +27,8 @@ import {
   Ruler,
   Tag,
   Filter,
-  X,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
 import type { CombinedUnit, UnitStatus } from "@/types";
 import { cn } from "@/lib/utils";
 import { centsToBrl } from "@/lib/business/formatters";
@@ -161,7 +159,6 @@ export const UnitSelectorDialogContent = ({
   onUnitSelect,
   filters,
   filterOptions,
-  onClose,
 }: {
   allUnits: CombinedUnit[];
   filteredUnits: CombinedUnit[];
@@ -182,7 +179,6 @@ export const UnitSelectorDialogContent = ({
     typologies: string[];
     sunPositions: string[];
   };
-  onClose?: () => void;
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const columns = useResponsiveColumns();
@@ -213,7 +209,7 @@ export const UnitSelectorDialogContent = ({
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Header fixo */}
+      {/* Header fixo - SEM botão de fechar */}
       <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4">
         <div className="flex items-center justify-between">
           <div>
@@ -222,16 +218,7 @@ export const UnitSelectorDialogContent = ({
               Use os filtros para encontrar a unidade desejada e clique para selecioná-la.
             </p>
           </div>
-          {onClose && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="h-8 w-8"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
+          {/* Removido o botão de fechar personalizado */}
         </div>
       </div>
 
