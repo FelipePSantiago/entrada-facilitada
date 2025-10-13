@@ -158,21 +158,21 @@ export async function savePropertyAction(
     
     const startDate = values.constructionStartDate ? format(parseISO(values.constructionStartDate), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
     
-    let deliveryD = values.deliveryDate;
-    if (deliveryD) {
-        deliveryD = format(parseISO(deliveryDate), 'yyyy-MM-dd');
-    } else {
-      const startDateObj = parseISO(startDate);
-      const deliveryDateObj = addYears(startDateObj, 2);
-      deliveryD = format(deliveryDateObj, 'yyyy-MM-dd');
-    }
+    let deliveryDate: string;
+if (values.deliveryDate) {
+    deliveryDate = format(parseISO(values.deliveryDate), 'yyyy-MM-dd');
+} else {
+    const startDateObj = parseISO(startDate);
+    const deliveryDateObj = addYears(startDateObj, 2);
+    deliveryDate = format(deliveryDateObj, 'yyyy-MM-dd');
+}
     
     const dataToSave: Omit<Property, 'availability' | 'pricing' | 'lastPriceUpdate' | 'publishedVersion'> = {
       id: values.id,
       enterpriseName: values.enterpriseName,
       brand: values.brand,
       constructionStartDate: `${startDate}T12:00:00.000Z`,
-      deliveryDate: `${deliveryD}T12:00:00.000Z`,
+      deliveryDate: `${deliveryDate}T12:00:00.000Z`,
     };
 
     await propertyRef.set(dataToSave, { merge: true });

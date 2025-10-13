@@ -318,3 +318,180 @@ export const getPropertiesAction = onCall({
     allowedOrigins,
   }
 ));
+
+// functions/src/index.ts
+
+// ... MANTENHA O CÓDIGO DAS SUAS FUNÇÕES EXISTENTES E OS IMPORTS ...
+
+// =================================================================
+// ============= INÍCIO DA FUNÇÃO DE AUTOMAÇÃO CORRIGIDA =============
+// =================================================================
+
+const puppeteer = require('puppeteer');
+
+// !! ATENÇÃO !!
+// OS SELETORES FORAM ATUALIZADOS COM BASE NO HTML FORNECIDO PARA TODAS AS PÁGINAS.
+// A PÁGINA 7 USA XPATH PARA EXTRAÇÃO ROBUSTA DE DADOS.
+
+const SELECTORS = {
+  pagina1: { origemRecurso: '#origemRecurso', form: '#form' },
+  pagina2: { categoriaImovel: '#categoriaImovel', cidade: '#cidade', valorImovel: '#valorImovel', rendaFamiliar: '#renda', form: '#form' },
+  pagina3: { dataNascimento: '#dataNascimento', form: '#form' },
+  pagina4: { opcaoEnquadramento: 'a[href$="3074"]' },
+  pagina5: { sistemaAmortizacao: '#rcrRge', form: '#form' },
+  pagina6: { quantidadeMeses: '#prazoObra', form: '#cronogramaForm' },
+  pagina7: {
+    prazo: '//td[contains(text(), "Prazo:")]/following-sibling::td[1]',
+    valorFinanciamento: '//td[contains(text(), "Valor de Financiamento")]/following-sibling::td[1]',
+    primeiraPrestacao: '//th[contains(text(), "Primeira Prestação")]/following-sibling::td[1]',
+    jurosEfetivos: '//th[contains(text(), "Juros Efetivos")]/following-sibling::td[1]'
+  }
+};
+
+export const simularFinanciamentoCaixa = functions.https.onCall(async (data, context) => {
+  // Validação de segurança para garantir que o usuário esteja autenticado
+  if (!context.auth) {
+    console.error("Tentativa de acesso não autenticado à simulação da Caixa.");
+    throw new functions.https.HttpsError('unauthenticated', 'O usuário não está autenticado.');
+  }
+
+  const { renda, dataNascimento, valorImovel, sistemaAmortizacao } = data;
+
+  if (!renda || !dataNascimento || !valorImovel || !sistemaAmortizacao) {
+    console.error("Dados inválidos fornecidos para a simulação:", data);
+    throw new functions.https.HttpsError('invalid-argument', 'Faltam dados obrigatórios para a simulação.');
+  }
+
+  console.log(`Iniciando simulação para o usuário: ${context.auth.uid}. Dados: Valor=${valorImovel}, Renda=${renda}, Sistema=${sistemaAmortizacao}`);
+
+  let browser;
+  try {
+    // Lança o navegador com opções para evitar detecção de bot
+    browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-blink-features=AutomationControlled', // Esconde que é um robô
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process', // Pode ajudar em ambientes serverless
+      ]
+    });
+    const page = await browser.newPage();
+
+    // Define um User-Agent de um navegador comum para evitar bloqueio
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36');
+
+    // Remove a propriedade 'webdriver' do navegador, outra pista comum de bots
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined,
+      });
+    });
+
+    // --- PÁGINA 1: Origem de Recursos ---
+    console.log("PASSO 1: Acessando a página inicial do simulador...");
+    const response = await page.goto('https://www.portaldeempreendimentos.caixa.gov.br/simulador/', {
+      waitUntil: 'networkidle2',
+      timeout: 30000 // Timeout de 30 segundos
+    });
+
+    // Verificação robusta: a resposta pode ser nula se a conexão for bloqueada
+    if (!response) {
+      console.error("Falha crítica: A resposta do page.goto() foi nula. O site bloqueou a conexão.");
+      throw new functions.https.HttpsError(
+        'unavailable',
+        'Falha ao acessar o simulador da Caixa. O site está bloqueando requisições automatizadas. Tente novamente mais tarde.'
+      );
+    }
+
+    if (!response.ok()) {
+      const status = response.status();
+      const statusText = response.statusText();
+      console.error(`Falha ao acessar o simulador da Caixa. Status: ${status} - ${statusText}`);
+      throw new functions.https.HttpsError(
+        'unavailable',
+        `Falha ao acessar o simulador da Caixa. O site pode estar fora do ar ou instável. Status do servidor: ${status} - ${statusText}. Tente novamente em alguns minutos.`
+      );
+    }
+    console.log("PASSO 1: Página inicial carregada com sucesso. Status:", response.status());
+
+    await page.waitForSelector(SELECTORS.pagina1.origemRecurso, { timeout: 15000 });
+    await page.select(SELECTORS.pagina1.origemRecurso, '15');
+    await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle2' }), page.evaluate(() => document.querySelector('#form').submit())]);
+
+    // --- PÁGINA 2: Dados do Imóvel ---
+    console.log("PASSO 2: Preenchendo dados do imóvel...");
+    await page.waitForSelector(SELECTORS.pagina2.categoriaImovel, { timeout: 15000 });
+    await page.select(SELECTORS.pagina2.categoriaImovel, '16');
+    await page.type(SELECTORS.pagina2.cidade, 'Brasília - DF');
+    await page.type(SELECTORS.pagina2.valorImovel, valorImovel);
+    await page.type(SELECTORS.pagina2.rendaFamiliar, renda);
+    await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle2' }), page.evaluate(() => document.querySelector('#form').submit())]);
+
+    // --- PÁGINA 3: Participantes ---
+    console.log("PASSO 3: Preenchendo dados do participante...");
+    await page.waitForSelector(SELECTORS.pagina3.dataNascimento, { timeout: 15000 });
+    await page.evaluate((selector, value) => { document.querySelector(selector).value = value; }, SELECTORS.pagina3.dataNascimento, dataNascimento);
+    await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle2' }), page.evaluate(() => document.querySelector('#form').submit())]);
+
+    // --- PÁGINA 4: Enquadramento ---
+    console.log("PASSO 4: Selecionando enquadramento...");
+    await page.waitForSelector(SELECTORS.pagina4.opcaoEnquadramento, { timeout: 15000 });
+    await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle2' }), page.click(SELECTORS.pagina4.opcaoEnquadramento)]);
+
+    // --- PÁGINA 5: Sistema de Amortização ---
+    console.log("PASSO 5: Selecionando sistema de amortização...");
+    await page.waitForSelector(SELECTORS.pagina5.sistemaAmortizacao, { timeout: 15000 });
+    const valorSistemaAmortizacao = sistemaAmortizacao === 'SAC TR' ? '793' : '794';
+    await page.select(SELECTORS.pagina5.sistemaAmortizacao, valorSistemaAmortizacao);
+    await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle2' }), page.evaluate(() => document.querySelector('#form').submit())]);
+
+    // --- PÁGINA 6: Cronograma de Obra ---
+    console.log("PASSO 6: Preenchendo cronograma de obra...");
+    await page.waitForSelector(SELECTORS.pagina6.quantidadeMeses, { timeout: 15000 });
+    await page.type(SELECTORS.pagina6.quantidadeMeses, '36');
+    await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle2' }), page.evaluate(() => document.querySelector('#cronogramaForm').submit())]);
+    await page.waitForTimeout(2000); // Espera o cálculo
+    await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle2' }), page.evaluate(() => document.querySelector('#cronogramaForm').submit())]);
+
+    // --- PÁGINA 7: Detalhamento e Extração de Dados ---
+    console.log("PASSO 7: Extraindo resultados da simulação...");
+    await page.waitForSelector('#idTabelaResumo', { timeout: 20000 });
+
+    const resultados = await page.evaluate((selectors) => {
+      const getTextByXPath = (xpath) => {
+        const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+        return result.singleNodeValue ? result.singleNodeValue.textContent.trim() : 'Não encontrado';
+      };
+      return {
+        prazo: getTextByXPath(selectors.prazo),
+        valorFinanciamento: getTextByXPath(selectors.valorFinanciamento),
+        primeiraPrestacao: getTextByXPath(selectors.primeiraPrestacao),
+        jurosEfetivos: getTextByXPath(selectors.jurosEfetivos),
+      };
+    }, SELECTORS.pagina7);
+
+    console.log("PASSO 7: Resultados extraídos com sucesso:", resultados);
+    await browser.close();
+    return { sucesso: true, dados: resultados };
+
+  } catch (error) {
+    if (browser) {
+      await browser.close();
+    }
+    console.error("Erro capturado na simulação da Caixa:", error);
+    // Se o erro já for um dos nossos, repita-o. Caso contrário, gere um erro genérico.
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError('internal', 'Ocorreu um erro inesperado ao tentar realizar a simulação. Detalhes do erro: ' + error.message);
+  }
+});
+
+// =================================================================
+// ============== FIM DA FUNÇÃO DE AUTOMAÇÃO CORRIGIDA ================
+// =================================================================
