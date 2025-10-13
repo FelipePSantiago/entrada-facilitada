@@ -337,6 +337,36 @@ const calculateConstructionInsuranceLocal = (
     return result;
 };
 
+// FUNÇÕES RESTAURADAS DO ORIGINAL
+const getDisabledDates = (type: PaymentFieldType): ((date: Date) => boolean) | undefined => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  switch(type) {
+    case 'sinal1':
+      return (date) => date < today || date > addDays(today, 30);
+    case 'sinal2':
+      return (date) => date < today || date > addDays(today, 60);
+    case 'sinal3':
+      return (date) => date < today || date > addDays(today, 90);
+    case 'proSoluto':
+      {
+        const minDate = startOfMonth(addMonths(today, 1));
+        return (date) => {
+          if (date < minDate) return true;
+          const day = date.getDate();
+          return ![5, 10, 15, 20].includes(day);
+        };
+      }
+    default:
+      return (date) => date < today;
+  }
+};
+
+const isDateLocked = (type: PaymentFieldType) => {
+  return ["bonusAdimplencia", "financiamento", "bonusCampanha"].includes(type);
+};
+
 interface PaymentFlowCalculatorProps {
     properties: Property[];
     isSinalCampaignActive: boolean;
@@ -474,7 +504,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     return (properties || []).filter(p => p.brand === 'Riva');
   }, [properties]);
 
-  // Memoizar campos de pagamento disponíveis (MOVIDO PARA CIMA)
+  // Memoizar campos de pagamento disponíveis
   const availablePaymentFields = useMemo(() => {
     return paymentFieldOptions.filter(opt => {
       if (["bonusAdimplencia", "bonusCampanha"].includes(opt.value)) return false;
@@ -591,7 +621,38 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     globalProcessingRef.current.isProcessing = false;
   }, []);
 
-  // FUNÇÃO CORRIGIDA: processExtractedData com tipagem adequada (MOVIDO PARA CIMA)
+  // Filtro para seguro de obras (mostrar apenas a partir da data do sinal) - RESTAURADO DO ORIGINAL
+  const sinalAtoDate = useMemo(() => {
+    const sinal = watchedPayments.find(p => p.type === 'sinalAto');
+    return sinal ? startOfMonth(sinal.date) : startOfMonth(new Date());
+  }, [watchedPayments]);
+
+  const filteredInsuranceBreakdown = useMemo(() => {
+    if (!results?.monthlyInsuranceBreakdown) return [];
+    return results.monthlyInsuranceBreakdown.filter(item => {
+      const itemDate = startOfMonth(item.date);
+      return itemDate > sinalAtoDate;
+    });
+  }, [results?.monthlyInsuranceBreakdown, sinalAtoDate]);
+
+  // Gráficos de comprometimento - RESTAURADO DO ORIGINAL
+  const commitmentChartData = useMemo((): ChartData[] | null => {
+    if (!results) return null;
+    return [
+      { name: "Comprometimento", value: results.incomeCommitmentPercentage * 100, fill: "hsl(var(--primary))" },
+      { name: "Restante", value: 100 - (results.incomeCommitmentPercentage * 100), fill: "hsl(var(--muted))" },
+    ];
+  }, [results]);
+
+  const proSolutoChartData = useMemo((): ChartData[] | null => {
+    if (!results) return null;
+    return [
+      { name: "Percentual Parcelado", value: results.proSolutoCommitmentPercentage * 100, fill: "hsl(var(--primary))" },
+      { name: "Restante", value: 100 - (results.proSolutoCommitmentPercentage * 100), fill: "hsl(var(--muted))" },
+    ];
+  }, [results]);
+
+  // FUNÇÃO CORRIGIDA: processExtractedData com tipagem adequada
   const processExtractedData = useCallback(async (extractedData: ExtractedData) => {
     console.log('🎉 Processando dados extraídos:', extractedData);
     
@@ -679,6 +740,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       toast({ variant: 'destructive', title: '❌ Arquivo Muito Grande', description: 'O arquivo deve ter no máximo 15MB.' });
       return;
     }
+    // CORREÇÃO: Adicionar array de tipos permitidos
     if (!validateMimeType(file, ['application/pdf', 'image/jpeg', 'image/png'])) {
       toast({ variant: 'destructive', title: '❌ Arquivo Inválido', description: 'Por favor, envie um PDF ou imagem.' });
       return;
@@ -1036,6 +1098,192 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     return initialRate; 
   }, []);
 
+  // FUNÇÃO handleReset RESTAURADA DO ORIGINAL
+  const handleReset = useCallback(() => {
+    const propertyId = getValues('propertyId');
+    form.reset({ 
+      propertyId: propertyId || "", 
+      payments: [], 
+      appraisalValue: 0, 
+      saleValue: 0, 
+      grossIncome: 0, 
+      simulationInstallmentValue: 0, 
+      financingParticipants: 1, 
+      conditionType: "padrao", 
+      installments: undefined, 
+      notaryFees: undefined, 
+      notaryPaymentMethod: 'creditCard', 
+      notaryInstallments: undefined, 
+      selectedUnit: "" 
+    });
+    setResults(null);
+    setIsDataExtracted(false);
+    setIsSaleValueLocked(false);
+
+    if (propertyId) {
+      handlePropertyChange(propertyId);
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, [form, getValues]);
+
+  // FUNÇÃO handleSetMinimumCondition RESTAURADA DO ORIGINAL (com useCallback)
+  const handleSetMinimumCondition = useCallback(async () => {
+    const { installments, simulationInstallmentValue } = getValues();
+    if (!installments || installments <= 0) {
+        setError("installments", { message: "Número de parcelas é obrigatório para este cálculo." });
+        toast({
+            variant: "destructive",
+            title: "❌ Parcelas Não Informadas",
+            description: "Por favor, informe o número de parcelas do pró-soluto.",
+        });
+        return;
+    }
+
+    const isValid = await trigger(
+        ["propertyId", "saleValue", "appraisalValue", "grossIncome", "simulationInstallmentValue", "installments"],
+        { shouldFocus: true }
+    );
+    if (!isValid || !selectedProperty || !deliveryDateObj || !constructionStartDateObj) {
+        toast({
+            variant: "destructive",
+            title: "❌ Dados Incompletos",
+            description: "Por favor, preencha todos os campos obrigatórios antes de calcular.",
+        });
+        return;
+    }
+    
+    const { saleValue, appraisalValue, grossIncome, payments: existingPayments, conditionType } = getValues();
+    const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
+
+    const incomeLimit = 0.5 * grossIncome;
+    const { breakdown: monthlyInsurance } = calculateConstructionInsuranceLocal(
+        constructionStartDateObj,
+        deliveryDateObj,
+        simulationInstallmentValue
+    );
+    const insuranceMap = new Map(monthlyInsurance.map(item => [item.month, item.value]));
+
+    const today = new Date();
+    
+    const { installment: firstInstallmentFor1BRL } = calculatePriceInstallment(1, installments, deliveryDateObj, existingPayments);
+
+    if (firstInstallmentFor1BRL <= 0) {
+        toast({
+            variant: "destructive",
+            title: "❌ Erro de Cálculo",
+            description: "Não foi possível determinar a parcela base para o cálculo da condição mínima.",
+        });
+        return;
+    }
+
+    const rateBeforeDelivery = 0.005; 
+    const rateAfterDelivery = 0.015;
+
+    let pvOfMaxInstallments = 0;
+    
+    for (let i = 1; i <= installments; i++) {
+        const monthDate = addMonths(today, i);
+        const otherPayment = deliveryDateObj && monthDate < deliveryDateObj
+            ? (insuranceMap.get(format(monthDate, "MMMM/yyyy", { locale: ptBR })) || 0)
+            : simulationInstallmentValue;
+        
+        const maxProSolutoForThisMonth = Math.max(0, incomeLimit - otherPayment);
+
+        let discountFactor = 1;
+        for (let j = 1; j <= i; j++) {
+            const pastMonthDate = addMonths(today, j);
+            const pastInstallmentMonth = startOfMonth(pastMonthDate);
+            const pastRate = pastInstallmentMonth < startOfMonth(deliveryDateObj) ? rateBeforeDelivery : rateAfterDelivery;
+            discountFactor /= (1 + pastRate);
+        }
+        
+        pvOfMaxInstallments += (maxProSolutoForThisMonth / firstInstallmentFor1BRL) * discountFactor;
+    }
+    const proSolutoByIncome = pvOfMaxInstallments;
+    
+    const proSolutoLimitPercent = conditionType === 'especial' 
+        ? 0.1799 
+        : (isReservaParque ? 0.1799 : 0.1499);
+    
+    const maxProSolutoCorrigido = proSolutoLimitPercent * saleValue;
+    
+    let correctionFactor = 1;
+    let gracePeriodMonths = 1;
+    if (existingPayments.some(p => p.type === 'sinal1')) gracePeriodMonths++;
+    if (existingPayments.some(p => p.type === 'sinal2')) gracePeriodMonths++;
+    if (existingPayments.some(p => p.type === 'sinal3')) gracePeriodMonths++;
+
+    if (deliveryDateObj < today) gracePeriodMonths += differenceInMonths(today, deliveryDateObj);
+
+    for (let i = 0; i < gracePeriodMonths; i++) {
+        const month = startOfMonth(addMonths(today, i));
+        const rate = deliveryDateObj && month < startOfMonth(deliveryDateObj) ? rateBeforeDelivery : rateAfterDelivery;
+        correctionFactor *= (1 + rate);
+    }
+    
+    const proSolutoByPercentage = maxProSolutoCorrigido / correctionFactor;
+    
+    const finalProSolutoValue = Math.min(proSolutoByIncome, proSolutoByPercentage);
+
+    const sumOfOtherPayments = existingPayments.reduce((acc, p) => {
+        if (!['sinalAto', 'proSoluto', 'bonusAdimplencia', 'bonusCampanha', 'desconto'].includes(p.type)) {
+            return acc + (p.value || 0);
+        }
+        return acc;
+    }, 0);
+    
+    const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
+    let campaignBonusValue = 0;
+
+    if (isSinalCampaignActive) {
+        const tempSinalAto = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue;
+        const sinalPadrao5Percent = 0.05 * saleValue;
+
+        if (tempSinalAto > sinalPadrao5Percent) {
+            let potentialBonus = tempSinalAto - sinalPadrao5Percent;
+
+            if(sinalCampaignLimitPercent !== undefined && sinalCampaignLimitPercent >= 0) {
+                const userDiscountPayment = existingPayments.find(p => p.type === 'desconto');
+                const saleValueForBonusCalc = saleValue - (userDiscountPayment?.value || 0);
+                const limitInCurrency = saleValueForBonusCalc * (sinalCampaignLimitPercent / 100);
+                potentialBonus = Math.min(potentialBonus, limitInCurrency);
+            }
+            
+            campaignBonusValue = potentialBonus;
+        }
+    }
+    
+    const finalSinalAto = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue - campaignBonusValue;
+
+    const newPayments: PaymentField[] = existingPayments.filter(p => !['sinalAto', 'proSoluto', 'bonusCampanha'].includes(p.type));
+    
+    newPayments.push({ type: 'sinalAto', value: Math.max(0, finalSinalAto), date: new Date() });
+    
+    if (campaignBonusValue > 0) {
+        newPayments.push({ type: 'bonusCampanha', value: campaignBonusValue, date: new Date() });
+    }
+    
+    let proSolutoDate = new Date();
+    const sinal1Payment = newPayments.find(p => p.type === 'sinal1');
+    const baseDate = sinal1Payment?.date ? sinal1Payment.date : new Date();
+    const targetMonth = addMonths(baseDate, 1);
+    proSolutoDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 5);
+
+    newPayments.push({ type: 'proSoluto', value: Math.max(0, finalProSolutoValue), date: proSolutoDate });
+    
+    replace(newPayments);
+
+    toast({
+        title: "✅ Condição Mínima Aplicada",
+        description: "O fluxo de pagamento foi ajustado para maximizar o pró-soluto dentro das regras."
+    });
+
+    setTimeout(() => form.handleSubmit(onSubmit)(), 100);
+  }, [getValues, setError, toast, selectedProperty, deliveryDateObj, constructionStartDateObj, trigger, isSinalCampaignActive, sinalCampaignLimitPercent, replace, form]);
+
   // onSubmit com Bônus Adimplência FIXO e Sinal Ato FIXO
   const onSubmit = useCallback((values: FormValues) => {
     clearErrors();
@@ -1290,368 +1538,428 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
 
   // Otimizar geração de PDF
   const handleGeneratePdf = useCallback(async () => {
-    if (!results || !selectedProperty) {
-      toast({
-        title: "Dados incompletos",
-        description: "Realize uma simulação antes de gerar o PDF.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsGeneratingPdf(true);
+    if (isGeneratingPdf) return;
 
     try {
-      const formValues = form.getValues();
+      setIsGeneratingPdf(true);
       
-      // Preparar dados para o PDF
-      const pdfData: PdfFormValues = {
-        // Dados do imóvel
-        propertyName: selectedProperty.name,
-        propertyAddress: selectedProperty.address,
-        propertyType: selectedProperty.type,
-        
-        // Dados financeiros
-        appraisalValue: formValues.appraisalValue,
-        saleValue: formValues.saleValue,
-        grossIncome: formValues.grossIncome,
-        simulationInstallmentValue: formValues.simulationInstallmentValue,
-        
-        // Dados do financiamento
-        financedAmount: results.financedAmount,
-        monthlyInstallment: results.monthlyInstallment,
-        totalWithInterest: results.totalWithInterest,
-        averageInterestRate: results.averageInterestRate,
-        
-        // Dados do corretor
+      const formValues = getValues();
+      const pdfFormValues: PdfFormValues = {
+        ...formValues,
         brokerName,
         brokerCreci,
-        
-        // Pagamentos
-        payments: formValues.payments,
-        
-        // Dados adicionais
-        conditionType: formValues.conditionType,
-        installments: formValues.installments,
-        notaryFees: formValues.notaryFees,
-        notaryPaymentMethod: formValues.notaryPaymentMethod,
-        notaryInstallments: formValues.notaryInstallments,
-        
-        // Datas
-        deliveryDate: selectedProperty.deliveryDate,
-        constructionStartDate: selectedProperty.constructionStartDate,
-        
-        // Data de geração
-        generatedAt: new Date().toISOString(),
       };
 
-      await generatePdf(pdfData);
-      
+      await generatePdf(pdfFormValues, results!, selectedProperty!);
+
       toast({
-        title: "PDF gerado com sucesso",
-        description: "O arquivo foi baixado para o seu dispositivo.",
+        title: "PDF gerado com sucesso!",
+        description: "A proposta foi baixada no seu dispositivo.",
       });
-    } catch (error) {
-      console.error("Erro ao gerar PDF:", error);
+
+    } catch (error: any) {
+      console.error('Erro na geração de PDF:', error);
       toast({
         title: "Erro ao gerar PDF",
-        description: "Ocorreu um erro ao gerar o arquivo. Tente novamente.",
-        variant: "destructive"
+        description: error.message || "Não foi possível gerar o PDF.",
+        variant: "destructive",
       });
     } finally {
       setIsGeneratingPdf(false);
     }
-  }, [results, selectedProperty, form, brokerName, brokerCreci, toast]);
+  }, [isGeneratingPdf, getValues, brokerName, brokerCreci, results, selectedProperty, toast]);
 
-  // Preparar dados para o gráfico - CORREÇÃO DO TIPO
-  const chartData: ChartData[] = useMemo(() => {
-    if (!results) return [];
+  // Otimizar handlers de propriedade e unidade
+  const handlePropertyChange = useCallback((id: string) => {
+    if (!id) return;
     
-    const labels = ["Financiado", "Juros", "Entrada", "Taxas"];
+    form.reset({ 
+      ...form.getValues(), 
+      propertyId: id, 
+      payments: [], 
+      appraisalValue: 0, 
+      saleValue: 0, 
+      grossIncome: 0, 
+      simulationInstallmentValue: 0, 
+      financingParticipants: 1, 
+      conditionType: 'padrao', 
+      installments: undefined, 
+      notaryPaymentMethod: 'creditCard', 
+      notaryInstallments: undefined, 
+      selectedUnit: "" 
+    });
+    
+    setResults(null);
+    setIsDataExtracted(false);
+    setIsSaleValueLocked(false);
+
+    setStatusFilter("Disponível");
+    setFloorFilter("Todos");
+    setTypologyFilter("Todos");
+    setSunPositionFilter("Todos");
+
+    const propertyDetails = properties.find((p: Property) => p.id === id);
+
+    if (propertyDetails?.availability && propertyDetails?.pricing?.length) {
+      const availabilityMap = new Map<string, { status: UnitStatus; floor: string; tower: string }>();
+      propertyDetails.availability.towers.forEach((tower: Tower) => {
+        tower.floors.forEach((floor: { units: Unit[] } & { floor: string }) => {
+          floor.units.forEach((unit: Unit) => {
+            availabilityMap.set(unit.unitId, { status: unit.status, floor: floor.floor, tower: tower.tower });
+          });
+        });
+      });
+
+      const combinedUnits: CombinedUnit[] = propertyDetails.pricing.map((p) => {
+        const availabilityInfo = availabilityMap.get(p.unitId);
+        const normalizedUnitNumber = parseInt(String(p.unitNumber), 10).toString();
+        return {
+          ...p, 
+          unitNumber: normalizedUnitNumber,
+          status: availabilityInfo ? availabilityInfo.status : 'Indisponível',
+          floor: availabilityInfo ? availabilityInfo.floor : 'N/A',
+          block: availabilityInfo ? availabilityInfo.tower : 'N/A',
+        };
+      });
+      setAllUnits(combinedUnits);
+    } else {
+      setAllUnits([]);
+      toast({
+        title: "Aviso",
+        description: "Nenhum dado de espelho de vendas encontrado para este empreendimento. Prossiga com a inserção manual.",
+      });
+    }
+  }, [form, properties, toast]);
+
+  const handleUnitSelect = useCallback((unit: CombinedUnit) => {
+    if (!selectedProperty) return;
+
+    const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
+    const unitDisplay = isReservaParque ? `Torre ${unit.block} - Unidade ${unit.unitNumber}` : `Bloco ${unit.block} - Unidade ${unit.unitNumber}`;
+
+    setValue('selectedUnit', unitDisplay);
+    setValue('appraisalValue', unit.appraisalValue / 100);
+    setValue('saleValue', unit.saleValue / 100);
+    setIsSaleValueLocked(true);
+    setIsUnitSelectorOpen(false);
+    toast({
+      title: "Unidade Selecionada!",
+      description: `Os valores para a unidade ${unit.unitNumber} (Torre ${unit.block}) foram preenchidos.`
+    });
+  }, [selectedProperty, setValue, toast]);
+
+  const handleClearUnitSelection = useCallback(() => {
+    setValue('selectedUnit', '');
+    setValue('appraisalValue', 0);
+    setValue('saleValue', 0);
+    setIsSaleValueLocked(false);
+    toast({
+      title: "Seleção de unidade limpa",
+      description: "Você pode agora inserir valores manualmente ou selecionar outra unidade."
+    });
+  }, [setValue, toast]);
+
+  // Adicionar campo de pagamento
+  const handleAddPaymentField = useCallback((type: PaymentFieldType) => {
+    if (!canProceedWithOperation('add-payment-field')) return;
+    
+    let initialDate: Date;
+    let initialValue = 0;
+    const today = new Date();
+    const fieldType = type;
+
+    if (isDateLocked(fieldType)) {
+      if (deliveryDateObj && new Date() > deliveryDateObj) {
+        initialDate = lastDayOfMonth(addMonths(today, 1));
+      } else {
+        initialDate = deliveryDateObj || today;
+      }
+    } else if (fieldType === 'proSoluto') {
+      const { payments, appraisalValue, saleValue } = getValues();
+      const sumOfOtherPayments = payments.reduce((acc, payment) => {
+        if (payment.type !== "proSoluto" && payment.type !== "bonusAdimplencia") {
+          return acc + (payment.value || 0);
+        }
+        return acc;
+      }, 0);
+      const newProSolutoValue = (appraisalValue - sumOfOtherPayments) - (appraisalValue - saleValue);
+      initialValue = Math.max(0, newProSolutoValue);
+      
+      const sinal1Payment = watchedPayments.find(p => p.type === 'sinal1');
+      const baseDate = sinal1Payment?.date ? sinal1Payment.date : new Date();
+      const targetMonth = addMonths(baseDate, 1);
+      initialDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 5);
+    } else {
+      initialDate = today;
+    }
+
+    const newPayment: PaymentField = {
+      type,
+      value: initialValue,
+      date: initialDate,
+    };
+    
+    append(newPayment);
+    
+    setTimeout(() => {
+      completeOperation();
+    }, 100);
+  }, [append, canProceedWithOperation, completeOperation, deliveryDateObj, getValues, watchedPayments]);
+
+  // Otimizar handlers de filtros
+  const handleStatusFilterChange = useCallback((value: string) => {
+    setStatusFilter(value as UnitStatus | "Todos");
+  }, []);
+
+  const handleFloorFilterChange = useCallback((value: string) => {
+    setFloorFilter(value);
+  }, []);
+
+  const handleTypologyFilterChange = useCallback((value: string) => {
+    setTypologyFilter(value);
+  }, []);
+
+  const handleSunPositionFilterChange = useCallback((value: string) => {
+    setSunPositionFilter(value);
+  }, []);
+
+  // Limpar cache quando componente for desmontado
+  useEffect(() => {
+    return () => {
+      insuranceCache.clear();
+    };
+  }, []);
+
+  // Otimizar carregamento de unidades
+  useEffect(() => {
+    if (selectedProperty && selectedProperty.pricing && selectedProperty.availability) {
+      const combinedUnits = selectedProperty.pricing.map(pricing => {
+        const unit = selectedProperty.availability?.towers
+          .flatMap(tower => tower.floors)
+          .flatMap(floor => floor.units)
+          .find(u => u.unitId === pricing.unitId);
+        
+        return unit ? { ...pricing, ...unit } : pricing;
+      });
+      
+      setAllUnits(combinedUnits);
+    }
+  }, [selectedProperty]);
+
+  // CORREÇÃO: Preparar dados para o gráfico - ajustar para o tipo correto
+  const chartData = useMemo(() => {
+    if (!results) return { data: [], value: 0 };
+
+    const labels = ['Entrada', 'Financiamento', 'Bônus Adimplência'];
     const data = [
+      watchedPayments.reduce((sum, p) => !['financiamento', 'bonusAdimplencia'].includes(p.type) ? sum + p.value : sum, 0),
       results.financedAmount,
-      results.totalWithInterest - results.financedAmount,
-      form.getValues("saleValue") - results.financedAmount,
-      (form.getValues("notaryFees") || 0)
+      watchedPayments.find(p => p.type === 'bonusAdimplencia')?.value || 0
     ];
     
-    const colors = [
-      "#3b82f6", // blue-500
-      "#ef4444", // red-500
-      "#10b981", // green-500
-      "#f59e0b"  // amber-500
-    ];
-    
-    return labels.map((label, index) => ({
-      name: label,
-      value: data[index],
-      fill: colors[index]
-    }));
-  }, [results, form]);
+    return {
+      data: [{
+        name: 'Distribuição de Pagamentos',
+        value: data[0],
+        fill: '#8884d8',
+        labels,
+        datasets: [
+          {
+            label: 'Valores',
+            data,
+            backgroundColor: [
+              'rgba(54, 162, 235, 0.6)',
+              'rgba(255, 99, 132, 0.6)',
+              'rgba(75, 192, 192, 0.6)',
+            ],
+            borderColor: [
+              'rgba(54, 162, 235, 1)',
+              'rgba(255, 99, 132, 1)',
+              'rgba(75, 192, 192, 1)',
+            ],
+            borderWidth: 1,
+          },
+        ],
+      }],
+      value: data[0] // valor principal
+    };
+  }, [results, watchedPayments]);
 
   return (
-    <div className="container mx-auto py-6 px-4 max-w-7xl">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Calculadora de Fluxo de Pagamento</h1>
-          <p className="text-muted-foreground">
-            Simule o financiamento do seu imóvel e visualize o fluxo de pagamentos
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setIsTutorialOpen(true)}
-          >
-            <HelpCircle className="h-4 w-4 mr-2" />
-            Tutorial
-          </Button>
-        </div>
+    <>
+      <div id='root-tutorial'>
+        <InteractiveTutorial
+          isOpen={isTutorialOpen}
+          onClose={() => setIsTutorialOpen(false)}
+          form={form}
+          results={results}
+        />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building className="h-5 w-5" />
-                Seleção de Imóvel
-              </CardTitle>
-              <CardDescription>
-                Selecione o imóvel que deseja simular o financiamento
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+      <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
+        <DialogContent className="max-w-full w-full h-full p-4 flex flex-col sm:max-w-7xl sm:h-auto sm:max-h-[90vh] sm:rounded-lg sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Selecione uma Unidade Disponível</DialogTitle>
+            <DialogDescription>
+              Use os filtros para encontrar a unidade desejada e clique para selecioná-la.
+            </DialogDescription>
+          </DialogHeader>
+          {isUnitSelectorOpen && selectedProperty && (
+            <UnitSelectorDialogContent
+              allUnits={allUnits}
+              filteredUnits={filteredUnits}
+              isReservaParque={selectedProperty.enterpriseName.includes('Reserva Parque Clube')}
+              onUnitSelect={handleUnitSelect}
+              filters={{
+                status: statusFilter,
+                setStatus: setStatusFilter,
+                floor: floorFilter,
+                setFloor: setFloorFilter,
+                typology: typologyFilter,
+                setTypology: setTypologyFilter,
+                sunPosition: sunPositionFilter,
+                setSunPosition: setSunPositionFilter,
+              }}
+              filterOptions={filterOptions}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <div id="root" className="w-full">
+        <div className="grid grid-cols-1 gap-8">
+          <div className="w-full">
+            <div className="p-6 md:p-8" onPaste={handlePaste}>
               <Form {...form}>
-                <FormField
-                  control={form.control}
-                  name="propertyId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Empreendimento</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione um empreendimento" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {filteredProperties.map((property) => (
-                            <SelectItem key={property.id} value={property.id}>
-                              {property.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                {selectedProperty && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-sm font-medium">Endereço</Label>
-                        <p className="text-sm text-muted-foreground">{selectedProperty.address}</p>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium">Data de Entrega</Label>
-                        <p className="text-sm text-muted-foreground">
-                          {selectedProperty.deliveryDate ? format(parseISO(selectedProperty.deliveryDate), "dd/MM/yyyy", { locale: ptBR }) : "Não informada"}
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <FormItem>
+                    <FormLabel>1. Selecione o Empreendimento</FormLabel>
+                    <FormField
+                      control={form.control}
+                      name="propertyId"
+                      render={({ field }) => (
+                        <Select onValueChange={handlePropertyChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger id="property-select-trigger">
+                              <Building className="mr-2 h-5 w-5 text-muted-foreground" />
+                              <SelectValue placeholder="Lista de empreendimentos" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {filteredProperties.map((property: Property) => (
+                              <SelectItem key={property.id} value={property.id}>
+                                {property.enterpriseName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    <FormMessage />
+                  </FormItem>
+
+                  {selectedProperty && (
+                    <div className="animate-in fade-in-50 space-y-6">
+                      <div className="text-sm text-muted-foreground bg-secondary/50 p-3 rounded-md space-y-1">
+                        <p>
+                          <strong>Data de Entrega:</strong>{" "}
+                          {deliveryDateObj ? format(deliveryDateObj, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : 'N/A'}
                         </p>
+                        {deliveryDateObj && new Date() > deliveryDateObj && (
+                          <p>
+                            <strong>Meses desde a entrega:</strong>{" "}
+                            {differenceInMonths(new Date(), deliveryDateObj)}
+                          </p>
+                        )}
                       </div>
-                    </div>
-                    
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsUnitSelectorOpen(true)}
-                      className="w-full"
-                    >
-                      <Grid3X3 className="h-4 w-4 mr-2" />
-                      Selecionar Unidade
-                    </Button>
-                    
-                    {form.getValues("selectedUnit") && (
-                      <Alert>
-                        <CheckCircle2 className="h-4 w-4" />
-                        <AlertTitle>Unidade Selecionada</AlertTitle>
-                        <AlertDescription>
-                          {form.getValues("selectedUnit")}
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-                )}
-              </Form>
-            </CardContent>
-          </Card>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <FormLabel>2. Informe os Dados da Simulação</FormLabel>
+                        <div className="space-y-4 mt-2">
+                          {getValues('selectedUnit') ? (
+                            <div className="p-3 bg-primary/10 rounded-lg text-primary flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 font-semibold">
+                                <CheckCircle2 className="h-5 w-5"/>
+                                Unidade: {getValues('selectedUnit')}
+                              </div>
+                              <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-primary/70 hover:bg-primary/20" onClick={handleClearUnitSelection}>
+                                <XCircle className="h-4 w-4"/>
+                              </Button>
+                            </div>
+                          ) : (
+                            allUnits.length > 0 && (
+                              <Button id="unit-select-button" type="button" variant="outline" className="w-full" onClick={() => setIsUnitSelectorOpen(true)}>
+                                <MapPin className="mr-2 h-4 w-4"/>
+                                SELECIONAR UNIDADE
+                              </Button>
+                            )
+                          )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
-                Dados Financeiros
-              </CardTitle>
-              <CardDescription>
-                Informe os valores para simulação do financiamento
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Form {...form}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <CurrencyFormField
-                    name="appraisalValue"
-                    label="Valor de Avaliação"
-                    control={form.control}
-                    id="appraisal-value-input"
-                  />
-                  
-                  <CurrencyFormField
-                    name="saleValue"
-                    label="Valor de Venda"
-                    control={form.control}
-                    id="sale-value-input"
-                  />
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <CurrencyFormField
-                    name="grossIncome"
-                    label="Renda Bruta Mensal"
-                    control={form.control}
-                  />
-                  
-                  <CurrencyFormField
-                    name="simulationInstallmentValue"
-                    label="Valor da Parcela Simulada"
-                    control={form.control}
-                  />
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="financingParticipants"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Participantes no Financiamento</FormLabel>
-                        <Select onValueChange={(value) => field.onChange(parseInt(value))} defaultValue={field.value?.toString()}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o número de participantes" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="1">1</SelectItem>
-                            <SelectItem value="2">2</SelectItem>
-                            <SelectItem value="3">3</SelectItem>
-                            <SelectItem value="4">4</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="conditionType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tipo de Condição</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o tipo de condição" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="padrao">Padrão</SelectItem>
-                            <SelectItem value="especial">Especial</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </Form>
-            </CardContent>
-          </Card>
+                          <Alert id="data-extraction-alert" className="border-primary/30 bg-primary/5 text-primary-foreground shadow-sm">
+                            <Sparkles className="h-5 w-5 text-primary" />
+                            <AlertTitle className="font-bold text-primary">Extração de dados</AlertTitle>
+                            <CardDescription>
+                              Enviar Simulação Caixa em PDF.
+                            </CardDescription>
+                            <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                              <input
+                                type="file"
+                                accept="application/pdf,image/png,image/jpeg"
+                                ref={fileInputRef}
+                                onChange={handleFileChange}
+                                className="hidden"
+                              />
+                              <Button
+                                id="upload-file-button"
+                                type="button"
+                                variant="default"
+                                className="flex-1"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isExtracting}
+                              >
+                                {isExtracting ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Upload className="mr-2 h-4 w-4" />
+                                )}
+                                {isExtracting ? "Extraindo..." : "Carregar Arquivo"}
+                              </Button>
+                            </div>
+                          </Alert>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Pagamentos
-              </CardTitle>
-              <CardDescription>
-                Adicione os pagamentos para a simulação
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Form {...form}>
-                <div className="space-y-4">
-                  {fields.map((field, index) => (
-                    <div key={field.id} className="flex items-center gap-2 p-4 border rounded-lg">
-                      <div className="flex-1 space-y-2">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <CurrencyFormField id="appraisal-value-input" name="appraisalValue" label="Valor de Avaliação" control={form.control} readOnly={isSaleValueLocked} />
+                            <CurrencyFormField id="sale-value-input" name="saleValue" label="Valor de Venda" control={form.control} readOnly={isSaleValueLocked} />
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <CurrencyFormField name="grossIncome" label="Renda Bruta" control={form.control} readOnly={isDataExtracted} />
+                            <CurrencyFormField name="simulationInstallmentValue" label="Valor da Parcela Caixa" control={form.control} readOnly={isDataExtracted} />
+                          </div>
                           <FormField
                             control={form.control}
-                            name={`payments.${index}.type`}
+                            name="financingParticipants"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Tipo</FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormLabel>Número de Participantes</FormLabel>
+                                <Select
+                                  onValueChange={(value) => field.onChange(parseInt(value, 10))}
+                                  value={String(field.value) || ''}
+                                >
                                   <FormControl>
                                     <SelectTrigger>
-                                      <SelectValue placeholder="Selecione o tipo" />
+                                      <Users className="mr-2 h-5 w-5 text-muted-foreground" />
+                                      <SelectValue placeholder="Selecione o número de participantes" />
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    {paymentFieldOptions.map((option) => (
-                                      <SelectItem key={option.value} value={option.value}>
-                                        {option.label}
-                                      </SelectItem>
-                                    ))}
+                                    <SelectItem value="1">1 Participante</SelectItem>
+                                    <SelectItem value="2">2 Participantes</SelectItem>
+                                    <SelectItem value="3">3 Participantes</SelectItem>
+                                    <SelectItem value="4">4 Participantes</SelectItem>
                                   </SelectContent>
                                 </Select>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          
-                          <FormField
-                            control={form.control}
-                            name={`payments.${index}.value`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Valor (R$)</FormLabel>
-                                <FormControl>
-                                  <CurrencyInput
-                                    value={field.value * 100}
-                                    onValueChange={(cents) => field.onChange(cents === null ? 0 : cents / 100)}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          
-                          <FormField
-                            control={form.control}
-                            name={`payments.${index}.date`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Data</FormLabel>
-                                <FormControl>
-                                  <DatePicker
-                                    value={field.value ? field.value.toISOString() : ''}
-                                    onChange={(date) => field.onChange(date ? new Date(date) : undefined)}
-                                  />
-                                </FormControl>
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -1659,518 +1967,535 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                         </div>
                       </div>
                       
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        onClick={() => remove(index)}
-                      >
-                        <XCircle className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  
-                  <div className="flex flex-wrap gap-2">
-                    {availablePaymentFields.map((option) => (
-                      <Button
-                        key={option.value}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => append({
-                          type: option.value,
-                          value: 0,
-                          date: new Date()
-                        })}
-                      >
-                        <PlusCircle className="h-4 w-4 mr-2" />
-                        {option.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </Form>
-            </CardContent>
-          </Card>
+                      <Separator />
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Taxas de Cartório
-              </CardTitle>
-              <CardDescription>
-                Configure as taxas de cartório para o financiamento
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Form {...form}>
-                <div className="space-y-4">
-                  <CurrencyFormField
-                    name="notaryFees"
-                    label="Taxas de Cartório"
-                    control={form.control}
-                    readOnly={true}
-                  />
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="notaryPaymentMethod"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Método de Pagamento</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione o método de pagamento" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="creditCard">Cartão de Crédito</SelectItem>
-                              <SelectItem value="bankSlip">Boleto</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="notaryInstallments"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Parcelas</FormLabel>
-                          <Select onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)} defaultValue={field.value?.toString()}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione o número de parcelas" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {form.watch("notaryPaymentMethod") === "creditCard" ? (
-                                <>
-                                  <SelectItem value="1">1x</SelectItem>
-                                  <SelectItem value="2">2x</SelectItem>
-                                  <SelectItem value="3">3x</SelectItem>
-                                  <SelectItem value="4">4x</SelectItem>
-                                  <SelectItem value="5">5x</SelectItem>
-                                  <SelectItem value="6">6x</SelectItem>
-                                  <SelectItem value="7">7x</SelectItem>
-                                  <SelectItem value="8">8x</SelectItem>
-                                  <SelectItem value="9">9x</SelectItem>
-                                  <SelectItem value="10">10x</SelectItem>
-                                  <SelectItem value="11">11x</SelectItem>
-                                  <SelectItem value="12">12x</SelectItem>
-                                </>
-                              ) : (
-                                <>
-                                  <SelectItem value="36">36x</SelectItem>
-                                  <SelectItem value="40">40x</SelectItem>
-                                </>
-                              )}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  {form.watch("notaryFees") && form.watch("notaryInstallments") && (
-                    <div className="p-4 bg-muted rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium">Valor da Parcela</span>
-                        <span className="text-sm font-bold">
-                          {centsToBrl(
-                            calculateNotaryInstallment(
-                              form.getValues("notaryFees") || 0,
-                              form.getValues("notaryInstallments") || 1,
-                              form.getValues("notaryPaymentMethod")
-                            ) * 100
+                      <div className="space-y-4">
+                        <FormLabel>3. Opções do Pró-Soluto</FormLabel>
+                        <FormField
+                          control={form.control}
+                          name="conditionType"
+                          render={({ field }) => (
+                            <FormItem className="space-y-3" id="condition-type-radiogroup">
+                              <FormControl>
+                                <RadioGroup
+                                  onValueChange={field.onChange}
+                                  value={field.value}
+                                  className="flex flex-col space-y-1"
+                                >
+                                  <FormItem className="flex items-center space-x-3 space-y-0">
+                                    <FormControl>
+                                      <RadioGroupItem value="padrao" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">
+                                      Condição Padrão
+                                    </FormLabel>
+                                  </FormItem>
+                                  <FormItem className="flex items-center space-x-3 space-y-0">
+                                    <FormControl>
+                                      <RadioGroupItem value="especial" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">
+                                      Condição Especial
+                                    </FormLabel>
+                                  </FormItem>
+                                </RadioGroup>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
                           )}
-                        </span>
+                        />
+                        <FormField
+                          control={form.control}
+                          name="installments"
+                          render={({ field }) => {
+                            let maxInstallments = 0;
+                            if (selectedProperty) {
+                              const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
+                              if (isReservaParque) {
+                                maxInstallments = watchedConditionType === 'especial' ? 66 : 60;
+                              } else {
+                                maxInstallments = watchedConditionType === 'especial' ? 66 : 52;
+                              }
+                            }
+                            return (
+                              <FormItem>
+                                <FormLabel className="text-sm">Nº de Parcelas (até {maxInstallments})</FormLabel>
+                                <FormControl>
+                                  <div className="relative">
+                                    <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                    <Input
+                                      id="installments-input"
+                                      type="number"
+                                      step="4"
+                                      min="4"
+                                      max={maxInstallments}
+                                      placeholder={`Ex: ${maxInstallments > 0 ? maxInstallments - 4 : ''}`}
+                                      {...field}
+                                      value={field.value ?? ""}
+                                      onChange={(e) => field.onChange(parseInt(e.target.value, 10) || undefined)}
+                                      className="pl-10"
+                                    />
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}}
+                        />
                       </div>
+
                     </div>
                   )}
-                </div>
-              </Form>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5" />
-                Importar Dados
-              </CardTitle>
-              <CardDescription>
-                Importe dados de um arquivo PDF ou imagem para preencher automaticamente os campos
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-muted-foreground/25 rounded-lg">
-                <Upload className="h-10 w-10 text-muted-foreground mb-4" />
-                <div className="text-center">
-                  <p className="text-sm font-medium mb-2">
-                    Arraste e solte um arquivo ou clique para selecionar
-                  </p>
-                  <p className="text-xs text-muted-foreground mb-4">
-                    PDF, JPG ou PNG (máx. 15MB)
-                  </p>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isExtracting}
-                  >
-                    {isExtracting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Extraindo dados...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-4 w-4 mr-2" />
-                        Selecionar Arquivo
-                      </>
+                  <Separator />
+
+                  <div id="payment-flow-builder">
+                    <FormLabel>4. Monte seu Fluxo de Pagamento</FormLabel>
+                    <div className="space-y-4 mt-2">
+                      {fields.map((field, index) => {
+                        const selectedField = paymentFieldOptions.find(opt => opt.value === field.type);
+                        const isProSoluto = field.type === 'proSoluto';
+                        const isBonusAdimplencia = field.type === 'bonusAdimplencia';
+                        const isBonusCampanha = field.type === 'bonusCampanha';
+                        const isFinanciamento = field.type === 'financiamento';
+                        const isReadOnly = isProSoluto || isBonusAdimplencia || isBonusCampanha || (isFinanciamento && isDataExtracted);
+
+                        return (
+                          <div key={field.id} className="flex flex-col sm:flex-row items-end gap-2 animate-in fade-in-50">
+                            <FormField
+                              control={form.control}
+                              name={`payments.${index}.value`}
+                              render={({ field: formField }) => (
+                                <FormItem className="flex-grow w-full">
+                                  <FormLabel className="text-xs">{selectedField?.label}</FormLabel>
+                                  <FormControl>
+                                    <div className="relative">
+                                      <HandCoins className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                      <CurrencyInput
+                                        value={formField.value * 100}
+                                        onValueChange={(cents) => {
+                                          if(!isReadOnly){
+                                            formField.onChange(cents === null ? 0 : cents / 100)
+                                          }
+                                        }}
+                                        className="pl-10"
+                                        readOnly={isReadOnly}
+                                      />
+                                    </div>
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name={`payments.${index}.date`}
+                              render={({ field: fieldProps }) => (
+                                <FormItem className="w-full sm:w-auto">
+                                  <FormLabel className="text-xs">Data</FormLabel>
+                                  <DatePicker 
+                                    value={fieldProps.value.toISOString()}
+                                    onChange={(dateString) => dateString ? fieldProps.onChange(new Date(dateString)) : fieldProps.onChange(undefined)}
+                                    disabled={getDisabledDates(watchedPayments[index].type) || isDateLocked(field.type)}
+                                  />
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:bg-destructive/10"
+                              onClick={() => remove(index)}
+                            >
+                              <XCircle className="h-5 w-5" />
+                            </Button>
+                          </div>
+                        )})}
+                    </div>
+                    <FormMessage>
+                      {form.formState.errors.payments?.message}
+                    </FormMessage>
+                  </div>
+                  
+                  <div className="pt-2">
+                    {availablePaymentFields.length > 0 && form.watch('propertyId') && (
+                      <Select
+                        onValueChange={handleAddPaymentField}
+                        value=""
+                      >
+                        <SelectTrigger id="add-payment-field-select">
+                          <PlusCircle className="mr-2 h-5 w-5" />
+                          Adicionar campo ao fluxo
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availablePaymentFields.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
-                  </Button>
-                </div>
-              </div>
-              
-              {isDataExtracted && (
-                <Alert>
-                  <CheckCircle2 className="h-4 w-4" />
-                  <AlertTitle>Dados Importados</AlertTitle>
-                  <AlertDescription>
-                    Os dados foram importados com sucesso. Verifique os campos preenchidos e complete as informações restantes.
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-end">
-            <Button
-              onClick={form.handleSubmit(onSubmit)}
-              disabled={isCalculating}
-              size="lg"
-            >
-              {isCalculating ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Calculando...
-                </>
-              ) : (
-                <>
-                  <Calculator className="h-4 w-4 mr-2" />
-                  Calcular Simulação
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-        
-        <div className="space-y-6">
-          {results && (
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calculator className="h-5 w-5" />
-                    Resultados
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Valor Financiado</p>
-                      <p className="text-2xl font-bold">{centsToBrl(results.financedAmount * 100)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Prazo</p>
-                      <p className="text-2xl font-bold">{form.getValues("installments")} meses</p>
-                    </div>
                   </div>
                   
-                  <Separator />
-                  
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Parcela Mensal</p>
-                    <div className="text-2xl font-bold">{centsToBrl((results.monthlyInstallment || 0) * 100)}</div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Total de Juros</p>
-                      <p className="text-xl font-bold">{centsToBrl((results.totalWithInterest - results.financedAmount) * 100)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Taxa de Juros Efetiva</p>
-                      <p className="text-xl font-bold">{formatPercentage(results.averageInterestRate)}</p>
-                    </div>
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm font-medium text-muted-foreground">Entrada</span>
-                      <span className="font-medium">{centsToBrl(form.getValues("saleValue") * 100 - results.financedAmount * 100)}</span>
-                    </div>
-                    
-                    <div className="flex justify-between">
-                      <span className="text-sm font-medium text-muted-foreground">Taxas Cartoriais</span>
-                      <span className="font-medium">{centsToBrl((form.getValues("notaryFees") || 0) * 100)}</span>
-                    </div>
-                    
-                    <Separator />
-                    
-                    <div className="flex justify-between">
-                      <span className="font-medium">Total a Pagar</span>
-                      <span className="font-bold">
-                        {centsToBrl(
-                          (results.totalWithInterest + 
-                          (form.getValues("saleValue") * 100 - results.financedAmount * 100) + 
-                          (form.getValues("notaryFees") || 0) * 100
-                          )
+                  {selectedProperty && (
+                    <div id="notary-fees-section" className="space-y-4 animate-in fade-in-50">
+                      <Separator />
+                      <FormLabel>5. Calcule as Taxas Cartorárias</FormLabel>
+                      <FormField
+                        control={form.control}
+                        name="notaryFees"
+                        render={() => (
+                          <FormItem>
+                            <FormLabel>Valor Total das Taxas</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <FileText className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                <CurrencyInput
+                                  value={(getValues('notaryFees') || 0) * 100}
+                                  onValueChange={() => {}}
+                                  readOnly
+                                  className="pl-10 bg-muted/50"
+                                />
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
                         )}
-                      </span>
+                      />
+                      <FormField
+                        control={form.control}
+                        name="notaryPaymentMethod"
+                        render={({ field }) => (
+                          <FormItem className="space-y-3">
+                            <FormLabel>Forma de Pagamento</FormLabel>
+                            <FormControl>
+                              <RadioGroup
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                                value={field.value}
+                                className="flex flex-col space-y-1"
+                              >
+                                <FormItem className="flex items-center space-x-3 space-y-0">
+                                  <FormControl>
+                                    <RadioGroupItem value="creditCard" />
+                                  </FormControl>
+                                  <FormLabel className="font-normal">
+                                    Cartão de Crédito
+                                  </FormLabel>
+                                </FormItem>
+                                <FormItem className="flex items-center space-x-3 space-y-0">
+                                  <FormControl>
+                                    <RadioGroupItem value="bankSlip" />
+                                  </FormControl>
+                                  <FormLabel className="font-normal">
+                                    Boleto Bancário
+                                  </FormLabel>
+                                </FormItem>
+                              </RadioGroup>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      {watchedNotaryPaymentMethod === 'creditCard' && (
+                        <FormField
+                          control={form.control}
+                          name="notaryInstallments"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Nº de Parcelas (até 12x)</FormLabel>
+                              <FormControl>
+                                <div className="relative">
+                                  <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                                  <Input
+                                    type="number"
+                                    step="1"
+                                    min="1"
+                                    max="12"
+                                    placeholder="Ex: 12"
+                                    {...field}
+                                    value={field.value ?? ""}
+                                    onChange={(e) => field.onChange(parseInt(e.target.value, 10) || undefined)}
+                                    className="pl-10"
+                                  />
+                                </div>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
+                      {watchedNotaryPaymentMethod === 'bankSlip' && (
+                        <FormField
+                          control={form.control}
+                          name="notaryInstallments"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Nº de Parcelas</FormLabel>
+                              <Select
+                                onValueChange={(value) => field.onChange(parseInt(value, 10))}
+                                value={String(field.value || '')}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <CalendarClock className="mr-2 h-5 w-5 text-muted-foreground" />
+                                    <SelectValue placeholder="Escolha 36 ou 40 parcelas" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="36">36 vezes</SelectItem>
+                                  <SelectItem value="40">40 vezes</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
                     </div>
+                  )}
+
+                  <CardFooter className="p-0 pt-6 flex flex-col sm:flex-row gap-4">
+                    <div id="calculation-actions" className="w-full flex flex-col sm:flex-row gap-4">
+                      <Button id="calculate-button" type="submit" className="w-full" disabled={!selectedProperty || isExtracting}>
+                        Calcular
+                      </Button>
+                      <Button
+                        id="minimum-condition-button"
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        onClick={handleSetMinimumCondition}
+                        disabled={!selectedProperty || isExtracting || !getValues('installments')}
+                      >
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        Condição Mínima
+                      </Button>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleReset}
+                      className="w-full"
+                      disabled={isExtracting}
+                    >
+                      <Repeat className="mr-2 h-4 w-4" />
+                      Limpar
+                    </Button>
+                  </CardFooter>
+                </form>
+              </Form>
+            </div>
+          </div>
+          
+          {results && selectedProperty && (
+            <div id="results-section" className="bg-secondary/50 p-4 md:p-6 rounded-lg">
+              <div
+                ref={resultsRef}
+                key={JSON.stringify(results)}
+                className="animate-in fade-in-50 duration-500 space-y-6"
+              >
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-bold text-primary tracking-tight">Dashboard da Simulação</h2>
+                  <CardDescription>Análise detalhada do seu fluxo de pagamento.</CardDescription>
+                </div>
+                
+                {results.incomeError || results.proSolutoError ? (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Ajustes Necessários</AlertTitle>
+                    <AlertDescription>
+                      {results.incomeError && <p>{results.incomeError}</p>}
+                      {results.proSolutoError && <p>{results.proSolutoError}</p>}
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Parcela Pró-Soluto (Linear)</CardTitle>
+                          <CardDescription>{getValues('installments') || 0} meses</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex justify-center items-center p-6">
+                          <span className="text-3xl font-bold text-primary">
+                            {centsToBrl((results.monthlyInstallment || 0) * 100)}
+                          </span>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Pico de Comprometimento</CardTitle>
+                          <CardDescription>Renda x Parcela CAIXA + Pró-Soluto</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex justify-center items-center">
+                          {commitmentChartData && (
+                            <ResultChart 
+                              data={commitmentChartData} 
+                              value={results.incomeCommitmentPercentage}
+                            />
+                          )}
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Percentual Parcelado (Pró-Soluto)</CardTitle>
+                          <CardDescription>Pró-Soluto Corrigido x Venda</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex justify-center items-center">
+                          {proSolutoChartData && (
+                            <ResultChart 
+                              data={proSolutoChartData} 
+                              value={results.proSolutoCommitmentPercentage}
+                            />
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+                    
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Resumo Financeiro</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">Valor Parcelado (Pró-Soluto)</span>
+                          <span className="font-medium">{centsToBrl(results.financedAmount * 100)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">Total de Juros (Pró-Soluto)</span>
+                          <span className="font-medium">{centsToBrl((results.totalWithInterest - results.financedAmount) * 100)}</span>
+                        </div>
+                        <Separator />
+                        <div className="flex justify-between items-center text-base">
+                          <span className="font-semibold">Valor Total Pago (Pró-Soluto)</span>
+                          <span className="font-bold text-primary">{centsToBrl(results.totalWithInterest * 100)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm pt-2">
+                          <span className="text-muted-foreground">Taxa de Juros Mensal (Média)</span>
+                          <span className="font-medium">{formatPercentage(results.averageInterestRate)}</span>
+                        </div>
+
+                        {results.notaryInstallmentValue && (
+                          <div className="flex justify-between items-center text-sm pt-2">
+                            <span className="text-muted-foreground">Parcela Taxas Cartorárias</span>
+                            <span className="font-medium">{centsToBrl(results.notaryInstallmentValue * 100)}</span>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Accordion type="single" collapsible className="w-full" defaultValue="timeline">
+                      <AccordionItem value="timeline">
+                        <AccordionTrigger>
+                          <div className="flex items-center gap-2">
+                            <ListOrdered className="h-5 w-5" />
+                            <span>Linha do Tempo do Pagamento</span>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <PaymentTimeline results={results} formValues={getValues()} />
+                        </AccordionContent>
+                      </AccordionItem>
+                      {filteredInsuranceBreakdown.length > 0 && (
+                        <AccordionItem value="insurance">
+                          <AccordionTrigger>
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="h-5 w-5" />
+                              <span>Detalhamento do Seguro de Obras ({centsToBrl(results.totalConstructionInsurance * 100)})</span>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="max-h-60 overflow-y-auto">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Mês</TableHead>
+                                    <TableHead>Progresso</TableHead>
+                                    <TableHead className="text-right">Valor</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {filteredInsuranceBreakdown.map(
+                                    (item: MonthlyInsurance, index: number) => (
+                                      <TableRow key={index} className={cn(!item.isPayable && 'text-muted-foreground')}>
+                                        <TableCell className={cn("font-medium capitalize", item.isPayable && "text-primary")}>
+                                          {item.month}
+                                        </TableCell>
+                                        <TableCell>
+                                          {formatPercentage(item.progressRate)}
+                                        </TableCell>
+                                        <TableCell className={cn("text-right", !item.isPayable && "line-through")}>
+                                          {centsToBrl(item.value * 100)}
+                                        </TableCell>
+                                      </TableRow>
+                                    )
+                                  )}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      )}
+                    </Accordion>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Gerar Proposta em PDF</CardTitle>
+                        <CardDescription>
+                          Preencha os dados do corretor para incluir na proposta final.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="broker-name-linear">Nome do Corretor</Label>
+                            <div className="relative">
+                              <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                              <Input id="broker-name-linear" placeholder="Seu Nome Completo" value={brokerName} onChange={(e) => setBrokerName(e.target.value)} className="pl-10" />
+                            </div>
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="broker-creci-linear">CRECI</Label>
+                            <div className="relative">
+                              <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                              <Input id="broker-creci-linear" placeholder="000000-X" value={brokerCreci} onChange={(e) => setBrokerCreci(e.target.value)} className="pl-10" />
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                      <CardFooter>
+                        <Button onClick={handleGeneratePdf} disabled={isGeneratingPdf} className="w-full">
+                          {isGeneratingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                          {isGeneratingPdf ? 'Gerando PDF...' : 'Gerar PDF'}
+                        </Button>
+                      </CardFooter>
+                    </Card>
                   </div>
-                  
-                  {results.incomeError && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle>Atenção</AlertTitle>
-                      <AlertDescription>
-                        {results.incomeError}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                  
-                  {results.proSolutoError && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle>Atenção</AlertTitle>
-                      <AlertDescription>
-                        {results.proSolutoError}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </CardContent>
-                <CardFooter>
-                  <Button
-                    onClick={handleGeneratePdf}
-                    disabled={isGeneratingPdf}
-                    className="w-full"
-                  >
-                    {isGeneratingPdf ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Gerando PDF...
-                      </>
-                    ) : (
-                      <>
-                        <Download className="h-4 w-4 mr-2" />
-                        Gerar PDF
-                      </>
-                    )}
-                  </Button>
-                </CardFooter>
-              </Card>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <PieChart className="h-5 w-5" />
-                    Distribuição de Pagamentos
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResultChart data={chartData} />
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    Fluxo de Pagamentos
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <PaymentTimeline items={watchedPayments} />
-                </CardContent>
-              </Card>
-            </>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {!results && selectedProperty && (
+            <div className="bg-secondary/50 p-6 md:p-8 mt-6 rounded-lg">
+              <div className="text-center text-muted-foreground animate-in fade-in duration-500 max-w-2xl mx-auto">
+                <Wallet className="mx-auto h-16 w-16 mb-4 text-primary/30" />
+                <h3 className="font-semibold">
+                  Seu fluxo de pagamento aparecerá aqui.
+                </h3>
+                <p>Preencha os campos e monte o fluxo para calcular.</p>
+              </div>
+            </div>
           )}
         </div>
       </div>
-      
-      <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Selecionar Unidade</DialogTitle>
-            <DialogDescription>
-              Escolha uma unidade para continuar com a simulação
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <div className="flex items-center space-x-2">
-                <Label htmlFor="status-filter">Status:</Label>
-                <Select value={statusFilter} onValueChange={(value: UnitStatus | "Todos") => setStatusFilter(value)}>
-                  <SelectTrigger id="status-filter" className="w-[180px]">
-                    <SelectValue placeholder="Filtrar por status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todos</SelectItem>
-                    <SelectItem value="Disponível">Disponível</SelectItem>
-                    <SelectItem value="Vendido">Vendido</SelectItem>
-                    <SelectItem value="Reservado">Reservado</SelectItem>
-                    <SelectItem value="Indisponível">Indisponível</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Label htmlFor="floor-filter">Andar:</Label>
-                <Select value={floorFilter} onValueChange={setFloorFilter}>
-                  <SelectTrigger id="floor-filter" className="w-[180px]">
-                    <SelectValue placeholder="Filtrar por andar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todos</SelectItem>
-                    {filterOptions.floors.map((floor) => (
-                      <SelectItem key={floor} value={floor}>
-                        {floor}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Label htmlFor="typology-filter">Tipologia:</Label>
-                <Select value={typologyFilter} onValueChange={setTypologyFilter}>
-                  <SelectTrigger id="typology-filter" className="w-[180px]">
-                    <SelectValue placeholder="Filtrar por tipologia" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todos</SelectItem>
-                    {filterOptions.typologies.map((typology) => (
-                      <SelectItem key={typology} value={typology}>
-                        {typology}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Label htmlFor="sun-position-filter">Posição Solar:</Label>
-                <Select value={sunPositionFilter} onValueChange={setSunPositionFilter}>
-                  <SelectTrigger id="sun-position-filter" className="w-[180px]">
-                    <SelectValue placeholder="Filtrar por posição solar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todos</SelectItem>
-                    {filterOptions.sunPositions.map((sunPosition) => (
-                      <SelectItem key={sunPosition} value={sunPosition}>
-                        {sunPosition}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredUnits.map((unit) => (
-                <UnitCard
-                  key={`${unit.block}-${unit.unitNumber}`}
-                  unit={unit}
-                  isReservaParque={selectedProperty?.enterpriseName.includes('Reserva Parque Clube') || false}
-                  onUnitSelect={(unit) => {
-                    setValue('selectedUnit', `${unit.block} - Unidade ${unit.unitNumber}`);
-                    setValue('saleValue', unit.saleValue / 100);
-                    setValue('appraisalValue', unit.appraisalValue / 100);
-                    setIsUnitSelectorOpen(false);
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-      
-      <InteractiveTutorial 
-        isOpen={isTutorialOpen}
-        onClose={() => setIsTutorialOpen(false)}
-        tutorialSteps={[
-          {
-            title: "Bem-vindo à Calculadora de Fluxo de Pagamento",
-            content: "Esta ferramenta ajuda você a simular o financiamento do seu imóvel e visualizar o fluxo de pagamentos.",
-            target: ".container"
-          },
-          {
-            title: "Seleção de Imóvel",
-            content: "Selecione o empreendimento e a unidade que deseja simular o financiamento.",
-            target: '[data-testid="property-selection"]'
-          },
-          {
-            title: "Dados Financeiros",
-            content: "Informe os valores de avaliação, venda, renda e parcela simulada.",
-            target: '[data-testid="financial-data"]'
-          },
-          {
-            title: "Pagamentos",
-            content: "Adicione os pagamentos como entrada, sinal, financiamento, etc.",
-            target: '[data-testid="payments"]'
-          },
-          {
-            title: "Taxas de Cartório",
-            content: "Configure as taxas de cartório e o método de pagamento.",
-            target: '[data-testid="notary-fees"]'
-          },
-          {
-            title: "Importar Dados",
-            content: "Importe dados de um arquivo PDF ou imagem para preencher automaticamente os campos.",
-            target: '[data-testid="import-data"]'
-          },
-          {
-            title: "Resultados",
-            content: "Visualize os resultados do cálculo, incluindo parcela mensal, total de juros e taxa efetiva.",
-            target: '[data-testid="results"]'
-          },
-          {
-            title: "Gráfico de Distribuição",
-            content: "Veja a distribuição dos pagamentos em formato de gráfico.",
-            target: '[data-testid="chart"]'
-          },
-          {
-            title: "Fluxo de Pagamentos",
-            content: "Visualize o cronograma de pagamentos ao longo do tempo.",
-            target: '[data-testid="payment-timeline"]'
-          },
-          {
-            title: "Gerar PDF",
-            content: "Exporte os resultados da simulação em formato PDF.",
-            target: '[data-testid="generate-pdf"]'
-          }
-        ]}
-      />
-    </div>
+    </>
   );
 }
+
+// Componente Calculator para importação
+const CalculatorIcon = memo(() => <Calculator className="h-4 w-4" />);
+CalculatorIcon.displayName = 'Calculator';
