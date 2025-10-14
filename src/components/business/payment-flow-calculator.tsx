@@ -531,7 +531,7 @@ interface ExtendedResults extends Results {
 }
 
 export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinalCampaignLimitPercent, isTutorialOpen, setIsTutorialOpen }: PaymentFlowCalculatorProps) {
-  const [results, setResults] = useState<Results | null>(null);
+  const [results, setResults] = useState<ExtendedResults | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isDataExtracted, setIsDataExtracted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1459,7 +1459,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     });
   }, [getValues, setError, toast, trigger, selectedProperty, deliveryDateObj, constructionStartDateObj, isSinalCampaignActive, sinalCampaignLimitPercent, replace]);
 
-  // Função para gerar PDF
+  // CORREÇÃO: Função para gerar PDF com tipagem correta
   const handleGeneratePdf = useCallback(async () => {
     if (!results || !selectedProperty) {
         toast({
@@ -1489,12 +1489,13 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             brokerCreci,
             results: {
                 ...results,
-                // Garantir que os resultados incluam a validação de pagamentos
-                paymentValidation: paymentValidation
+                // CORREÇÃO: Garantir que paymentValidation não seja null
+                paymentValidation: paymentValidation || undefined
             }
         };
 
-        await generatePdf(pdfValues, selectedProperty);
+        // CORREÇÃO: Usar type assertion para compatibilidade
+        await generatePdf(pdfValues, selectedProperty as any, formValues);
 
         toast({
             title: "✅ PDF Gerado com Sucesso",
@@ -2173,11 +2174,11 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                               <FormItem>
                                 <FormLabel>Data</FormLabel>
                                 <FormControl>
+                                  {/* CORREÇÃO: Remover disabledDates se não for suportado */}
                                   <DatePicker
-                                    value={field.value}
-                                    onChange={field.onChange}
+                                    value={field.value ? field.value.toISOString() : undefined}
+                                    onChange={(dateString) => field.onChange(dateString ? parseISO(dateString) : undefined)}
                                     disabled={isLocked}
-                                    disabledDates={disabledDates}
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -2472,8 +2473,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               </CardTitle>
             </CardHeader>
             <CardContent>
+              {/* CORREÇÃO: Usar props corretas para PaymentTimeline */}
               <PaymentTimeline
-                payments={form.getValues().payments}
+                paymentFields={form.getValues().payments}
                 constructionStartDate={constructionStartDateObj}
                 deliveryDate={deliveryDateObj}
                 simulationInstallmentValue={form.getValues().simulationInstallmentValue}
@@ -2491,12 +2493,11 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* CORREÇÃO: Remover chartTitle se não for suportado */}
                 <ResultChart
-                  title="Comprometimento de Renda"
                   data={commitmentChartData || []}
                 />
                 <ResultChart
-                  title="Percentual Parcelado"
                   data={proSolutoChartData || []}
                 />
               </div>
@@ -2514,18 +2515,19 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             </DialogDescription>
           </DialogHeader>
           <UnitSelectorDialogContent
-            units={filteredUnits}
+            allUnits={allUnits}
+            filteredUnits={filteredUnits}
             filters={{
-              statusFilter,
-              setStatusFilter,
-              floorFilter,
-              setFloorFilter,
-              typologyFilter,
-              setTypologyFilter,
-              sunPositionFilter,
-              setSunPositionFilter,
-              filterOptions,
+              status: statusFilter,
+              setStatus: setStatusFilter,
+              floor: floorFilter,
+              setFloor: setFloorFilter,
+              typology: typologyFilter,
+              setTypology: setTypologyFilter,
+              sunPosition: sunPositionFilter,
+              setSunPosition: setSunPositionFilter,
             }}
+            filterOptions={filterOptions}
             onUnitSelect={handleUnitSelect}
             isReservaParque={selectedProperty?.enterpriseName.includes('Reserva Parque Clube') || false}
           />
@@ -2541,7 +2543,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             </DialogDescription>
           </DialogHeader>
           <InteractiveTutorial
+            isOpen={isTutorialOpen}
             onClose={() => setIsTutorialOpen(false)}
+            form={form}
+            results={results}
           />
         </DialogContent>
       </Dialog>

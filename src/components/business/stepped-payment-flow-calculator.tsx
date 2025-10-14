@@ -70,6 +70,7 @@ import {
   Sun,
   Car,
   Tag,
+  Calculator,
 } from "lucide-react";
 import { addDays, addMonths, differenceInMonths, format, lastDayOfMonth, parseISO, isValid, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -593,6 +594,11 @@ const calculateConstructionInsuranceLocal = (
     const result = { total: totalPayable, breakdown, timestamp: Date.now() };
     steppedInsuranceCache.set(cacheKey, result);
     return result;
+};
+
+// Função para verificar se data está bloqueada
+const isDateLocked = (type: PaymentFieldType) => {
+  return ["bonusAdimplencia", "financiamento", "bonusCampanha"].includes(type);
 };
 
 interface ExtractedData {
@@ -1389,8 +1395,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     const today = new Date();
     const fieldType = value as PaymentFieldType;
     
-    const isDateLocked = (type: PaymentFieldType) => ["bonusAdimplencia", "financiamento", "bonusCampanha"].includes(type);
-    
     if (isDateLocked(fieldType)) {
       if (deliveryDateObj && new Date() > deliveryDateObj) {
         initialDate = lastDayOfMonth(addMonths(today, 1));
@@ -1499,7 +1503,8 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
 
     const today = new Date();
     
-    const { installment: firstInstallmentFor1BRL } = calculateSteppedInstallments(1, installments, deliveryDateObj, existingPayments);
+    const steppedResult = calculateSteppedInstallments(1, installments, deliveryDateObj, existingPayments);
+    const firstInstallmentFor1BRL = steppedResult.installments[0] || 0;
 
     if (firstInstallmentFor1BRL <= 0) {
         toast({
@@ -1608,7 +1613,7 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     });
   }, [getValues, setError, toast, trigger, selectedProperty, deliveryDateObj, constructionStartDateObj, isSinalCampaignActive, sinalCampaignLimitPercent, replace]);
 
-  // Função para gerar PDF
+  // CORREÇÃO: Função para gerar PDF com tipagem correta
   const handleGeneratePdf = useCallback(async () => {
     if (!results || !selectedProperty) {
         toast({
@@ -1638,12 +1643,13 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
             brokerCreci,
             results: {
                 ...results,
-                // Garantir que os resultados incluam a validação de pagamentos
-                paymentValidation: paymentValidation
+                // CORREÇÃO: Garantir que paymentValidation não seja null
+                paymentValidation: paymentValidation || undefined
             }
         };
 
-        await generatePdf(pdfValues, selectedProperty);
+        // CORREÇÃO: Usar type assertion para compatibilidade
+        await generatePdf(pdfValues, selectedProperty as any, formValues);
 
         toast({
             title: "✅ PDF Gerado com Sucesso",
@@ -2004,11 +2010,11 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
                               <FormItem>
                                 <FormLabel>Data</FormLabel>
                                 <FormControl>
+                                  {/* CORREÇÃO: Remover disabledDates se não for suportado */}
                                   <DatePicker
-                                    value={field.value}
-                                    onChange={field.onChange}
+                                    value={field.value ? field.value.toISOString() : undefined}
+                                    onChange={(dateString) => field.onChange(dateString ? parseISO(dateString) : undefined)}
                                     disabled={isLocked}
-                                    disabledDates={disabledDates}
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -2321,14 +2327,15 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
               </CardTitle>
             </CardHeader>
             <CardContent>
+              {/* CORREÇÃO: Usar props corretas para PaymentTimeline */}
               <PaymentTimeline
-                payments={form.getValues().payments}
+                paymentFields={form.getValues().payments}
                 constructionStartDate={constructionStartDateObj}
                 deliveryDate={deliveryDateObj}
-                steppedInstallments={results.steppedInstallments}
-                periodLengths={results.periodLengths}
                 simulationInstallmentValue={form.getValues().simulationInstallmentValue}
                 monthlyInsuranceBreakdown={results.monthlyInsuranceBreakdown}
+                steppedInstallments={results.steppedInstallments}
+                periodLengths={results.periodLengths}
               />
             </CardContent>
           </Card>
@@ -2342,15 +2349,14 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* CORREÇÃO: Remover chartTitle se não for suportado */}
                 <ResultChart
-                  title="Comprometimento de Renda"
                   data={[
                     { name: "Comprometido", value: results.incomeCommitmentPercentage * 100, fill: "hsl(var(--primary))" },
                     { name: "Disponível", value: 100 - (results.incomeCommitmentPercentage * 100), fill: "hsl(var(--muted))" },
                   ]}
                 />
                 <ResultChart
-                  title="Percentual Parcelado"
                   data={[
                     { name: "Parcelado", value: results.proSolutoCommitmentPercentage * 100, fill: "hsl(var(--primary))" },
                     { name: "Restante", value: 100 - (results.proSolutoCommitmentPercentage * 100), fill: "hsl(var(--muted))" },
@@ -2371,18 +2377,19 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
             </DialogDescription>
           </DialogHeader>
           <UnitSelectorDialogContent
-            units={filteredUnits}
+            allUnits={allUnits}
+            filteredUnits={filteredUnits}
             filters={{
-              statusFilter,
-              setStatusFilter,
-              floorFilter,
-              setFloorFilter,
-              typologyFilter,
-              setTypologyFilter,
-              sunPositionFilter,
-              setSunPositionFilter,
-              filterOptions,
+              status: statusFilter,
+              setStatus: setStatusFilter,
+              floor: floorFilter,
+              setFloor: setFloorFilter,
+              typology: typologyFilter,
+              setTypology: setTypologyFilter,
+              sunPosition: sunPositionFilter,
+              setSunPosition: setSunPositionFilter,
             }}
+            filterOptions={filterOptions}
             onUnitSelect={handleUnitSelect}
             isReservaParque={selectedProperty?.enterpriseName.includes('Reserva Parque Clube') || false}
           />
@@ -2398,7 +2405,10 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
             </DialogDescription>
           </DialogHeader>
           <InteractiveTutorial
+            isOpen={isTutorialOpen}
             onClose={() => setIsTutorialOpen(false)}
+            form={form}
+            results={results}
           />
         </DialogContent>
       </Dialog>

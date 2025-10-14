@@ -19,13 +19,11 @@ export interface TwoFactorSecret {
 }
 // #endregion
 
-
 // #region Property & Unit Types
-
 export type PropertyBrand = "Riva" | "Direcional";
 export type UnitStatus = "Disponível" | "Vendido" | "Reservado" | "Indisponível";
 
-// Base Unit interface (minimal fields needed for availability structure)
+// Base Unit interface (minimal fields needed for availability structures)
 export interface Unit {
   unitId: string;
   unitNumber: string; 
@@ -66,11 +64,11 @@ export interface Tower {
   tower: string; // Name or identifier of the tower
   floors: Floor[];
 }
-// #endregion
 
 export interface VersionSettings {
     latest: string;
 }
+
 export interface Property {
     id: string;
     enterpriseName: string;
@@ -81,14 +79,13 @@ export interface Property {
     lastPriceUpdate?: Timestamp | null;
     pricing?: CombinedUnit[] | null; // Reference to Pricing
 }
+
 export interface Availability {
   towers: Tower[];
 }
-// #endregion Availability Types
-
+// #endregion
 
 // #region Form & Calculation Types
-
 export const paymentFieldSchema = z.object({
   type: z.enum([
     "sinalAto", "sinal1", "sinal2", "sinal3", "proSoluto", 
@@ -99,7 +96,6 @@ export const paymentFieldSchema = z.object({
 });
 
 export type PaymentFieldType = z.infer<typeof paymentFieldSchema>['type'];
-
 
 export const formSchema = z.object({
   propertyId: z.string().min(1),
@@ -138,23 +134,28 @@ export interface MonthlyInsurance {
 }
 
 export interface Results {
- summary: { remaining: number; okTotal: boolean };
- financedAmount: number;
- monthlyInstallment?: number;
- steppedInstallments?: number[];
- periodLengths?: number[];
- totalWithInterest: number;
- totalConstructionInsurance: number;
- monthlyInsuranceBreakdown: MonthlyInsurance[];
- incomeCommitmentPercentage: number;
- proSolutoCommitmentPercentage: number;
- averageInterestRate: number;
- notaryInstallmentValue?: number;
- incomeError?: string;
- proSolutoError?: string;
+  summary: { remaining: number; okTotal: boolean };
+  financedAmount: number;
+  monthlyInstallment?: number;
+  steppedInstallments?: number[];
+  periodLengths?: number[];
+  totalWithInterest: number;
+  totalConstructionInsurance: number;
+  monthlyInsuranceBreakdown: MonthlyInsurance[];
+  incomeCommitmentPercentage: number;
+  proSolutoCommitmentPercentage: number;
+  averageInterestRate: number;
+  notaryInstallmentValue?: number;
+  incomeError?: string;
+  proSolutoError?: string;
+  paymentValidation?: {
+    isValid: boolean;
+    difference: number;
+    expected: number;
+    actual: number;
+    businessLogicViolation?: string;
+  };
 }
-
-
 
 export interface ExtractFinancialDataInput {
     fileDataUri: string;
@@ -167,16 +168,15 @@ export interface ExtractPricingOutput {
     simulationInstallmentValue: number;
     financingValue: number;
 }
-
 // #endregion
 
-
 // #region PDF & Generic Types
-
 export interface PdfFormValues extends FormValues {
-    brokerName?: string;
-    brokerCreci?: string;
+  brokerName: string;
+  brokerCreci: string;
+  results?: Results;
 }
+
 export type PdfResults = Results;
 
 export interface PDFPageData extends UserOptions {
@@ -189,10 +189,91 @@ export interface PDFPageData extends UserOptions {
   } | null;
 }
 
+export interface PaymentTimelineProps {
+  paymentFields: PaymentField[];
+  constructionStartDate: Date | null;
+  deliveryDate: Date | null;
+  simulationInstallmentValue: number;
+  monthlyInsuranceBreakdown: MonthlyInsurance[];
+  steppedInstallments?: number[];
+  periodLengths?: number[];
+}
+
+export interface ChartData {
+  name: string;
+  value: number;
+  fill: string;
+}
+
+export interface ResultChartProps {
+  chartTitle: string;
+  data: ChartData[];
+}
+
+export interface UnitSelectorDialogContentProps {
+  units: CombinedUnit[];
+  filters: {
+    status: UnitStatus | "Todos";
+    setStatus: (status: UnitStatus | "Todos") => void;
+    floor: string;
+    setFloor: (floor: string) => void;
+    typology: string;
+    setTypology: (typology: string) => void;
+    sunPosition: string;
+    setSunPosition: (sunPosition: string) => void;
+  };
+  filterOptions: {
+    status: string[];
+    floors: string[];
+    typologies: string[];
+    sunPositions: string[];
+  };
+  onUnitSelect: (unit: CombinedUnit) => void;
+  isReservaParque: boolean;
+}
+
+export interface InteractiveTutorialProps {
+  isOpen: boolean;
+  onClose: () => void;
+  form: any; // You might want to type this more specifically
+  results: Results;
+}
+
 export type GenericObject<T = unknown> = Record<string, T>;
 export type ApiResponse<T> = {
   data: T;
   error?: string;
 };
 
+// #region Component Props Types
+export interface DatePickerProps {
+  value?: string;
+  onChange?: (dateString: string | undefined) => void;
+  disabled?: boolean;
+  disabledDates?: (date: Date) => boolean;
+  placeholder?: string;
+}
+
+export interface PaymentTimelineComponentProps {
+  paymentFields: PaymentField[];
+  constructionStartDate: Date | null;
+  deliveryDate: Date | null;
+  simulationInstallmentValue: number;
+  monthlyInsuranceBreakdown: MonthlyInsurance[];
+  steppedInstallments?: number[];
+  periodLengths?: number[];
+}
+
+export interface ResultChartComponentProps {
+  chartTitle: string;
+  data: ChartData[];
+}
+
+// Interface para a função generatePdf
+export interface GeneratePdfParams {
+  formValues: PdfFormValues;
+  property: Property;
+  originalFormValues: FormValues;
+}
+// #endregion
 // #endregion
