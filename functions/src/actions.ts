@@ -209,7 +209,7 @@ export async function batchCreatePropertiesAction(
         
         const id = name
           .toLowerCase()
-          .normalize("NFD").replace(/[̀-ͯ]/g, "")
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
           .replace(/[^a-z0-9\s-]/g, '')
           .trim()
           .replace(/\s+/g, '-');
@@ -252,7 +252,7 @@ export async function batchCreatePropertiesAction(
         }
     }
     
-    // Invalidar cache
+    // Invalidate cache
     PropertyCache.invalidateAll();
     
     return { addedCount };
@@ -271,7 +271,7 @@ export async function deletePropertyAction(data: { propertyId: string, idToken: 
     const propertyRef = adminDb.collection("properties").doc(propertyId);
     await propertyRef.delete();
     
-    // Invalidar cache
+    // Invalidate cache
     PropertyCache.invalidateProperty(propertyId);
     PropertyCache.invalidateAll();
     
@@ -299,7 +299,7 @@ export async function deleteAllPropertiesAction(data: { idToken: string }): Prom
 
     await batch.commit();
 
-    // Invalidar cache
+    // Invalidate cache
     PropertyCache.invalidateAll();
 
     return { deletedCount: snapshot.size };
@@ -402,7 +402,7 @@ export async function updatePropertyPricingAction(
       lastPriceUpdate: FieldValue.serverTimestamp(),
     });
 
-    // Invalidar cache
+    // Invalidate cache
     PropertyCache.invalidateProperty(propertyId);
     PropertyCache.setUnitPricing(propertyId, fullPricingDataInCents);
 
@@ -424,7 +424,7 @@ export async function deletePropertyPricingAction(data: { propertyId: string, id
           lastPriceUpdate: FieldValue.delete(),
       });
       
-      // Invalidar cache
+      // Invalidate cache
       PropertyCache.invalidateProperty(propertyId);
       
     } catch(error: unknown) {
@@ -482,7 +482,7 @@ export const verifyAndEnableTwoFactorAction = async (data: { uid: string, secret
             const userDocRef = adminDb.collection("users").doc(uid);
             await userDocRef.set({ twoFactorURI: secretUri, twoFactorEnabled: true }, { merge: true });
             
-            // Invalidar cache do usuário
+            // Invalidate user cache
             UserCache.invalidateUser(uid);
             
             return true;
@@ -543,7 +543,7 @@ export const getTwoFactorSecretAction = async (uid: string): Promise<string | nu
                 twoFactorURI: FieldValue.delete(),
             });
             
-            // Invalidar cache
+            // Invalidate cache
             UserCache.invalidateUser(uid);
             
             return null;
@@ -645,7 +645,7 @@ export const handleUnitStatusChangeAction = async (data: {
             'availability.towers': updatedTowers
         });
 
-        // Invalidar cache
+        // Invalidate cache
         PropertyCache.invalidateProperty(propertyId);
 
     } catch (error: unknown) {
@@ -656,24 +656,71 @@ export const handleUnitStatusChangeAction = async (data: {
 
 export const updatePropertyAvailabilityAction = async (data: { 
     propertyId: string, 
-    availability: AvailabilityData, 
+    fileContent: string,
     idToken: string 
-}): Promise<void> => {
-    const { propertyId, availability, idToken } = data;
+}): Promise<{ unitsUpdatedCount: number }> => {
+    const { propertyId, fileContent, idToken } = data;
     await verifyAdmin(idToken);
+
     try {
         if (!propertyId) throw new Error("ID do empreendimento não fornecido.");
-        if (!availability || !availability.towers) {
-            throw new Error("Dados de disponibilidade inválidos.");
+        if (!fileContent) throw new Error("Conteúdo do arquivo não fornecido.");
+
+        const parsedData = parseExcel(fileContent);
+        if (!parsedData || parsedData.length === 0) {
+            throw new Error("Nenhum dado encontrado na planilha.");
         }
 
         const propertyRef = adminDb.collection("properties").doc(propertyId);
-        await propertyRef.update({
-            availability: availability
+        const propertyDoc = await propertyRef.get();
+
+        if (!propertyDoc.exists) {
+            throw new Error("Empreendimento não encontrado.");
+        }
+
+        const property = propertyDoc.data() as Property;
+        if (!property.availability || !property.availability.towers) {
+            throw new Error("Estrutura de disponibilidade inicial não encontrada. Por favor, carregue uma tabela de preços primeiro.");
+        }
+
+        const availabilityUpdates = new Map<string, UnitStatus>();
+        parsedData.forEach(row => {
+            const unitId = String(getValue(row, ['Unidade', 'Unit'])).trim();
+            const status = String(getValue(row, ['Disponibilidade', 'Status'])).trim() as UnitStatus;
+            if (unitId && status) {
+                availabilityUpdates.set(unitId, status);
+            }
         });
 
-        // Invalidar cache
+        if (availabilityUpdates.size === 0) {
+            throw new Error("Nenhuma atualização de disponibilidade válida encontrada na planilha. Verifique as colunas 'Unidade' e 'Disponibilidade'.");
+        }
+
+        let unitsUpdatedCount = 0;
+        const updatedTowers = property.availability.towers.map(tower => ({
+            ...tower,
+            floors: tower.floors.map(floor => ({
+                ...floor,
+                units: floor.units.map(unit => {
+                    if (availabilityUpdates.has(unit.unitId)) {
+                        const newStatus = availabilityUpdates.get(unit.unitId)!;
+                        if (unit.status !== newStatus) {
+                            unitsUpdatedCount++;
+                            return { ...unit, status: newStatus };
+                        }
+                    }
+                    return unit;
+                })
+            }))
+        }));
+
+        await propertyRef.update({ 
+            'availability.towers': updatedTowers 
+        });
+
         PropertyCache.invalidateProperty(propertyId);
+
+        return { unitsUpdatedCount };
 
     } catch (error: unknown) {
         console.error("Error in updatePropertyAvailabilityAction: ", getErrorMessage(error));

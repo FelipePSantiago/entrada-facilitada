@@ -2,13 +2,14 @@
   "name": "functions",
   "description": "Cloud Functions for Firebase",
   "scripts": {
-    "libbuild": "esbuild src/index.ts --bundle --minify --platform=node --target=node20 --outfile=lib/index.js --external:firebase-functions --external:firebase-admin --external:otplib --external:pdf-parse",
+    "libbuild": "esbuild src/index.ts --bundle --minify --platform=node --target=node20 --outfile=lib/index.js --external:firebase-functions --external:firebase-admin --external:otplib --external:pdf-parse --external:puppeteer",
     "build": "npm run libbuild",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "postinstall": "node ./install-chrome.js"
   },
   "engines": {
     "node": "20"
@@ -20,11 +21,12 @@
     "firebase-functions": "^5.0.0",
     "otplib": "^12.0.1",
     "pdf-parse": "^1.1.1",
-    "puppeteer": "^19.11.1",
+    "puppeteer": "^22.9.0",
     "server-only": "^0.0.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@puppeteer/browsers": "^2.2.0",
     "@types/babel__core": "^7.20.5",
     "@types/pdf-parse": "^1.1.4",
     "esbuild": "^0.19.2",

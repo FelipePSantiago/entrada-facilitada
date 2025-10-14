@@ -676,7 +676,10 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     const saleValue = watchedSaleValue || 0;
     const appraisalValue = watchedAppraisalValue || 0;
   
-    const newProSolutoValue = (appraisalValue - sumOfOtherPayments) - (appraisalValue - saleValue);
+    const calculationTarget = Math.max(appraisalValue, saleValue);
+    const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
+    const newProSolutoValue = calculationTarget - sumOfOtherPayments - bonusAdimplenciaValue;
+
     
     const existingProSoluto = watchedPayments[proSolutoIndex];
     if (existingProSoluto.value !== newProSolutoValue) {
@@ -1171,8 +1174,11 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
         }
         return acc;
       }, 0);
-      const newProSolutoValue = (appraisalValue - sumOfOtherPayments) - (appraisalValue - saleValue);
-      initialValue = Math.max(0, newProSolutoValue);
+    const calculationTarget = Math.max(appraisalValue, saleValue);
+    const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
+    const newProSolutoValue = calculationTarget - sumOfOtherPayments - bonusAdimplenciaValue;
+    initialValue = Math.max(0, newProSolutoValue);
+
       
       const sinal1Payment = watchedPayments.find(p => p.type === 'sinal1');
       const baseDate = sinal1Payment?.date ? sinal1Payment.date : today;
@@ -1331,7 +1337,9 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     }, 0);
     
     const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
-    const sinalAtoCalculado = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue;
+    const calculationTarget = Math.max(appraisalValue, saleValue);
+    const sinalAtoCalculado = calculationTarget - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue;
+
     let campaignBonusValue = 0;
 
     if (isSinalCampaignActive && sinalAtoCalculado > 0.05 * saleValue) {
@@ -1349,7 +1357,8 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
         finalProSolutoValue -= campaignBonusValue;
     }
     
-    const finalSinalAto = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue - campaignBonusValue;
+    const finalSinalAto = calculationTarget - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue - campaignBonusValue;
+
 
     const newPayments: PaymentField[] = existingPayments.filter(p => !['sinalAto', 'proSoluto', 'bonusCampanha'].includes(p.type));
     

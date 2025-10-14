@@ -1256,7 +1256,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         }
     }
     
-    const finalSinalAto = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue - campaignBonusValue;
+    const calculationTarget = Math.max(appraisalValue, saleValue);
+    const finalSinalAto = calculationTarget - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue - campaignBonusValue;
+
 
     const newPayments: PaymentField[] = existingPayments.filter(p => !['sinalAto', 'proSoluto', 'bonusCampanha'].includes(p.type));
     
@@ -1334,7 +1336,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       return acc;
     }, 0);
 
-    let proSolutoValue = values.appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue;
+    const calculationTarget = Math.max(values.appraisalValue, values.saleValue);
+    let proSolutoValue = calculationTarget - sumOfOtherPayments - bonusAdimplenciaValue;
+
     proSolutoValue = Math.max(0, proSolutoValue);
 
     console.log('🔄 Pró-Soluto recalculado com valores fixos:', {
@@ -1682,8 +1686,12 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         }
         return acc;
       }, 0);
-      const newProSolutoValue = (appraisalValue - sumOfOtherPayments) - (appraisalValue - saleValue);
+      
+      const calculationTarget = Math.max(appraisalValue, saleValue);
+      const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
+      const newProSolutoValue = calculationTarget - sumOfOtherPayments - bonusAdimplenciaValue;
       initialValue = Math.max(0, newProSolutoValue);
+
       
       const sinal1Payment = watchedPayments.find(p => p.type === 'sinal1');
       const baseDate = sinal1Payment?.date ? sinal1Payment.date : new Date();
