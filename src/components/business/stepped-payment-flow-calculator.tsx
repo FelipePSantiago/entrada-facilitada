@@ -1648,8 +1648,8 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
             }
         };
 
-        // CORREÇÃO: Usar type assertion para compatibilidade
-        await generatePdf(pdfValues, selectedProperty as any, formValues);
+        // CORREÇÃO: Passar apenas os parâmetros necessários
+        await generatePdf(pdfValues, selectedProperty);
 
         toast({
             title: "✅ PDF Gerado com Sucesso",
@@ -2329,7 +2329,7 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
             <CardContent>
               {/* CORREÇÃO: Usar props corretas para PaymentTimeline */}
               <PaymentTimeline
-                paymentFields={form.getValues().payments}
+                payments={form.getValues().payments}
                 constructionStartDate={constructionStartDateObj}
                 deliveryDate={deliveryDateObj}
                 simulationInstallmentValue={form.getValues().simulationInstallmentValue}
@@ -2349,18 +2349,22 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* CORREÇÃO: Remover chartTitle se não for suportado */}
+                {/* CORREÇÃO: Adicionar propriedades obrigatórias */}
                 <ResultChart
                   data={[
                     { name: "Comprometido", value: results.incomeCommitmentPercentage * 100, fill: "hsl(var(--primary))" },
                     { name: "Disponível", value: 100 - (results.incomeCommitmentPercentage * 100), fill: "hsl(var(--muted))" },
                   ]}
+                  value={results.incomeCommitmentPercentage * 100}
+                  chartTitle="Comprometimento de Renda"
                 />
                 <ResultChart
                   data={[
                     { name: "Parcelado", value: results.proSolutoCommitmentPercentage * 100, fill: "hsl(var(--primary))" },
                     { name: "Restante", value: 100 - (results.proSolutoCommitmentPercentage * 100), fill: "hsl(var(--muted))" },
                   ]}
+                  value={results.proSolutoCommitmentPercentage * 100}
+                  chartTitle="Percentual Parcelado"
                 />
               </div>
             </CardContent>

@@ -189,8 +189,9 @@ export interface PDFPageData extends UserOptions {
   } | null;
 }
 
+// CORREÇÃO: Atualizar interface para usar 'payments' em vez de 'paymentFields'
 export interface PaymentTimelineProps {
-  paymentFields: PaymentField[];
+  payments: PaymentField[];
   constructionStartDate: Date | null;
   deliveryDate: Date | null;
   simulationInstallmentValue: number;
@@ -205,9 +206,11 @@ export interface ChartData {
   fill: string;
 }
 
+// CORREÇÃO: Adicionar propriedade 'value' obrigatória
 export interface ResultChartProps {
   chartTitle: string;
   data: ChartData[];
+  value: number;
 }
 
 export interface UnitSelectorDialogContentProps {
@@ -254,8 +257,9 @@ export interface DatePickerProps {
   placeholder?: string;
 }
 
+// CORREÇÃO: Atualizar interface para usar 'payments' em vez de 'paymentFields'
 export interface PaymentTimelineComponentProps {
-  paymentFields: PaymentField[];
+  payments: PaymentField[];
   constructionStartDate: Date | null;
   deliveryDate: Date | null;
   simulationInstallmentValue: number;
@@ -264,16 +268,17 @@ export interface PaymentTimelineComponentProps {
   periodLengths?: number[];
 }
 
+// CORREÇÃO: Adicionar propriedade 'value' obrigatória
 export interface ResultChartComponentProps {
   chartTitle: string;
   data: ChartData[];
+  value: number;
 }
 
-// Interface para a função generatePdf
+// CORREÇÃO: Interface para a função generatePdf - remover parâmetro extra
 export interface GeneratePdfParams {
   formValues: PdfFormValues;
   property: Property;
-  originalFormValues: FormValues;
 }
 // #endregion
 // #endregion
