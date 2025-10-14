@@ -73,7 +73,7 @@ import {
 } from "lucide-react";
 import { addDays, addMonths, differenceInMonths, format, lastDayOfMonth, startOfMonth, parseISO, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { Property, Unit, CombinedUnit, UnitStatus, PaymentField, Results, MonthlyInsurance, FormValues, PdfFormValues, PaymentFieldType, Tower } from "@/types";
+import type { Property, Unit, CombinedUnit, UnitStatus, PaymentField, Results, MonthlyInsurance, FormValues, PdfFormValues, PaymentFieldType, Tower, ExtractPricingOutput } from "@/types";
 import { cn } from "@/lib/utils";
 import {
   Accordion,
@@ -179,6 +179,23 @@ const paymentFieldOptions: { value: PaymentFieldType; label: string }[] = [
   { value: "fgts", label: "FGTS" },
   { value: "financiamento", label: "Financiamento" },
 ] as const;
+
+// Interface para dados extraídos (corrigida para usar tipos existentes)
+interface ExtractedData extends Partial<ExtractPricingOutput> {
+  grossIncome?: number;
+  simulationInstallmentValue?: number;
+}
+
+// Interface estendida para Results com paymentValidation
+interface ExtendedResults extends Results {
+  paymentValidation?: {
+    isValid: boolean;
+    difference: number;
+    expected: number;
+    actual: number;
+    businessLogicViolation?: string;
+  };
+}
 
 // Função auxiliar para status badge (fora do componente)
 const getStatusBadgeClass = (status: UnitStatus) => {
@@ -502,32 +519,6 @@ interface PaymentFlowCalculatorProps {
     sinalCampaignLimitPercent?: number;
     isTutorialOpen: boolean;
     setIsTutorialOpen: (isOpen: boolean) => void;
-}
-
-// Interface para a resposta da extração de PDF
-interface ExtractPdfResponse {
-  grossIncome: number;
-  simulationInstallmentValue: number;
-  appraisalValue: number;
-  financingValue: number;
-}
-
-// Interface para dados extraídos
-interface ExtractedData {
-  grossIncome?: number;
-  simulationInstallmentValue?: number;
-  appraisalValue?: number;
-  financingValue?: number;
-}
-
-interface ExtendedResults extends Results {
-  paymentValidation?: {
-    isValid: boolean;
-    difference: number;
-    expected: number;
-    actual: number;
-    businessLogicViolation?: string;
-  };
 }
 
 export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinalCampaignLimitPercent, isTutorialOpen, setIsTutorialOpen }: PaymentFlowCalculatorProps) {
@@ -1494,7 +1485,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             }
         };
 
-        // CORREÇÃO: Passar apenas os parâmetros necessários
+        // CORREÇÃO: Passar apenas 2 parâmetros conforme a interface
         await generatePdf(pdfValues, selectedProperty);
 
         toast({
@@ -2168,13 +2159,12 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                           render={({ field }) => {
                             const paymentType = form.watch(`payments.${index}.type`) as PaymentFieldType;
                             const isLocked = isDateLocked(paymentType);
-                            const disabledDates = getDisabledDates(paymentType);
                             
                             return (
                               <FormItem>
                                 <FormLabel>Data</FormLabel>
                                 <FormControl>
-                                  {/* CORREÇÃO: Remover disabledDates se não for suportado */}
+                                  {/* CORREÇÃO: Remover disabledDates não suportado */}
                                   <DatePicker
                                     value={field.value ? field.value.toISOString() : undefined}
                                     onChange={(dateString) => field.onChange(dateString ? parseISO(dateString) : undefined)}
@@ -2473,7 +2463,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {/* CORREÇÃO: Usar props corretas para PaymentTimeline */}
+              {/* CORREÇÃO: Mudar paymentFields para payments */}
               <PaymentTimeline
                 payments={form.getValues().payments}
                 constructionStartDate={constructionStartDateObj}
@@ -2493,16 +2483,16 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* CORREÇÃO: Adicionar propriedades obrigatórias */}
+                {/* CORREÇÃO: Adicionar propriedades obrigatórias - chartTitle e value */}
                 <ResultChart
+                  chartTitle="Comprometimento de Renda"
                   data={commitmentChartData || []}
                   value={results.incomeCommitmentPercentage * 100}
-                  chartTitle="Comprometimento de Renda"
                 />
                 <ResultChart
+                  chartTitle="Percentual Parcelado"
                   data={proSolutoChartData || []}
                   value={results.proSolutoCommitmentPercentage * 100}
-                  chartTitle="Percentual Parcelado"
                 />
               </div>
             </CardContent>
@@ -2518,9 +2508,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               Escolha uma unidade disponível no empreendimento.
             </DialogDescription>
           </DialogHeader>
+          {/* CORREÇÃO: Mudar allUnits para units */}
           <UnitSelectorDialogContent
-            allUnits={allUnits}
-            filteredUnits={filteredUnits}
+            units={filteredUnits}
             filters={{
               status: statusFilter,
               setStatus: setStatusFilter,

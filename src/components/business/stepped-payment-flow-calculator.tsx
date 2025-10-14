@@ -2010,11 +2010,11 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
                               <FormItem>
                                 <FormLabel>Data</FormLabel>
                                 <FormControl>
-                                  {/* CORREÇÃO: Remover disabledDates se não for suportado */}
                                   <DatePicker
                                     value={field.value ? field.value.toISOString() : undefined}
                                     onChange={(dateString) => field.onChange(dateString ? parseISO(dateString) : undefined)}
                                     disabled={isLocked}
+                                    disabledDates={disabledDates}
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -2327,7 +2327,7 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {/* CORREÇÃO: Usar props corretas para PaymentTimeline */}
+              {/* CORREÇÃO: Mudar paymentFields para payments */}
               <PaymentTimeline
                 payments={form.getValues().payments}
                 constructionStartDate={constructionStartDateObj}
@@ -2349,22 +2349,22 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* CORREÇÃO: Adicionar propriedades obrigatórias */}
+                {/* CORREÇÃO: Adicionar propriedade chartTitle obrigatória */}
                 <ResultChart
+                  chartTitle="Comprometimento de Renda"
                   data={[
                     { name: "Comprometido", value: results.incomeCommitmentPercentage * 100, fill: "hsl(var(--primary))" },
                     { name: "Disponível", value: 100 - (results.incomeCommitmentPercentage * 100), fill: "hsl(var(--muted))" },
                   ]}
                   value={results.incomeCommitmentPercentage * 100}
-                  chartTitle="Comprometimento de Renda"
                 />
                 <ResultChart
+                  chartTitle="Percentual Parcelado"
                   data={[
                     { name: "Parcelado", value: results.proSolutoCommitmentPercentage * 100, fill: "hsl(var(--primary))" },
                     { name: "Restante", value: 100 - (results.proSolutoCommitmentPercentage * 100), fill: "hsl(var(--muted))" },
                   ]}
                   value={results.proSolutoCommitmentPercentage * 100}
-                  chartTitle="Percentual Parcelado"
                 />
               </div>
             </CardContent>
@@ -2380,9 +2380,9 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
               Escolha uma unidade disponível no empreendimento.
             </DialogDescription>
           </DialogHeader>
+          {/* CORREÇÃO: Usar propriedade 'units' em vez de 'allUnits' e 'filteredUnits' */}
           <UnitSelectorDialogContent
-            allUnits={allUnits}
-            filteredUnits={filteredUnits}
+            units={filteredUnits}
             filters={{
               status: statusFilter,
               setStatus: setStatusFilter,
