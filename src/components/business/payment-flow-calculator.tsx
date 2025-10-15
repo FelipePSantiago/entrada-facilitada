@@ -21,7 +21,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  CardFooter,
 } from "@/components/ui/card";
 import {
   Form,
@@ -42,28 +41,16 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  CalendarClock,
-  Wallet,
   Repeat,
-  HandCoins,
   PlusCircle,
   XCircle,
   Building,
   DollarSign,
-  ShieldCheck,
   Upload,
   Loader2,
-  FileText,
-  CreditCard,
-  Users,
   Download,
   AlertCircle,
-  MapPin,
   CheckCircle2,
-  Sparkles,
-  ListOrdered,
-  User,
-  Briefcase,
   Grid3X3,
   Ruler,
   Sun,
@@ -75,12 +62,6 @@ import { addDays, addMonths, differenceInMonths, format, lastDayOfMonth, startOf
 import { ptBR } from "date-fns/locale";
 import type { Property, Unit, CombinedUnit, UnitStatus, PaymentField, Results, MonthlyInsurance, FormValues, PdfFormValues, PaymentFieldType, Tower, ExtractPricingOutput } from "@/types";
 import { cn } from "@/lib/utils";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import {
   Table,
   TableBody,
@@ -99,7 +80,6 @@ import { generatePdf } from "@/lib/generators/pdf-generator";
 import React from 'react';
 import { InteractiveTutorial } from "@/components/common/interactive-tutorial";
 import { ResultChart, type ChartData } from "@/components/business/result-chart";
-import { PaymentTimeline } from "@/components/business/payment-timeline";
 import { validateFileSize, validateMimeType } from "@/lib/validators";
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -232,10 +212,8 @@ const validatePaymentSumWithBusinessLogic = (
   const difference = Math.abs(totalPayments - calculationTarget);
   const isValid = difference < 0.01; // Tolerância de 1 centavo
   
-  // Verificar violações específicas da lógica de negócio
   let businessLogicViolation: string | undefined;
   
-  // Verificar se há bônus de campanha sem sinal ato suficiente
   const campaignBonus = payments.find(p => p.type === 'bonusCampanha');
   const sinalAto = payments.find(p => p.type === 'sinalAto');
   
@@ -267,19 +245,16 @@ const recalculatePaymentsIntelligently = (
   const calculationTarget = Math.max(appraisalValue, saleValue);
   const newPayments = [...payments];
   
-  // Encontrar índices dos campos relevantes
   const sinalAtoIndex = newPayments.findIndex(p => p.type === 'sinalAto');
   const proSolutoIndex = newPayments.findIndex(p => p.type === 'proSoluto');
   const campaignBonusIndex = newPayments.findIndex(p => p.type === 'bonusCampanha');
   const bonusAdimplenciaIndex = newPayments.findIndex(p => p.type === 'bonusAdimplencia');
   
-  // Calcular bônus de adimplência
   const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
   if (bonusAdimplenciaIndex > -1) {
     newPayments[bonusAdimplenciaIndex].value = bonusAdimplenciaValue;
   }
   
-  // Calcular soma dos outros pagamentos (excluindo sinalAto, proSoluto e bonusCampanha)
   const sumOfOtherPayments = newPayments.reduce((acc, payment, index) => {
     if (index !== sinalAtoIndex && index !== proSolutoIndex && index !== campaignBonusIndex) {
       return acc + payment.value;
@@ -287,13 +262,11 @@ const recalculatePaymentsIntelligently = (
     return acc;
   }, 0);
   
-  // Lógica do bônus de campanha
   let campaignBonusValue = 0;
   let sinalAtoValue = 0;
   let proSolutoValue = 0;
   
   if (isSinalCampaignActive && sinalCampaignLimitPercent !== undefined) {
-    // Calcular valores temporários
     const tempProSoluto = proSolutoIndex > -1 ? newPayments[proSolutoIndex].value : 0;
     const tempSinalAto = calculationTarget - sumOfOtherPayments - bonusAdimplenciaValue - tempProSoluto;
     const sinalMinimo = 0.05 * saleValue;
@@ -317,13 +290,11 @@ const recalculatePaymentsIntelligently = (
       proSolutoValue = calculationTarget - sumOfOtherPayments - bonusAdimplenciaValue - sinalAtoValue;
     }
   } else {
-    // Sem campanha - cálculo padrão
     const tempProSoluto = proSolutoIndex > -1 ? newPayments[proSolutoIndex].value : 0;
     sinalAtoValue = calculationTarget - sumOfOtherPayments - bonusAdimplenciaValue - tempProSoluto;
     proSolutoValue = tempProSoluto;
   }
   
-  // Aplicar valores calculados
   if (sinalAtoIndex > -1) {
     newPayments[sinalAtoIndex].value = Math.max(0, sinalAtoValue);
   }
@@ -335,12 +306,112 @@ const recalculatePaymentsIntelligently = (
   if (campaignBonusIndex > -1 && campaignBonusValue > 0) {
     newPayments[campaignBonusIndex].value = campaignBonusValue;
   } else if (campaignBonusIndex > -1 && campaignBonusValue === 0) {
-    // Remover bônus se não houver valor
     newPayments.splice(campaignBonusIndex, 1);
   }
   
   return newPayments;
 };
+
+/**
+ * FUNÇÃO PRINCIPAL DE CÁLCULO DA CONDIÇÃO MÍNIMA (CORRIGIDA E ATUALIZADA)
+ */
+const applyMinimumCondition = (
+  payments: PaymentField[], 
+  appraisalValue: number, 
+  saleValue: number,
+  isSinalCampaignActive: boolean,
+  sinalCampaignLimitPercent: number | undefined,
+  conditionType: 'padrao' | 'especial',
+  propertyEnterpriseName: string
+): PaymentField[] => {
+  const calculationTarget = Math.max(appraisalValue, saleValue);
+  const newPayments = [...payments];
+
+  const descontoPayment = newPayments.find(p => p.type === 'desconto');
+  const descontoValue = descontoPayment?.value || 0;
+  const valorFinalImovel = saleValue - descontoValue;
+  const sinalAtoMinimoGeral = valorFinalImovel * 0.05;
+
+  const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
+  const sumOfOtherPayments = newPayments.reduce((acc, payment) => {
+    if (!["sinalAto", "proSoluto", "bonusCampanha", "desconto"].includes(payment.type)) {
+      return acc + payment.value;
+    }
+    return acc;
+  }, 0);
+
+  const remainingAmount = calculationTarget - sumOfOtherPayments - bonusAdimplenciaValue;
+  if (remainingAmount <= 0) {
+    return newPayments.filter(p => !["sinalAto", "proSoluto", "bonusCampanha"].includes(p.type));
+  }
+
+  const isReservaParque = propertyEnterpriseName.includes('Reserva Parque Clube');
+  const proSolutoLimitPercent = isReservaParque ? 0.18 : (conditionType === 'especial' ? 0.18 : 0.15);
+  const maxProSolutoByPercent = saleValue * proSolutoLimitPercent;
+  const maxProSolutoBySinalMinimo = remainingAmount - sinalAtoMinimoGeral;
+
+  let proSolutoValue = Math.min(
+    maxProSolutoByPercent,
+    remainingAmount,
+    maxProSolutoBySinalMinimo
+  );
+  
+  proSolutoValue = Math.max(0, proSolutoValue);
+
+  let sinalAtoValue = remainingAmount - proSolutoValue;
+  let campaignBonusValue = 0;
+
+  if (isSinalCampaignActive && sinalCampaignLimitPercent !== undefined) {
+    const sinalMinimoCampanha = 0.05 * saleValue;
+    
+    if (sinalAtoValue > sinalMinimoCampanha) {
+      const excedente = sinalAtoValue - sinalMinimoCampanha;
+      const limiteMaximoBonus = saleValue * (sinalCampaignLimitPercent / 100);
+      
+      campaignBonusValue = Math.min(excedente, limiteMaximoBonus);
+      proSolutoValue -= campaignBonusValue;
+    } else {
+      sinalAtoValue = sinalMinimoCampanha;
+      proSolutoValue = remainingAmount - sinalAtoValue;
+    }
+  }
+
+  const finalPayments = newPayments.filter(p => !["sinalAto", "proSoluto", "bonusCampanha"].includes(p.type));
+
+  if (sinalAtoValue > 0) {
+    const sinalAtoPayment = newPayments.find(p => p.type === 'sinalAto');
+    finalPayments.push({
+      type: 'sinalAto', value: sinalAtoValue, date: sinalAtoPayment?.date || new Date(),
+    });
+  }
+  if (proSolutoValue > 0) {
+    const proSolutoPayment = newPayments.find(p => p.type === 'proSoluto');
+    const defaultProSolutoDate = proSolutoPayment?.date || (() => {
+        const sinal1Payment = newPayments.find(p => p.type === 'sinal1');
+        const baseDate = sinal1Payment?.date || new Date();
+        const targetMonth = addMonths(baseDate, 1);
+        return new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 5);
+    })();
+    finalPayments.push({
+      type: 'proSoluto', value: proSolutoValue, date: defaultProSolutoDate,
+    });
+  }
+  if (campaignBonusValue > 0) {
+    const campaignBonusPayment = newPayments.find(p => p.type === 'bonusCampanha');
+    finalPayments.push({
+      type: 'bonusCampanha', value: campaignBonusValue, date: campaignBonusPayment?.date || new Date(),
+    });
+  }
+  if (bonusAdimplenciaValue > 0) {
+    const bonusAdimplenciaPayment = newPayments.find(p => p.type === 'bonusAdimplencia');
+    finalPayments.push({
+        type: 'bonusAdimplencia', value: bonusAdimplenciaValue, date: bonusAdimplenciaPayment?.date || new Date(),
+    });
+  }
+
+  return finalPayments;
+};
+
 
 interface UnitCardProps {
     unit: CombinedUnit;
@@ -359,7 +430,7 @@ const UnitCard = memo(({ unit, isReservaParque, onUnitSelect, style }: UnitCardP
         if (unit.status === 'Disponível') {
             onUnitSelect(unit);
         }
-    }, [unit.status, onUnitSelect]);
+    }, [unit, onUnitSelect]);
     
     return (
         <div style={style}>
@@ -445,7 +516,6 @@ const calculateConstructionInsuranceLocal = (
         return { total: 0, breakdown: [] };
     }
 
-    // Gerar chave de cache
     const cacheKey = `${constructionStartDate.getTime()}-${deliveryDate.getTime()}-${caixaInstallmentValue}`;
     const cached = insuranceCache.get(cacheKey);
     
@@ -484,31 +554,6 @@ const calculateConstructionInsuranceLocal = (
 };
 
 // FUNÇÕES RESTAURADAS DO ORIGINAL
-const getDisabledDates = (type: PaymentFieldType): ((date: Date) => boolean) | undefined => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  switch(type) {
-    case 'sinal1':
-      return (date) => date < today || date > addDays(today, 30);
-    case 'sinal2':
-      return (date) => date < today || date > addDays(today, 60);
-    case 'sinal3':
-      return (date) => date < today || date > addDays(today, 90);
-    case 'proSoluto':
-      {
-        const minDate = startOfMonth(addMonths(today, 1));
-        return (date) => {
-          if (date < minDate) return true;
-          const day = date.getDate();
-          return ![5, 10, 15, 20].includes(day);
-        };
-      }
-    default:
-      return (date) => date < today;
-  }
-};
-
 const isDateLocked = (type: PaymentFieldType) => {
   return ["bonusAdimplencia", "financiamento", "bonusCampanha"].includes(type);
 };
@@ -524,7 +569,6 @@ interface PaymentFlowCalculatorProps {
 export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinalCampaignLimitPercent, isTutorialOpen, setIsTutorialOpen }: PaymentFlowCalculatorProps) {
   const [results, setResults] = useState<ExtendedResults | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
-  const [isDataExtracted, setIsDataExtracted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -540,7 +584,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   const [typologyFilter, setTypologyFilter] = useState<string>("Todos");
   const [sunPositionFilter, setSunPositionFilter] = useState<string>("Todos");
 
-  // Sistema global de controle de processamento otimizado
   const globalProcessingRef = useRef({
     isProcessing: false,
     lastOperation: '',
@@ -574,24 +617,79 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   const watchedPayments = form.watch('payments');
   const watchedAppraisalValue = form.watch('appraisalValue');
   const watchedSaleValue = form.watch('saleValue');
-  const watchedConditionType = form.watch('conditionType');
   const watchedPropertyId = form.watch('propertyId');
   const watchedFinancingParticipants = form.watch('financingParticipants');
   const watchedNotaryPaymentMethod = form.watch('notaryPaymentMethod');
 
   const { setValue, setError, trigger, getValues, clearErrors } = form;
   
-  // Memoizar cálculos complexos
+  const handlePropertyChange = useCallback((id: string) => {
+    if (!id) return;
+    
+    form.reset({ 
+      ...form.getValues(), 
+      propertyId: id, 
+      payments: [], 
+      appraisalValue: 0, 
+      saleValue: 0, 
+      grossIncome: 0, 
+      simulationInstallmentValue: 0, 
+      financingParticipants: 1, 
+      conditionType: 'padrao', 
+      installments: undefined, 
+      notaryPaymentMethod: 'creditCard', 
+      notaryInstallments: undefined, 
+      selectedUnit: "" 
+    });
+    setResults(null);
+    setIsSaleValueLocked(false);
+
+    setStatusFilter("Disponível");
+    setFloorFilter("Todos");
+    setTypologyFilter("Todos");
+    setSunPositionFilter("Todos");
+
+    const propertyDetails = properties.find((p: Property) => p.id === id);
+
+    if (propertyDetails?.availability && propertyDetails?.pricing?.length) {
+      const availabilityMap = new Map<string, { status: UnitStatus; floor: string; tower: string }>();
+      propertyDetails.availability.towers.forEach((tower: Tower) => {
+        tower.floors.forEach((floor: { units: Unit[] } & { floor: string }) => {
+          floor.units.forEach((unit: Unit) => {
+            availabilityMap.set(unit.unitId, { status: unit.status, floor: floor.floor, tower: tower.tower });
+          });
+        });
+      });
+
+      const combinedUnits: CombinedUnit[] = propertyDetails.pricing.map((p) => {
+        const availabilityInfo = availabilityMap.get(p.unitId);
+        const normalizedUnitNumber = parseInt(String(p.unitNumber), 10).toString();
+        return {
+          ...p, 
+          unitNumber: normalizedUnitNumber,
+          status: availabilityInfo ? availabilityInfo.status : 'Indisponível',
+          floor: availabilityInfo ? availabilityInfo.floor : 'N/A',
+          block: availabilityInfo ? availabilityInfo.tower : 'N/A',
+        };
+      });
+      setAllUnits(combinedUnits);
+    } else {
+      setAllUnits([]);
+      toast({
+        title: "Aviso",
+        description: "Nenhum dado de espelho de vendas encontrado para este empreendimento. Prossiga com a inserção manual.",
+      });
+    }
+  }, [form, properties, toast]);
+  
   const hasSinal1 = useMemo(() => watchedPayments.some(p => p.type === 'sinal1'), [watchedPayments]);
   const hasSinal2 = useMemo(() => watchedPayments.some(p => p.type === 'sinal2'), [watchedPayments]);
   const financingPaymentsCount = useMemo(() => watchedPayments.filter(p => p.type === 'financiamento').length, [watchedPayments]);
   
-  // Memoizar propriedade selecionada
   const selectedProperty = useMemo(() => {
     return properties.find(p => p.id === watchedPropertyId);
   }, [properties, watchedPropertyId]);
 
-  // Memoizar datas
   const deliveryDateObj = useMemo(() => {
     if (!selectedProperty?.deliveryDate) return null;
     const date = parseISO(selectedProperty.deliveryDate);
@@ -604,7 +702,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     return isValid(date) ? date : null;
   }, [selectedProperty]);
 
-  // Memoizar unidades filtradas
   const filteredUnits = useMemo(() => {
     return allUnits.filter(unit => {
       const statusMatch = statusFilter === "Todos" || unit.status === statusFilter;
@@ -616,7 +713,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     });
   }, [allUnits, statusFilter, floorFilter, typologyFilter, sunPositionFilter]);
 
-  // Memoizar opções de filtros
   const filterOptions = useMemo(() => {
     const floors = [...new Set(allUnits.map(u => u.floor))].sort((a, b) => {
       const numA = parseInt(a.match(/\d+/)?.[0] || '0');
@@ -629,12 +725,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     return { floors, typologies, sunPositions };
   }, [allUnits]);
 
-  // Memoizar propriedades filtradas
   const filteredProperties = useMemo(() => {
     return (properties || []).filter(p => p.brand === 'Riva');
   }, [properties]);
 
-  // Memoizar campos de pagamento disponíveis
   const availablePaymentFields = useMemo(() => {
     return paymentFieldOptions.filter(opt => {
       if (["bonusAdimplencia", "bonusCampanha"].includes(opt.value)) return false;
@@ -648,9 +742,8 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     });
   }, [watchedPayments, hasSinal1, hasSinal2]);
 
-  // Memoizar validação de consistência dos pagamentos
   const paymentValidation = useMemo(() => {
-    if (!watchedAppraisalValue || !watchedSaleValue) return null;
+    if (!watchedAppraisalValue || !watchedSaleValue) return undefined;
     return validatePaymentSumWithBusinessLogic(
       watchedPayments, 
       watchedAppraisalValue, 
@@ -660,411 +753,44 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     );
   }, [watchedPayments, watchedAppraisalValue, watchedSaleValue, isSinalCampaignActive, sinalCampaignLimitPercent]);
 
-  // Função auxiliar para verificação robusta da campanha
-  const shouldApplyCampaignBonus = useCallback((isSinalCampaignActive: boolean, sinalCampaignLimitPercent?: number): boolean => {
-    const isActive = isSinalCampaignActive && 
-                    sinalCampaignLimitPercent !== undefined && 
-                    sinalCampaignLimitPercent > 0;
-    
-    console.log('🔍 Verificação da Campanha:', {
-        isSinalCampaignActive,
-        sinalCampaignLimitPercent,
-        isActive
-    });
-    
-    return isActive;
-  }, []);
-
-  // Função para aplicar lógica da campanha sinal em qualquer cálculo
-  const applyCampaignLogic = useCallback((
-    sinalAtoCalculado: number,
-    sinalAtoMinimo: number,
-    finalProSolutoValue: number,
-    valorFinalVenda: number,
-    sinalCampaignLimitPercent?: number
-  ): { finalSinalAto: number; finalProSoluto: number; campaignBonus: number } => {
-    
-    let finalSinalAto = sinalAtoCalculado;
-    let finalProSoluto = finalProSolutoValue;
-    let campaignBonus = 0;
-
-    const isCampaignActive = shouldApplyCampaignBonus(isSinalCampaignActive, sinalCampaignLimitPercent);
-
-    if (isCampaignActive) {
-      console.log('🎯 Aplicando lógica da campanha no cálculo...');
-      
-      const limiteMaximoBonus = valorFinalVenda * (sinalCampaignLimitPercent! / 100);
-
-      if (sinalAtoCalculado <= sinalAtoMinimo) {
-        // Caso 1: Sinal Ato <= Mínimo
-        finalSinalAto = sinalAtoMinimo;
-        finalProSoluto = finalProSolutoValue; // Pró-Soluto se ajusta automaticamente
-        campaignBonus = 0;
-      } else {
-        // Caso 2: Sinal Ato > Mínimo - aplicar bônus
-        const excedente = sinalAtoCalculado - sinalAtoMinimo;
-        
-        if (excedente <= limiteMaximoBonus) {
-          // Caso 2A: Excedente dentro do limite
-          campaignBonus = excedente;
-          finalProSoluto = finalProSolutoValue - campaignBonus;
-          finalSinalAto = sinalAtoCalculado;
-        } else {
-          // Caso 2B: Excedente excede limite
-          campaignBonus = limiteMaximoBonus;
-          finalProSoluto = finalProSolutoValue - campaignBonus;
-          const diferencaExcedente = excedente - limiteMaximoBonus;
-          finalSinalAto = sinalAtoCalculado - diferencaExcedente;
-        }
-      }
-    }
-
-    return { finalSinalAto, finalProSoluto, campaignBonus };
-  }, [isSinalCampaignActive, shouldApplyCampaignBonus]);
-
-  // Funções auxiliares para controle global de processamento
-  const canProceedWithOperation = useCallback((operationName: string, minDelayMs = 500): boolean => {
-    const now = Date.now();
-    const { isProcessing, lastOperation, timestamp } = globalProcessingRef.current;
-    
-    // Permitir operações relacionadas executarem em sequência
-    const relatedOperations = [
-        ['pro-soluto-auto', 'bonus-adimplencia', 'minimum-condition'],
-        ['bonus-adimplencia', 'pro-soluto-auto', 'add-payment-field']
-    ];
-    
-    const isRelated = relatedOperations.some(group => 
-        group.includes(operationName) && group.includes(lastOperation)
-    );
-    
-    // Se já está processando uma operação relacionada, permitir
-    if (isProcessing && isRelated) {
-        console.log(`🔄 Operação relacionada ${operationName} permitida durante ${lastOperation}`);
-        return true;
-    }
-    
-    // Se já está processando e foi recente, bloquear
-    if (isProcessing && (now - timestamp) < minDelayMs) {
-        console.log(`⏸️ Operação ${operationName} bloqueada - ${lastOperation} em andamento`);
-        return false;
-    }
-    
-    // Marcar como processando
-    globalProcessingRef.current = {
-        isProcessing: true,
-        lastOperation: operationName,
-        timestamp: now
-    };
-    
-    return true;
-  }, []);
-
-  const completeOperation = useCallback(() => {
-    globalProcessingRef.current.isProcessing = false;
-  }, []);
-
-  // Filtro para seguro de obras (mostrar apenas a partir da data do sinal) - RESTAURADO DO ORIGINAL
-  const sinalAtoDate = useMemo(() => {
-    const sinal = watchedPayments.find(p => p.type === 'sinalAto');
-    return sinal ? startOfMonth(sinal.date) : startOfMonth(new Date());
-  }, [watchedPayments]);
-
-  const filteredInsuranceBreakdown = useMemo(() => {
-    if (!results?.monthlyInsuranceBreakdown) return [];
-    return results.monthlyInsuranceBreakdown.filter(item => {
-      const itemDate = startOfMonth(item.date);
-      return itemDate > sinalAtoDate;
-    });
-  }, [results?.monthlyInsuranceBreakdown, sinalAtoDate]);
-
-  // Gráficos de comprometimento - RESTAURADO DO ORIGINAL
-  const commitmentChartData = useMemo((): ChartData[] | null => {
-    if (!results) return null;
-    return [
-      { name: "Comprometimento", value: results.incomeCommitmentPercentage * 100, fill: "hsl(var(--primary))" },
-      { name: "Restante", value: 100 - (results.incomeCommitmentPercentage * 100), fill: "hsl(var(--muted))" },
-    ];
-  }, [results]);
-
-  const proSolutoChartData = useMemo((): ChartData[] | null => {
-    if (!results) return null;
-    return [
-      { name: "Percentual Parcelado", value: results.proSolutoCommitmentPercentage * 100, fill: "hsl(var(--primary))" },
-      { name: "Restante", value: 100 - (results.proSolutoCommitmentPercentage * 100), fill: "hsl(var(--muted))" },
-    ];
-  }, [results]);
-
-  // FUNÇÃO CORRIGIDA: processExtractedData com tipagem adequada
-  const processExtractedData = useCallback(async (extractedData: ExtractedData) => {
-    console.log('🎉 Processando dados extraídos:', extractedData);
-    
-    try {
-      // Preencher campos básicos
-      if (extractedData.grossIncome) {
-        setValue('grossIncome', extractedData.grossIncome, { shouldValidate: true });
-        console.log('✅ Renda preenchida:', extractedData.grossIncome);
-      }
-      
-      if (extractedData.simulationInstallmentValue) {
-        setValue('simulationInstallmentValue', extractedData.simulationInstallmentValue, { shouldValidate: true });
-        console.log('✅ Parcela preenchida:', extractedData.simulationInstallmentValue);
-      }
-      
-      // NÃO preencher saleValue automaticamente - usuário deve informar manualmente
-      if (extractedData.appraisalValue && !isSaleValueLocked) {
-        setValue('appraisalValue', extractedData.appraisalValue, { shouldValidate: true });
-        console.log('✅ Avaliação preenchida:', extractedData.appraisalValue);
-      }
-      
-      // Adicionar ou atualizar financiamento
-      if (extractedData.financingValue) {
-        const financingPayment: PaymentField = {
-          type: "financiamento",
-          value: extractedData.financingValue,
-          date: deliveryDateObj || new Date(),
-        };
-        
-        const financingIndex = watchedPayments.findIndex(p => p.type === 'financiamento');
-        if (financingIndex > -1) {
-          const newPayments = [...watchedPayments];
-          newPayments[financingIndex] = financingPayment;
-          replace(newPayments);
-          console.log('🔄 Financiamento atualizado:', extractedData.financingValue);
-        } else {
-          append(financingPayment);
-          console.log('➕ Financiamento adicionado:', extractedData.financingValue);
-        }
-      }
-      
-      toast({ 
-        title: '✅ Dados Extraídos com Sucesso!', 
-        description: 'Os campos de renda e parcela foram preenchidos. Informe o Valor de Venda para completar a simulação.' 
-      });
-      
-    } catch (error) {
-      console.error('❌ Erro ao processar dados:', error);
-      throw error;
-    }
-  }, [setValue, isSaleValueLocked, deliveryDateObj, watchedPayments, replace, append, toast]);
-
-  // Otimizar extração de PDF com debounce
-  const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!event.target.files?.length) return;
-    const file = event.target.files[0];
-    
-    console.log('=== 🚀 CORREÇÃO DO PAYMENT CALCULATOR ===');
-    console.log('📄 Arquivo:', file.name, file.size, 'bytes');
-  
-    // VERIFICAÇÃO CRÍTICA: Se não há unidade selecionada, exigir valor de venda manual
-    if (!getValues('selectedUnit') && (!getValues('saleValue') || getValues('saleValue') <= 0)) {
-        toast({
-            variant: "destructive",
-            title: "❌ Valor de Venda Obrigatório",
-            description: "Para fazer upload do PDF, primeiro informe o Valor de Venda manualmente."
-        });
-        
-        // Focar no campo de valor de venda
-        const saleValueInput = document.getElementById('sale-value-input');
-        if (saleValueInput) {
-            saleValueInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            (saleValueInput as HTMLElement).focus();
-        }
-        
-        // Limpar o input de arquivo
-        if (fileInputRef.current) {
-            fileInputRef.current.value = "";
-        }
-        return;
-    }
-
-    // Validar arquivo
-    if (!validateFileSize(file)) {
-      toast({ variant: 'destructive', title: '❌ Arquivo Muito Grande', description: 'O arquivo deve ter no máximo 15MB.' });
-      return;
-    }
-    // CORREÇÃO: Adicionar array de tipos permitidos
-    if (!validateMimeType(file, ['application/pdf', 'image/jpeg', 'image/png'])) {
-      toast({ variant: 'destructive', title: '❌ Arquivo Inválido', description: 'Por favor, envie um PDF ou imagem.' });
-      return;
-    }
-  
-    setIsExtracting(true);
-    
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = async () => {
-        const fileAsDataURL = reader.result as string;
-
-        try {
-          console.log('🔧 Configurando Firebase Functions...');
-          
-          // CORREÇÃO: Usar a MESMA estrutura do stepped calculator
-          const functions = getFunctions();
-          const functionsWithRegion = getFunctions(undefined, 'us-central1');
-          
-          console.log('📤 Chamando Cloud Function...');
-          const extractPdfFunction = httpsCallable(functionsWithRegion, 'extractDataFromSimulationPdfAction');
-          
-          // Enviar no formato correto (igual ao stepped calculator)
-          const fileData = {
-            fileName: file.name,
-            fileSize: file.size,
-            fileType: file.type,
-            dataUrl: fileAsDataURL,
-            idToken: await getAuth().currentUser?.getIdToken()
-          };
-          
-          const response = await extractPdfFunction(fileData);
-          
-          console.log('✅ Resposta recebida:', response);
-          console.log('📊 Dados extraídos:', response.data);
-          
-          if (response.data) {
-            await processExtractedData(response.data as ExtractedData);
-          } else {
-            throw new Error('Nenhum dado retornado pela função');
-          }
-
-        } catch (error: any) {
-          console.error('💥 Erro detalhado:', {
-            message: error.message,
-            code: error.code,
-            details: error.details
-          });
-          
-          // Tratamento específico de erros
-          if (error.code === 'permission-denied' || error.code === 'unauthenticated') {
-            toast({ 
-              variant: "destructive", 
-              title: "❌ Permissão Negada", 
-              description: "Faça login novamente para usar esta função." 
-            });
-          } else if (error.code === 'not-found') {
-            toast({ 
-              variant: "destructive", 
-              title: "❌ Função Não Encontrada", 
-              description: "A função de extração não está disponível no servidor." 
-            });
-          } else if (error.code === 'invalid-argument') {
-            toast({ 
-              variant: "destructive", 
-              title: "❌ Arquivo Inválido", 
-              description: "O arquivo PDF não pôde ser processado. Verifique o formato." 
-            });
-          } else {
-            toast({ 
-              variant: "destructive", 
-              title: "❌ Erro no Servidor", 
-              description: error.message || "Tente novamente em alguns instantes." 
-            });
-          }
-        } finally {
-          setIsExtracting(false);
-          if (fileInputRef.current) {
-            fileInputRef.current.value = "";
-          }
-        }
-    };
-    reader.onerror = () => {
-      setIsExtracting(false);
-      toast({ variant: 'destructive', title: '❌ Erro ao ler arquivo' });
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    };
-  }, [getValues, toast, processExtractedData]);
-
-  // useEffect de emergência para detectar loops
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (globalProcessingRef.current.isProcessing && 
-          (Date.now() - globalProcessingRef.current.timestamp) > 5000) {
-        console.error('🚨 LOOP DETECTADO - Resetando processamento:', globalProcessingRef.current);
-        globalProcessingRef.current.isProcessing = false;
-        
-        toast({
-          variant: "destructive",
-          title: "🔄 Sistema Reiniciado",
-          description: "Foi detectado um loop infinito. O sistema foi reiniciado."
-        });
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [toast]);
-
   // useEffect do Bônus Adimplência FIXO
   useEffect(() => {
     if (!selectedProperty || !deliveryDateObj) return;
     
-    // Verificar processamento global
-    if (!canProceedWithOperation('bonus-adimplencia-fixo')) return;
-
     const hasFinancing = watchedPayments.some(p => p.type === 'financiamento');
     const appraisalValue = watchedAppraisalValue || 0;
     const saleValue = watchedSaleValue || 0;
 
-    console.log('🔍 Calculando Bônus Adimplência FIXO:', {
-      hasFinancing,
-      appraisalValue,
-      saleValue,
-      difference: appraisalValue - saleValue
-    });
-
-    try {
-      // Bônus Adimplência FIXO baseado APENAS em appraisalValue e saleValue
-      const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
+    const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
+    
+    if (hasFinancing && bonusAdimplenciaValue > 0) {
+      let bonusDate = deliveryDateObj;
+      if (new Date() > bonusDate) {
+        bonusDate = lastDayOfMonth(addMonths(new Date(), 1));
+      }
       
-      // Só adicionar/atualizar bônus se houver financiamento E valor positivo
-      if (hasFinancing && bonusAdimplenciaValue > 0) {
-        let bonusDate = deliveryDateObj;
-        if (new Date() > bonusDate) {
-          bonusDate = lastDayOfMonth(addMonths(new Date(), 1));
-        }
-        
-        const bonusPayment: PaymentField = {
-          type: "bonusAdimplencia",
-          value: bonusAdimplenciaValue, // VALOR FIXO
-          date: bonusDate,
-        };
+      const bonusPayment: PaymentField = {
+        type: "bonusAdimplencia",
+        value: bonusAdimplenciaValue,
+        date: bonusDate,
+      };
 
-        const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusAdimplencia');
-        
-        if (bonusIndex > -1) {
-          // Atualizar APENAS se o valor mudou significativamente
-          if (Math.abs(watchedPayments[bonusIndex].value - bonusAdimplenciaValue) > 1) {
-            const newPayments = [...watchedPayments];
-            newPayments[bonusIndex] = bonusPayment;
-            
-            setTimeout(() => {
-              replace(newPayments);
-              completeOperation();
-            }, 100);
-          } else {
-            completeOperation();
-          }
-        } else {
-          // Adicionar bônus se não existe
-          setTimeout(() => {
-            append(bonusPayment);
-            completeOperation();
-          }, 100);
+      const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusAdimplencia');
+      
+      if (bonusIndex > -1) {
+        if (Math.abs(watchedPayments[bonusIndex].value - bonusAdimplenciaValue) > 1) {
+          const newPayments = [...watchedPayments];
+          newPayments[bonusIndex] = bonusPayment;
+          setTimeout(() => replace(newPayments), 100);
         }
       } else {
-        // Remover bônus se não atender às condições
-        const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusAdimplencia');
-        if (bonusIndex > -1) {
-          setTimeout(() => {
-            remove(bonusIndex);
-            completeOperation();
-          }, 100);
-        } else {
-          completeOperation();
-        }
+        setTimeout(() => append(bonusPayment), 100);
       }
-    } catch (error) {
-      completeOperation();
-      console.error('Erro no cálculo do bônus adimplência fixo:', error);
+    } else {
+      const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusAdimplencia');
+      if (bonusIndex > -1) {
+        setTimeout(() => remove(bonusIndex), 100);
+      }
     }
   }, [
     watchedAppraisalValue, 
@@ -1076,8 +802,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     remove, 
     replace,
     watchedPayments,
-    canProceedWithOperation,
-    completeOperation
   ]);
 
   // useEffect para garantir consistência dos pagamentos
@@ -1092,13 +816,11 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       sinalCampaignLimitPercent
     );
     
-    // Se houver violação da lógica de negócio, não fazer ajuste automático
     if (validation.businessLogicViolation) {
       console.warn('Violação da lógica de negócio:', validation.businessLogicViolation);
       return;
     }
     
-    // Se a validação falhar e houver um pró-soluto nos pagamentos, recalcular de forma inteligente
     if (!validation.isValid && watchedPayments.some(p => p.type === 'proSoluto')) {
       const recalculatedPayments = recalculatePaymentsIntelligently(
         watchedPayments, 
@@ -1111,13 +833,11 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     }
   }, [watchedAppraisalValue, watchedSaleValue, watchedPayments, replace, isSinalCampaignActive, sinalCampaignLimitPercent]);
 
-  // useEffect simplificado para financiamento
   useEffect(() => {
     const hasFinancing = watchedPayments.some(p => p.type === 'financiamento');
     console.log('🏦 Status do Financiamento:', hasFinancing ? 'Presente' : 'Ausente');
   }, [financingPaymentsCount]);
   
-  // useEffect para taxas de cartório
   useEffect(() => {
     if (!selectedProperty) return;
     const baseFee = getNotaryFee(watchedAppraisalValue);
@@ -1127,7 +847,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     setValue('notaryFees', totalFee, { shouldValidate: true });
   }, [watchedAppraisalValue, watchedFinancingParticipants, setValue, selectedProperty]);
   
-  // useEffect para parcelas de cartório
   useEffect(() => {
     setValue('notaryInstallments', undefined, { shouldValidate: true });
   }, [watchedNotaryPaymentMethod, setValue]);
@@ -1157,7 +876,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         break; 
       }
     }
-  }, [selectedProperty, toast, handleFileChange]);
+  }, [selectedProperty, toast]);
 
   // Função para calcular parcela de preço
   const calculatePriceInstallment = useCallback((
@@ -1271,6 +990,97 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     return initialRate; 
   }, []);
 
+  // FUNÇÃO RESTAURADA: processExtractedData
+  const processExtractedData = useCallback(async (extractedData: ExtractedData) => {
+    console.log('🎉 Processando dados extraídos:', extractedData);
+    
+    try {
+      if (extractedData.grossIncome) {
+        setValue('grossIncome', extractedData.grossIncome, { shouldValidate: true });
+        console.log('✅ Renda preenchida:', extractedData.grossIncome);
+      }
+      
+      if (extractedData.simulationInstallmentValue) {
+        setValue('simulationInstallmentValue', extractedData.simulationInstallmentValue, { shouldValidate: true });
+        console.log('✅ Parcela preenchida:', extractedData.simulationInstallmentValue);
+      }
+      
+      if (extractedData.appraisalValue && !isSaleValueLocked) {
+        setValue('appraisalValue', extractedData.appraisalValue, { shouldValidate: true });
+        console.log('✅ Avaliação preenchida:', extractedData.appraisalValue);
+      }
+      
+      if (extractedData.financingValue) {
+        const financingPayment: PaymentField = {
+          type: "financiamento",
+          value: extractedData.financingValue,
+          date: deliveryDateObj || new Date(),
+        };
+        
+        const financingIndex = watchedPayments.findIndex(p => p.type === 'financiamento');
+        if (financingIndex > -1) {
+          const newPayments = [...watchedPayments];
+          newPayments[financingIndex] = financingPayment;
+          replace(newPayments);
+          console.log('🔄 Financiamento atualizado:', extractedData.financingValue);
+        } else {
+          append(financingPayment);
+          console.log('➕ Financiamento adicionado:', extractedData.financingValue);
+        }
+      }
+      
+      toast({ 
+        title: '✅ Dados Extraídos com Sucesso!', 
+        description: 'Os campos de renda e parcela foram preenchidos. Informe o Valor de Venda para completar a simulação.' 
+      });
+      
+    } catch (error) {
+      console.error('❌ Erro ao processar dados:', error);
+      throw error;
+    }
+  }, [setValue, isSaleValueLocked, deliveryDateObj, watchedPayments, replace, append, toast]);
+
+  // FUNÇÃO ESPECÍFICA: Aplicar Condição Mínima (ATUALIZADA)
+  const handleApplyMinimumCondition = useCallback(() => {
+    if (!watchedAppraisalValue || !watchedSaleValue) {
+      toast({
+        variant: "destructive",
+        title: "Dados Incompletos",
+        description: "Preencha os valores de avaliação e venda para aplicar a condição mínima.",
+      });
+      return;
+    }
+
+    const formValues = getValues();
+    const recalculatedPayments = applyMinimumCondition(
+      formValues.payments, 
+      formValues.appraisalValue, 
+      formValues.saleValue,
+      isSinalCampaignActive,
+      sinalCampaignLimitPercent || 0,
+      formValues.conditionType,
+      selectedProperty?.enterpriseName || ''
+    );
+
+    replace(recalculatedPayments);
+
+    const sinalAto = recalculatedPayments.find(p => p.type === 'sinalAto');
+    const proSoluto = recalculatedPayments.find(p => p.type === 'proSoluto');
+    const campaignBonus = recalculatedPayments.find(p => p.type === 'bonusCampanha');
+
+    toast({
+      title: "✅ Condição Mínima Aplicada",
+      description: (
+        <div className="space-y-1">
+          <p>O sistema calculou o Pró-Soluto máximo e ajustou o Sinal Ato, respeitando o mínimo de 5% sobre o valor final.</p>
+          {sinalAto && <p className="text-sm">Sinal Ato: <strong>{centsToBrl(sinalAto.value * 100)}</strong></p>}
+          {proSoluto && <p className="text-sm">Pró-Soluto: <strong>{centsToBrl(proSoluto.value * 100)}</strong></p>}
+          {campaignBonus && <p className="text-sm">Bônus de Campanha: <strong>{centsToBrl(campaignBonus.value * 100)}</strong></p>}
+        </div>
+      ),
+    });
+}, [watchedAppraisalValue, watchedSaleValue, getValues, isSinalCampaignActive, sinalCampaignLimitPercent, selectedProperty, replace, toast]);
+
   // FUNÇÃO handleReset RESTAURADA DO ORIGINAL
   const handleReset = useCallback(() => {
     const propertyId = getValues('propertyId');
@@ -1286,11 +1096,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       installments: undefined, 
       notaryFees: undefined, 
       notaryPaymentMethod: 'creditCard', 
-      notaryInstallments: undefined, 
-      selectedUnit: "" 
+      notaryInstallments: undefined,
+      selectedUnit: ""
     });
     setResults(null);
-    setIsDataExtracted(false);
     setIsSaleValueLocked(false);
 
     if (propertyId) {
@@ -1300,281 +1109,36 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-  }, [form, getValues]);
+  }, [form, getValues, handlePropertyChange]);
 
-  // FUNÇÃO handleSetMinimumCondition RESTAURADA DO ORIGINAL (com useCallback)
-  const handleSetMinimumCondition = useCallback(async () => {
-    const { installments, simulationInstallmentValue } = getValues();
-    if (!installments || installments <= 0) {
-        setError("installments", { message: "Número de parcelas é obrigatório para este cálculo." });
-        toast({
-            variant: "destructive",
-            title: "❌ Parcelas Não Informadas",
-            description: "Por favor, informe o número de parcelas do pró-soluto.",
-        });
-        return;
-    }
-
-    const isValid = await trigger(
-        ["propertyId", "saleValue", "appraisalValue", "grossIncome", "simulationInstallmentValue", "installments"],
-        { shouldFocus: true }
-    );
-    if (!isValid || !selectedProperty || !deliveryDateObj || !constructionStartDateObj) {
-        toast({
-            variant: "destructive",
-            title: "❌ Dados Incompletos",
-            description: "Por favor, preencha todos os campos obrigatórios antes de calcular.",
-        });
-        return;
-    }
-    
-    const { saleValue, appraisalValue, grossIncome, payments: existingPayments, conditionType } = getValues();
-    const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
-
-    const incomeLimit = 0.5 * grossIncome;
-    const { breakdown: monthlyInsurance } = calculateConstructionInsuranceLocal(
-        constructionStartDateObj,
-        deliveryDateObj,
-        simulationInstallmentValue
-    );
-    const insuranceMap = new Map(monthlyInsurance.map(item => [item.month, item.value]));
-
-    const today = new Date();
-    
-    const { installment: firstInstallmentFor1BRL } = calculatePriceInstallment(1, installments, deliveryDateObj, existingPayments);
-
-    if (firstInstallmentFor1BRL <= 0) {
-        toast({
-            variant: "destructive",
-            title: "❌ Erro de Cálculo",
-            description: "Não foi possível determinar a parcela base para o cálculo da condição mínima.",
-        });
-        return;
-    }
-
-    const rateBeforeDelivery = 0.005; 
-    const rateAfterDelivery = 0.015;
-
-    let pvOfMaxInstallments = 0;
-    
-    for (let i = 1; i <= installments; i++) {
-        const monthDate = addMonths(today, i);
-        const otherPayment = deliveryDateObj && monthDate < deliveryDateObj
-            ? (insuranceMap.get(format(monthDate, "MMMM/yyyy", { locale: ptBR })) || 0)
-            : simulationInstallmentValue;
-        
-        const maxProSolutoForThisMonth = Math.max(0, incomeLimit - otherPayment);
-
-        let discountFactor = 1;
-        for (let j = 1; j <= i; j++) {
-            const pastMonthDate = addMonths(today, j);
-            const pastInstallmentMonth = startOfMonth(pastMonthDate);
-            const pastRate = pastInstallmentMonth < startOfMonth(deliveryDateObj) ? rateBeforeDelivery : rateAfterDelivery;
-            discountFactor /= (1 + pastRate);
-        }
-        
-        pvOfMaxInstallments += (maxProSolutoForThisMonth / firstInstallmentFor1BRL) * discountFactor;
-    }
-    const proSolutoByIncome = pvOfMaxInstallments;
-    
-    const proSolutoLimitPercent = conditionType === 'especial' 
-        ? 0.1799 
-        : (isReservaParque ? 0.1799 : 0.1499);
-    
-    const maxProSolutoCorrigido = proSolutoLimitPercent * saleValue;
-    
-    let correctionFactor = 1;
-    let gracePeriodMonths = 1;
-    if (existingPayments.some(p => p.type === 'sinal1')) gracePeriodMonths++;
-    if (existingPayments.some(p => p.type === 'sinal2')) gracePeriodMonths++;
-    if (existingPayments.some(p => p.type === 'sinal3')) gracePeriodMonths++;
-
-    if (deliveryDateObj < today) gracePeriodMonths += differenceInMonths(today, deliveryDateObj);
-
-    for (let i = 0; i < gracePeriodMonths; i++) {
-        const month = startOfMonth(addMonths(today, i));
-        const rate = deliveryDateObj && month < startOfMonth(deliveryDateObj) ? rateBeforeDelivery : rateAfterDelivery;
-        correctionFactor *= (1 + rate);
-    }
-    
-    const proSolutoByPercentage = maxProSolutoCorrigido / correctionFactor;
-    
-    const finalProSolutoValue = Math.min(proSolutoByIncome, proSolutoByPercentage);
-
-    const sumOfOtherPayments = existingPayments.reduce((acc, p) => {
-        if (!['sinalAto', 'proSoluto', 'bonusAdimplencia', 'bonusCampanha', 'desconto'].includes(p.type)) {
-            return acc + (p.value || 0);
-        }
-        return acc;
-    }, 0);
-    
-    const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
-    let campaignBonusValue = 0;
-
-    if (isSinalCampaignActive) {
-        const tempSinalAto = appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue;
-        const sinalPadrao5Percent = 0.05 * saleValue;
-
-        if (tempSinalAto > sinalPadrao5Percent) {
-            let potentialBonus = tempSinalAto - sinalPadrao5Percent;
-
-            if(sinalCampaignLimitPercent !== undefined && sinalCampaignLimitPercent >= 0) {
-                const userDiscountPayment = existingPayments.find(p => p.type === 'desconto');
-                const saleValueForBonusCalc = saleValue - (userDiscountPayment?.value || 0);
-                const limitInCurrency = saleValueForBonusCalc * (sinalCampaignLimitPercent / 100);
-                potentialBonus = Math.min(potentialBonus, limitInCurrency);
-            }
-            
-            campaignBonusValue = potentialBonus;
-        }
-    }
-    
-    const calculationTarget = Math.max(appraisalValue, saleValue);
-    const finalSinalAto = calculationTarget - sumOfOtherPayments - bonusAdimplenciaValue - finalProSolutoValue - campaignBonusValue;
-
-    const newPayments: PaymentField[] = existingPayments.filter(p => !['sinalAto', 'proSoluto', 'bonusCampanha'].includes(p.type));
-    
-    newPayments.push({ type: 'sinalAto', value: Math.max(0, finalSinalAto), date: new Date() });
-    
-    if (campaignBonusValue > 0) {
-        newPayments.push({ type: 'bonusCampanha', value: campaignBonusValue, date: new Date() });
-    }
-    
-    newPayments.push({ type: 'proSoluto', value: Math.max(0, finalProSolutoValue), date: new Date() });
-
-    replace(newPayments);
-    
-    toast({
-        title: "✅ Condição Mínima Calculada",
-        description: "Os valores foram ajustados para a condição mínima possível.",
-    });
-  }, [getValues, setError, toast, trigger, selectedProperty, deliveryDateObj, constructionStartDateObj, isSinalCampaignActive, sinalCampaignLimitPercent, replace]);
-
-  // CORREÇÃO: Função para gerar PDF com tipagem correta
-  const handleGeneratePdf = useCallback(async () => {
-    if (!results || !selectedProperty) {
-        toast({
-            variant: "destructive",
-            title: "❌ Dados Insuficientes",
-            description: "Por favor, realize uma simulação antes de gerar o PDF.",
-        });
-        return;
-    }
-
-    if (!brokerName || !brokerCreci) {
-        toast({
-            variant: "destructive",
-            title: "❌ Dados do Corretor",
-            description: "Por favor, informe o nome e CRECI do corretor.",
-        });
-        return;
-    }
-
-    setIsGeneratingPdf(true);
-
-    try {
-        const formValues = getValues();
-        const pdfValues: PdfFormValues = {
-            ...formValues,
-            brokerName,
-            brokerCreci,
-            results: {
-                ...results,
-                // CORREÇÃO: Garantir que paymentValidation não seja null
-                paymentValidation: paymentValidation || undefined
-            }
-        };
-
-        // CORREÇÃO: Passar apenas 2 parâmetros conforme a interface
-        await generatePdf(pdfValues, selectedProperty);
-
-        toast({
-            title: "✅ PDF Gerado com Sucesso",
-            description: "O arquivo foi baixado para seu dispositivo.",
-        });
-    } catch (error) {
-        console.error("Erro ao gerar PDF:", error);
-        toast({
-            variant: "destructive",
-            title: "❌ Erro ao Gerar PDF",
-            description: "Ocorreu um erro ao gerar o arquivo. Tente novamente.",
-        });
-    } finally {
-        setIsGeneratingPdf(false);
-    }
-  }, [results, selectedProperty, brokerName, brokerCreci, getValues, paymentValidation, toast]);
-
-  // Função para lidar com mudança de propriedade
-  const handlePropertyChange = useCallback((id: string) => {
-    if (!id) return;
-    
-    form.reset({ ...form.getValues(), propertyId: id, payments: [], appraisalValue: 0, saleValue: 0, grossIncome: 0, simulationInstallmentValue: 0, financingParticipants: 1, conditionType: 'padrao', installments: undefined, notaryPaymentMethod: 'creditCard', notaryInstallments: undefined, selectedUnit: "" });
-    setResults(null);
-    setIsSaleValueLocked(false);
-
-    const propertyDetails = properties.find(p => p.id === id);
-    if (propertyDetails?.availability?.towers && propertyDetails?.pricing?.length) {
-      const availabilityMap = new Map<string, { status: UnitStatus; floor: string; tower: string }>();
-      propertyDetails.availability.towers.forEach((tower: Tower) => {
-        tower.floors.forEach((floor: any) => {
-          floor.units.forEach((unit: Unit) => {
-            availabilityMap.set(unit.unitId, { status: unit.status, floor: floor.floor, tower: tower.tower });
-          });
-        });
-      });
-      
-      const combinedUnits: CombinedUnit[] = propertyDetails.pricing.map((p: CombinedUnit) => {
-          const availabilityInfo = availabilityMap.get(p.unitId);
-          const normalizedUnitNumber = String(p.unitNumber);
-          return {
-              ...p,
-              unitNumber: normalizedUnitNumber,
-              status: availabilityInfo?.status ?? 'Indisponível',
-              floor: availabilityInfo?.floor ?? 'N/A',
-              block: availabilityInfo?.tower ?? 'N/A',
-          };
-      });
-      setAllUnits(combinedUnits);
-    } else {
-        setAllUnits([]);
-        toast({
-            title: "Aviso",
-            description: "Nenhum dado de espelho de vendas encontrado para este empreendimento. Prossiga com a inserção manual.",
-        });
-    }
-  }, [form, properties, toast]);
-
-  // Função para selecionar unidade
   const handleUnitSelect = useCallback((unit: CombinedUnit) => {
     if (!selectedProperty) return;
 
     const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
     const unitDisplay = isReservaParque ? `Torre ${unit.block} - Unidade ${unit.unitNumber}` : `Bloco ${unit.block} - Unidade ${unit.unitNumber}`;
 
-    setValue('selectedUnit', unitDisplay, { shouldValidate: true });
-    setValue('appraisalValue', unit.appraisalValue / 100, { shouldValidate: true });
+    setValue('selectedUnit', unitDisplay);
+    setValue('appraisalValue', unit.appraisalValue / 100);
     setValue('saleValue', unit.saleValue / 100);
     setIsSaleValueLocked(true);
     setIsUnitSelectorOpen(false);
     toast({
-        title: "✅ Unidade Selecionada!",
-        description: `Os valores para a unidade ${unit.unitNumber} (Torre ${unit.block}) foram preenchidos.`
+      title: "Unidade Selecionada!",
+      description: `Os valores para a unidade ${unit.unitNumber} (Torre ${unit.block}) foram preenchidos.`
     });
   }, [selectedProperty, setValue, toast]);
 
-  // Função para limpar seleção de unidade
   const handleClearUnitSelection = useCallback(() => {
     setValue('selectedUnit', '');
-    setValue('appraisalValue', 0, { shouldValidate: true });
-    setValue('saleValue', 0, { shouldValidate: true });
+    setValue('appraisalValue', 0);
+    setValue('saleValue', 0);
     setIsSaleValueLocked(false);
     toast({
-        title: "🧹 Seleção de unidade limpa",
-        description: "Você pode agora inserir valores manualmente ou selecionar outra unidade."
+      title: "Seleção de unidade limpa",
+      description: "Você pode agora inserir valores manualmente ou selecionar outra unidade.",
     });
   }, [setValue, toast]);
 
-  // Função para adicionar campo de pagamento
   const handleAddPaymentField = useCallback(async (value: string) => {
     if (!selectedProperty) return;
     const isValid = await trigger(["saleValue", "appraisalValue"], { shouldFocus: true });
@@ -1586,7 +1150,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     let initialValue = 0;
     const today = new Date();
     const fieldType = value as PaymentFieldType;
-    
+
     if (isDateLocked(fieldType)) {
       if (deliveryDateObj && new Date() > deliveryDateObj) {
         initialDate = lastDayOfMonth(addMonths(today, 1));
@@ -1601,13 +1165,11 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         }
         return acc;
       }, 0);
-      const calculationTarget = Math.max(appraisalValue, saleValue);
-      const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
-      const newProSolutoValue = calculationTarget - sumOfOtherPayments - bonusAdimplenciaValue;
+      const newProSolutoValue = (appraisalValue - sumOfOtherPayments) - (appraisalValue - saleValue);
       initialValue = Math.max(0, newProSolutoValue);
-
+      
       const sinal1Payment = watchedPayments.find(p => p.type === 'sinal1');
-      const baseDate = sinal1Payment?.date ? sinal1Payment.date : today;
+      const baseDate = sinal1Payment?.date ? sinal1Payment.date : new Date();
       const targetMonth = addMonths(baseDate, 1);
       initialDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 5);
     } else {
@@ -1617,75 +1179,177 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     append({ type: fieldType, value: initialValue, date: initialDate });
   }, [selectedProperty, trigger, deliveryDateObj, getValues, watchedPayments, append]);
 
-  // Função de submissão do formulário
-  const onSubmit = useCallback((values: FormValues) => {
+  // FUNÇÃO RESTAURADA: handleGeneratePdf
+  const handleGeneratePdf = useCallback(async () => {
+    if (!results || !selectedProperty) return;
+
+    setIsGeneratingPdf(true);
+    try {
+      const formValues = getValues();
+      const pdfData: PdfFormValues = {
+        ...formValues,
+        brokerName,
+        brokerCreci,
+        propertyId: selectedProperty.id,
+      };
+
+      await generatePdf(pdfData, results, selectedProperty);
+      toast({
+        title: "✅ PDF Gerado com Sucesso!",
+        description: "A proposta foi baixada com sucesso.",
+      });
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      toast({
+        variant: "destructive",
+        title: "❌ Erro ao Gerar PDF",
+        description: "Não foi possível gerar o PDF. Tente novamente.",
+      });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  }, [results, selectedProperty, getValues, brokerName, brokerCreci, toast]);
+
+  // Otimizar extração de PDF com debounce
+  const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files?.length) return;
+    const file = event.target.files[0];
+    
+    if (!getValues('selectedUnit') && (!getValues('saleValue') || getValues('saleValue') <= 0)) {
+        toast({
+            variant: "destructive",
+            title: "❌ Valor de Venda Obrigatório",
+            description: "Para fazer upload do PDF, primeiro informe o Valor de Venda manualmente."
+        });
+        
+        const saleValueInput = document.getElementById('sale-value-input');
+        if (saleValueInput) {
+            saleValueInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            (saleValueInput as HTMLElement).focus();
+        }
+        
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
+        return;
+    }
+
+    if (!validateFileSize(file)) {
+      toast({ variant: 'destructive', title: '❌ Arquivo Muito Grande', description: 'O arquivo deve ter no máximo 15MB.' });
+      return;
+    }
+    if (!validateMimeType(file, ['application/pdf', 'image/jpeg', 'image/png'])) {
+      toast({ variant: 'destructive', title: '❌ Arquivo Inválido', description: 'Por favor, envie um PDF ou imagem.' });
+      return;
+    }
+  
+    setIsExtracting(true);
+    
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = async () => {
+        const fileAsDataURL = reader.result as string;
+
+        try {
+          const functionsWithRegion = getFunctions(undefined, 'us-central1');
+          const extractPdfFunction = httpsCallable(functionsWithRegion, 'extractDataFromSimulationPdfAction');
+          
+          const fileData = {
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+            dataUrl: fileAsDataURL,
+            idToken: await getAuth().currentUser?.getIdToken()
+          };
+          
+          const response = await extractPdfFunction(fileData);
+          
+          if (response.data) {
+            await processExtractedData(response.data as ExtractedData);
+          } else {
+            throw new Error('Nenhum dado retornado pela função');
+          }
+
+        } catch (error: unknown) {
+          console.error('💥 Erro detalhado:', error);
+          
+          if (error instanceof Error) {
+            if ('code' in error && (error.code === 'permission-denied' || error.code === 'unauthenticated')) {
+              toast({ 
+                variant: "destructive", 
+                title: "❌ Permissão Negada", 
+                description: "Faça login novamente para usar esta função." 
+              });
+            } else if ('code' in error && error.code === 'not-found') {
+              toast({ 
+                variant: "destructive", 
+                title: "❌ Função Não Encontrada", 
+                description: "A função de extração não está disponível no servidor." 
+              });
+            } else if ('code' in error && error.code === 'invalid-argument') {
+              toast({ 
+                variant: "destructive", 
+                title: "❌ Arquivo Inválido", 
+                description: "O arquivo PDF não pôde ser processado. Verifique o formato." 
+              });
+            } else {
+              toast({ 
+                variant: "destructive", 
+                title: "❌ Erro no Servidor", 
+                description: error.message || "Tente novamente em alguns instantes." 
+              });
+            }
+          }
+        } finally {
+          setIsExtracting(false);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+          }
+        }
+    };
+    reader.onerror = () => {
+      setIsExtracting(false);
+      toast({ variant: 'destructive', title: '❌ Erro ao ler arquivo' });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    };
+  }, [getValues, toast, processExtractedData]);
+
+  function onSubmit(values: FormValues) {
     clearErrors();
 
     if (!selectedProperty || !deliveryDateObj || !constructionStartDateObj) {
-        setError("propertyId", { message: "Selecione um imóvel para continuar." });
-        return;
-    }
-    
-    // Validar consistência dos pagamentos com lógica de negócio
-    const validation = validatePaymentSumWithBusinessLogic(
-      values.payments, 
-      values.appraisalValue, 
-      values.saleValue,
-      isSinalCampaignActive,
-      sinalCampaignLimitPercent
-    );
-    
-    // Verificar violações da lógica de negócio primeiro
-    if (validation.businessLogicViolation) {
-      setError("payments", { message: validation.businessLogicViolation });
+      setError("propertyId", { message: "Selecione um imóvel para continuar."});
       return;
     }
     
-    if (!validation.isValid) {
-      // Se houver pró-soluto nos pagamentos, tentar recalcular de forma inteligente
-      if (values.payments.some(p => p.type === 'proSoluto')) {
-        const recalculatedPayments = recalculatePaymentsIntelligently(
-          values.payments, 
-          values.appraisalValue, 
-          values.saleValue,
-          isSinalCampaignActive,
-          sinalCampaignLimitPercent
-        );
-        replace(recalculatedPayments);
-        
-        // Validar novamente após o recálculo
-        const newValidation = validatePaymentSumWithBusinessLogic(
-          recalculatedPayments, 
-          values.appraisalValue, 
-          values.saleValue,
-          isSinalCampaignActive,
-          sinalCampaignLimitPercent
-        );
-        
-        if (!newValidation.isValid) {
-          setError("payments", { 
-            message: `Não foi possível ajustar automaticamente. A soma dos pagamentos (${centsToBrl(newValidation.actual * 100)}) não corresponde ao valor esperado (${centsToBrl(newValidation.expected * 100)})` 
-          });
-          return;
-        }
+    const proSolutoPayment = values.payments.find(p => p.type === 'proSoluto');
+    const hasProSoluto = !!proSolutoPayment;
+
+    if (hasProSoluto && values.installments !== undefined && values.installments > 0) {
+      const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
+      let maxInstallments;
+      if (isReservaParque) {
+        maxInstallments = values.conditionType === 'especial' ? 66 : 60;
       } else {
-        setError("payments", { 
-          message: `Soma dos pagamentos (${centsToBrl(validation.actual * 100)}) não corresponde ao valor esperado (${centsToBrl(validation.expected * 100)})` 
-        });
+        maxInstallments = values.conditionType === 'especial' ? 66 : 52;
+      }
+      if (values.installments > maxInstallments) {
+        setError("installments", { message: `Número de parcelas excede o limite de ${maxInstallments} para a condição selecionada.` });
         return;
       }
     }
-    
-    const hasProSoluto = values.payments.some(p => p.type === 'proSoluto');
-    const proSolutoPayment = values.payments.find(p => p.type === 'proSoluto');
+
     const proSolutoValue = proSolutoPayment?.value ?? 0;
-    
+    const financedAmount = proSolutoValue;
     const installments = values.installments ?? 0;
 
-    if (proSolutoValue <= 0 && hasProSoluto) {
+    if (financedAmount <= 0 && hasProSoluto) {
       setResults({
         summary: { remaining: 0, okTotal: true },
         financedAmount: 0,
+        monthlyInstallment: 0,
         totalWithInterest: 0,
         totalConstructionInsurance: 0,
         monthlyInsuranceBreakdown: [],
@@ -1695,25 +1359,91 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         notaryInstallmentValue: undefined,
         incomeError: undefined,
         proSolutoError: undefined,
-        paymentValidation: validation,
+        steppedInstallments: [],
+        periodLengths: [],
       });
       return;
     }
 
     if(hasProSoluto && !installments) {
-        setError("installments", { message: "Número de parcelas é obrigatório para Pró-Soluto."})
-        return;
+      setError("installments", { message: "Número de parcelas é obrigatório para Pró-Soluto."})
+      return;
     }
     
-    const { installment: priceInstallment, total: totalWithInterest } = calculatePriceInstallment(
-      proSolutoValue,
+    const { installment, total } = calculatePriceInstallment(
+      financedAmount,
       installments,
       deliveryDateObj,
       values.payments
     );
       
-    let maxCommitment = 0;
-    const today = new Date();
+    const incomeCommitmentPercentage = values.grossIncome > 0
+      ? (values.simulationInstallmentValue + installment) / values.grossIncome
+      : 0;
+
+    let proSolutoCorrigido = financedAmount;
+    if (hasProSoluto) {
+      const today = new Date();
+      
+      let currentGracePeriodMonths = 1;
+      const hasSinal1 = values.payments.some(p => p.type === 'sinal1');
+      const hasSinal2 = values.payments.some(p => p.type === 'sinal2');
+      if (hasSinal1) currentGracePeriodMonths++;
+      if (hasSinal2) currentGracePeriodMonths++;
+      if (!hasSinal1) currentGracePeriodMonths = 1;
+
+      if (deliveryDateObj < today) {
+        const monthsSinceDelivery = differenceInMonths(today, deliveryDateObj);
+        currentGracePeriodMonths += monthsSinceDelivery;
+      }
+
+      for (let i = 0; i < currentGracePeriodMonths; i++) {
+        const installmentDate = addMonths(today, i);
+        const installmentMonth = startOfMonth(installmentDate);
+        const deliveryMonth = startOfMonth(deliveryDateObj);
+        const interestRate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
+        proSolutoCorrigido *= (1 + interestRate);
+      }
+    }
+    
+    const proSolutoCommitmentPercentage = values.saleValue > 0
+      ? proSolutoCorrigido / values.saleValue
+      : 0;
+
+    let notaryInstallmentValue: number | undefined = undefined;
+    if (values.notaryFees && values.notaryInstallments && watchedNotaryPaymentMethod) {
+      notaryInstallmentValue = calculateNotaryInstallment(
+        values.notaryFees,
+        values.notaryInstallments,
+        watchedNotaryPaymentMethod
+      );
+    }
+
+    let incomeError: string | undefined = undefined;
+    let proSolutoError: string | undefined = undefined;
+
+    if (incomeCommitmentPercentage > 0.5) {
+      incomeError = "Comprometimento de renda excede 50%.";
+    }
+
+    if(hasProSoluto) {
+      const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
+      let proSolutoLimit;
+      let proSolutoLimitPercent;
+
+      if (isReservaParque) {
+        proSolutoLimit = 0.18;
+        proSolutoLimitPercent = '18%';
+      } else {
+        proSolutoLimit = values.conditionType === 'especial' ? 0.18 : 0.15;
+        proSolutoLimitPercent = values.conditionType === 'especial' ? '18%' : '15%';
+      }
+
+      if (proSolutoCommitmentPercentage >= proSolutoLimit) {
+        proSolutoError = `O Percentual Parcelado (Pró-Soluto) (${formatPercentage(proSolutoCommitmentPercentage)}) deve ser menor que ${proSolutoLimitPercent} para a condição selecionada.`;
+      }
+    }
+    
     const { total: totalConstructionInsurance, breakdown: monthlyInsuranceBreakdown } =
       calculateConstructionInsuranceLocal(
         constructionStartDateObj,
@@ -1721,95 +1451,13 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         values.simulationInstallmentValue
       );
     
-    const insuranceMap = new Map(monthlyInsuranceBreakdown.map(b => [b.month, b.value]));
+    const averageInterestRate = calculateRate(installments, installment, financedAmount);
 
-    if (values.grossIncome > 0 && deliveryDateObj) {
-        for (let i = 1; i <= installments; i++) {
-            const currentMonthDate = addMonths(today, i);
-            const currentMonthStr = format(currentMonthDate, "MMMM/yyyy", { locale: ptBR });
-            
-            const otherPayment = currentMonthDate < deliveryDateObj 
-                ? (insuranceMap.get(currentMonthStr) || 0)
-                : values.simulationInstallmentValue;
-
-            const totalMonthlyPayment = priceInstallment + otherPayment;
-            const monthlyCommitment = totalMonthlyPayment / values.grossIncome;
-
-            if (monthlyCommitment > maxCommitment) {
-                maxCommitment = monthlyCommitment;
-            }
-        }
-    }
-    
-    const incomeCommitmentPercentage = maxCommitment;
-    
-    let proSolutoCorrigido = proSolutoValue;
-    if (hasProSoluto && deliveryDateObj) {
-        let currentGracePeriodMonths = 1;
-        const hasSinal1 = values.payments.some(p => p.type === 'sinal1');
-        const hasSinal2 = values.payments.some(p => p.type === 'sinal2');
-        if (hasSinal1) currentGracePeriodMonths++;
-        if (hasSinal2) currentGracePeriodMonths++;
-        if (!hasSinal1) currentGracePeriodMonths = 1;
-
-        if (deliveryDateObj < today) {
-            const monthsSinceDelivery = differenceInMonths(today, deliveryDateObj);
-            currentGracePeriodMonths += monthsSinceDelivery;
-        }
-
-        for (let i = 0; i < currentGracePeriodMonths; i++) {
-            const installmentDate = addMonths(today, i);
-            const installmentMonth = startOfMonth(installmentDate);
-            const deliveryMonth = startOfMonth(deliveryDateObj);
-            const rate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
-            proSolutoCorrigido *= (1 + rate);
-        }
-    }
-    
-    const proSolutoCommitmentPercentage = values.saleValue > 0
-        ? proSolutoCorrigido / values.saleValue
-        : 0;
-
-    let notaryInstallmentValue: number | undefined = undefined;
-    if (values.notaryFees && values.notaryInstallments && watchedNotaryPaymentMethod) {
-        notaryInstallmentValue = calculateNotaryInstallment(
-            values.notaryFees,
-            values.notaryInstallments,
-            watchedNotaryPaymentMethod
-        );
-    }
-
-    let incomeError: string | undefined = undefined;
-    let proSolutoError: string | undefined = undefined;
-
-    if (incomeCommitmentPercentage > 0.5) {
-        incomeError = `Comprometimento de renda em seu pico excede 50%.`;
-    }
-
-    if(hasProSoluto) {
-        const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
-        let proSolutoLimit;
-        let proSolutoLimitPercent;
-
-        if (isReservaParque) {
-            proSolutoLimit = 0.18;
-            proSolutoLimitPercent = '18%';
-        } else {
-            proSolutoLimit = values.conditionType === 'especial' ? 0.18 : 0.15;
-            proSolutoLimitPercent = values.conditionType === 'especial' ? '18%' : '15%';
-        }
-
-        if (proSolutoCommitmentPercentage >= proSolutoLimit) {
-            proSolutoError = `O Percentual Parcelado (Pró-Soluto) (${formatPercentage(proSolutoCommitmentPercentage)}) deve ser menor que ${proSolutoLimitPercent} para a condição selecionada.`;
-        }
-    }
-    
-    const averageInterestRate = calculateRate(installments, priceInstallment, proSolutoValue);
-
-    setResults({
+    const newResults: ExtendedResults = {
       summary: { remaining: 0, okTotal: true },
-      financedAmount: proSolutoValue,
-      totalWithInterest,
+      financedAmount: financedAmount,
+      monthlyInstallment: installment,
+      totalWithInterest: total,
       totalConstructionInsurance,
       monthlyInsuranceBreakdown,
       incomeCommitmentPercentage,
@@ -1818,61 +1466,78 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       averageInterestRate,
       incomeError,
       proSolutoError,
-      paymentValidation: validation,
+      steppedInstallments: [],
+      periodLengths: [],
+      paymentValidation: paymentValidation || undefined
+    };
+
+    setResults(newResults);
+
+    setTimeout(() => {
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  }
+
+  // Filtro para seguro de obras (mostrar apenas a partir da data do sinal)
+  const sinalAtoDate = useMemo(() => {
+    const sinal = watchedPayments.find(p => p.type === 'sinalAto');
+    return sinal ? startOfMonth(sinal.date) : startOfMonth(new Date());
+  }, [watchedPayments]);
+
+  const filteredInsuranceBreakdown = useMemo(() => {
+    if (!results?.monthlyInsuranceBreakdown) return [];
+    return results.monthlyInsuranceBreakdown.filter(item => {
+      const itemDate = startOfMonth(item.date);
+      return itemDate > sinalAtoDate;
     });
-  }, [selectedProperty, deliveryDateObj, constructionStartDateObj, clearErrors, setError, watchedNotaryPaymentMethod, replace, isSinalCampaignActive, sinalCampaignLimitPercent]);
+  }, [results?.monthlyInsuranceBreakdown, sinalAtoDate]);
 
-  // Componente de alerta para inconsistência nos pagamentos
-  const PaymentInconsistencyAlert = memo(() => {
-    if (!paymentValidation || paymentValidation.isValid) return null;
-    
-    return (
-        <Alert variant="destructive" className="mt-4">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Inconsistência nos Pagamentos</AlertTitle>
-            <AlertDescription>
-                {paymentValidation.businessLogicViolation || 
-                 `A soma dos pagamentos (${centsToBrl(paymentValidation.actual * 100)}) não corresponde ao valor esperado (${centsToBrl(paymentValidation.expected * 100)}).` +
-                 (watchedPayments.some(p => p.type === 'proSoluto') ? " O pró-soluto será ajustado automaticamente." : "")
-                }
-            </AlertDescription>
-        </Alert>
-    );
-  });
-  PaymentInconsistencyAlert.displayName = 'PaymentInconsistencyAlert';
+  // Gráficos de comprometimento
+  const commitmentChartData = useMemo((): ChartData[] | null => {
+    if (!results) return null;
+    return [
+      { name: "Comprometimento", value: results.incomeCommitmentPercentage * 100, fill: "hsl(var(--primary))" },
+      { name: "Restante", value: 100 - (results.incomeCommitmentPercentage * 100), fill: "hsl(var(--muted))" },
+    ];
+  }, [results]);
 
+  const proSolutoChartData = useMemo((): ChartData[] | null => {
+    if (!results) return null;
+    return [
+      { name: "Percentual Parcelado", value: results.proSolutoCommitmentPercentage * 100, fill: "hsl(var(--primary))" },
+      { name: "Restante", value: 100 - (results.proSolutoCommitmentPercentage * 100), fill: "hsl(var(--muted))" },
+    ];
+  }, [results]);
+
+  // JSX - RENDERIZAÇÃO COMPLETA COM RESULTADOS
   return (
     <div className="space-y-6" onPaste={handlePaste}>
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Calculadora de Fluxo de Pagamentos</h2>
-        <Button
-          variant="outline"
-          onClick={() => setIsTutorialOpen(true)}
-          className="flex items-center gap-2"
-        >
-          <Sparkles className="h-4 w-4" />
-          Tutorial
-        </Button>
-      </div>
-
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building className="h-5 w-5" />
-                Dados do Imóvel
-              </CardTitle>
-              <CardDescription>
-                Selecione o empreendimento e informe os valores de avaliação e venda.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+      <InteractiveTutorial 
+        isOpen={isTutorialOpen}
+        onClose={() => setIsTutorialOpen(false)}
+        form={form}
+        results={results}
+      />
+      
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calculator className="h-5 w-5" />
+            Simulador de Fluxo de Pagamento
+          </CardTitle>
+          <CardDescription>
+            Preencha os dados para simular as condições de pagamento do imóvel.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {/* Seleção de Propriedade */}
               <FormField
                 control={form.control}
                 name="propertyId"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="property-select">
                     <FormLabel>Empreendimento</FormLabel>
                     <Select onValueChange={(value) => {
                       field.onChange(value);
@@ -1896,77 +1561,82 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 )}
               />
 
+              {/* Seleção de Unidade */}
               {selectedProperty && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="selectedUnit"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Unidade</FormLabel>
-                        <div className="flex gap-2">
-                          <FormControl>
-                            <Input
-                              placeholder="Selecione uma unidade"
-                              value={field.value || ""}
-                              onChange={field.onChange}
-                              readOnly
-                            />
-                          </FormControl>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setIsUnitSelectorOpen(true)}
-                            className="whitespace-nowrap"
-                          >
-                            <MapPin className="h-4 w-4 mr-2" />
-                            Selecionar
-                          </Button>
-                          {field.value && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={handleClearUnitSelection}
-                              className="text-red-500 hover:text-red-700"
-                            >
-                              <XCircle className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <div className="space-y-4 unit-selector">
+                  <div className="flex items-center justify-between">
+                    <Label>Unidade</Label>
+                    <div className="flex gap-2">
+                      {form.getValues('selectedUnit') && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleClearUnitSelection}
+                        >
+                          <XCircle className="h-4 w-4 mr-2" />
+                          Limpar Seleção
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsUnitSelectorOpen(true)}
+                      >
+                        <Building className="h-4 w-4 mr-2" />
+                        Selecionar Unidade
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {form.getValues('selectedUnit') && (
+                    <Alert>
+                      <CheckCircle2 className="h-4 w-4" />
+                      <AlertTitle>Unidade Selecionada</AlertTitle>
+                      <AlertDescription>
+                        {form.getValues('selectedUnit')}
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
-                  <FormField
-                    control={form.control}
-                    name="conditionType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Condição</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione a condição" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="padrao">Padrão</SelectItem>
-                            <SelectItem value="especial">Especial</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
+                    <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Selecione uma Unidade</DialogTitle>
+                        <DialogDescription>
+                          Escolha uma unidade disponível no empreendimento
+                        </DialogDescription>
+                      </DialogHeader>
+                      
+                      <UnitSelectorDialogContent
+                        allUnits={allUnits}
+                        filteredUnits={filteredUnits}
+                        isReservaParque={selectedProperty?.enterpriseName.includes('Reserva Parque Clube')}
+                        onUnitSelect={handleUnitSelect}
+                        filters={{
+                          status: statusFilter,
+                          setStatus: setStatusFilter,
+                          floor: floorFilter,
+                          setFloor: setFloorFilter,
+                          typology: typologyFilter,
+                          setTypology: setTypologyFilter,
+                          sunPosition: sunPositionFilter,
+                          setSunPosition: setSunPositionFilter,
+                        }}
+                        filterOptions={filterOptions}
+                      />
+                    </DialogContent>
+                  </Dialog>
                 </div>
               )}
 
+              {/* Valores do Imóvel */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <CurrencyFormField
                   name="appraisalValue"
                   label="Valor de Avaliação"
                   control={form.control}
+                  readOnly={isSaleValueLocked}
                   id="appraisal-value-input"
                 />
                 <CurrencyFormField
@@ -1978,26 +1648,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 />
               </div>
 
-              {selectedProperty && (
-                <div className="text-sm text-muted-foreground">
-                  <p>Data de Entrega: {deliveryDateObj ? format(deliveryDateObj, "dd/MM/yyyy", { locale: ptBR }) : "Não informada"}</p>
-                  <p>Início da Obra: {constructionStartDateObj ? format(constructionStartDateObj, "dd/MM/yyyy", { locale: ptBR }) : "Não informada"}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Dados Financeiros
-              </CardTitle>
-              <CardDescription>
-                Informe os dados financeiros para a simulação.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              {/* Dados do Cliente */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <CurrencyFormField
                   name="grossIncome"
@@ -2011,114 +1662,52 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="financingParticipants"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Participantes no Financiamento</FormLabel>
-                      <Select onValueChange={(value) => field.onChange(parseInt(value))} value={field.value?.toString()}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o número de participantes" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="1">1</SelectItem>
-                          <SelectItem value="2">2</SelectItem>
-                          <SelectItem value="3">3</SelectItem>
-                          <SelectItem value="4">4</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="installments"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Número de Parcelas (Pró-Soluto)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="Ex: 60"
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept=".pdf,image/jpeg,image/png"
-                  className="hidden"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isExtracting}
-                  className="flex items-center gap-2"
-                >
-                  {isExtracting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4" />
-                  )}
-                  Extrair Dados do PDF
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  Faça upload de uma simulação para preencher os campos automaticamente.
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <HandCoins className="h-5 w-5" />
-                Pagamentos
-              </CardTitle>
-              <CardDescription>
-                Adicione os pagamentos que compõem a transação.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {fields.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Wallet className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Nenhum pagamento adicionado ainda.</p>
-                  <p className="text-sm">Adicione pagamentos para começar a simulação.</p>
+              {/* Campos de Pagamento */}
+              <div className="space-y-4 payment-fields">
+                <div className="flex items-center justify-between">
+                  <Label>Formas de Pagamento</Label>
+                  <div className="flex gap-2">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      accept=".pdf,image/jpeg,image/png"
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isExtracting}
+                    >
+                      {isExtracting ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="mr-2 h-4 w-4" />
+                      )}
+                      {isExtracting ? 'Extraindo...' : 'Enviar PDF Caixa'}
+                    </Button>
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-4">
+
+                <div className="space-y-2">
                   {fields.map((field, index) => (
-                    <div key={field.id} className="flex items-center gap-4 p-4 border rounded-lg">
-                      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <FormField
-                          control={form.control}
-                          name={`payments.${index}.type`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Tipo</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value} disabled>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Selecione o tipo" />
-                                  </SelectTrigger>
-                                </FormControl>
+                    <div key={field.id} className="flex gap-2 items-end">
+                      <FormField
+                        control={form.control}
+                        name={`payments.${index}.type`}
+                        render={({ field }) => (
+                          <FormItem className="flex-1">
+                            <FormLabel>Tipo</FormLabel>
+                            <FormControl>
+                              <Select
+                                value={field.value}
+                                onValueChange={field.onChange}
+                                disabled={isDateLocked(watchedPayments[index]?.type)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
                                 <SelectContent>
                                   {paymentFieldOptions.map((option) => (
                                     <SelectItem key={option.value} value={option.value}>
@@ -2127,194 +1716,297 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                                   ))}
                                 </SelectContent>
                               </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                        <FormField
-                          control={form.control}
-                          name={`payments.${index}.value`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Valor</FormLabel>
-                              <FormControl>
-                                <div className="relative">
-                                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                  <CurrencyInput
-                                    value={(field.value as number) * 100}
-                                    onValueChange={(cents) => field.onChange(cents === null ? 0 : cents / 100)}
-                                    className="pl-10"
-                                  />
-                                </div>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                      <FormField
+                        control={form.control}
+                        name={`payments.${index}.value`}
+                        render={({ field }) => (
+                          <FormItem className="flex-1">
+                            <FormLabel>Valor</FormLabel>
+                            <FormControl>
+                              <CurrencyInput
+                                value={field.value * 100}
+                                onValueChange={(cents) => field.onChange(cents === null ? 0 : cents / 100)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                        <FormField
-                          control={form.control}
-                          name={`payments.${index}.date`}
-                          render={({ field }) => {
-                            const paymentType = form.watch(`payments.${index}.type`) as PaymentFieldType;
-                            const isLocked = isDateLocked(paymentType);
-                            
-                            return (
-                              <FormItem>
-                                <FormLabel>Data</FormLabel>
-                                <FormControl>
-                                  {/* CORREÇÃO: Remover disabledDates não suportado */}
-                                  <DatePicker
-                                    value={field.value ? field.value.toISOString() : undefined}
-                                    onChange={(dateString) => field.onChange(dateString ? parseISO(dateString) : undefined)}
-                                    disabled={isLocked}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            );
-                          }}
-                        />
-                      </div>
+                      <FormField
+                        control={form.control}
+                        name={`payments.${index}.date`}
+                        render={({ field }) => (
+                          <FormItem className="flex-1">
+                            <FormLabel>Data</FormLabel>
+                            <FormControl>
+                              <DatePicker
+                                value={field.value ? format(field.value, 'yyyy-MM-dd') : ''}
+                                onChange={(dateString) => {
+                                  if (dateString) {
+                                    field.onChange(new Date(dateString));
+                                  } else {
+                                    field.onChange(undefined);
+                                  }
+                                }}
+                                disabled={isDateLocked(watchedPayments[index]?.type)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
                       <Button
                         type="button"
                         variant="outline"
                         size="icon"
                         onClick={() => remove(index)}
-                        className="text-red-500 hover:text-red-700"
                       >
                         <XCircle className="h-4 w-4" />
                       </Button>
                     </div>
                   ))}
-                </div>
-              )}
 
-              <div className="flex flex-wrap gap-2">
-                {availablePaymentFields.map((option) => (
+                  {availablePaymentFields.length > 0 && (
+                    <Select onValueChange={handleAddPaymentField}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Adicionar forma de pagamento" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availablePaymentFields.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                {/* Validação de Pagamentos */}
+                {paymentValidation && !paymentValidation.isValid && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Inconsistência nos Pagamentos</AlertTitle>
+                    <AlertDescription>
+                      A soma dos pagamentos ({centsToBrl(paymentValidation.actual * 100)}) não corresponde ao valor esperado ({centsToBrl(paymentValidation.expected * 100)}).
+                      {paymentValidation.businessLogicViolation && (
+                        <span className="block mt-2">{paymentValidation.businessLogicViolation}</span>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* BOTÃO ESPECÍFICO: Aplicar Condição Mínima */}
+                <div className="flex justify-end mt-4">
                   <Button
-                    key={option.value}
                     type="button"
                     variant="outline"
-                    onClick={() => handleAddPaymentField(option.value)}
-                    className="flex items-center gap-2"
+                    onClick={handleApplyMinimumCondition}
+                    className="minimum-condition-button"
                   >
-                    <PlusCircle className="h-4 w-4" />
-                    {option.label}
+                    <Calculator className="mr-2 h-4 w-4" />
+                    Aplicar Condição Mínima
                   </Button>
-                ))}
+                </div>
+
+                {/* Condições do Pró-Soluto */}
+                {watchedPayments.some(p => p.type === 'proSoluto') && (
+                  <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="conditionType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tipo de Condição</FormLabel>
+                          <FormControl>
+                            <RadioGroup
+                              onValueChange={field.onChange}
+                              value={field.value}
+                              className="flex flex-col space-y-1"
+                            >
+                              <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                  <RadioGroupItem value="padrao" />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                  Padrão (até 15% do valor de venda)
+                                </FormLabel>
+                              </FormItem>
+                              <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                  <RadioGroupItem value="especial" />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                  Especial (até 18% do valor de venda)
+                                </FormLabel>
+                              </FormItem>
+                            </RadioGroup>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="installments"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Número de Parcelas</FormLabel>
+                          <FormControl>
+                            <Input
+                                type="number"
+                                {...field}
+                                onChange={(e) => field.onChange(e.target.valueAsNumber)}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
               </div>
 
-              {/* Alerta de inconsistência nos pagamentos */}
-              <PaymentInconsistencyAlert />
-            </CardContent>
-          </Card>
+              {/* Participantes do Financiamento */}
+              <FormField
+                control={form.control}
+                name="financingParticipants"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Participantes no Financiamento</FormLabel>
+                    <FormControl>
+                      <Select
+                        value={field.value.toString()}
+                        onValueChange={(value) => field.onChange(parseInt(value))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 participante</SelectItem>
+                          <SelectItem value="2">2 participantes</SelectItem>
+                          <SelectItem value="3">3 participantes</SelectItem>
+                          <SelectItem value="4">4 participantes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Taxas de Cartório
-              </CardTitle>
-              <CardDescription>
-                Configure as taxas de cartório e o método de pagamento.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <CurrencyFormField
-                  name="notaryFees"
-                  label="Taxas de Cartório"
-                  control={form.control}
-                  readOnly
-                />
-
+              {/* Taxas de Cartório */}
+              <div className="space-y-4">
                 <FormField
                   control={form.control}
                   name="notaryPaymentMethod"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Método de Pagamento</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o método" />
-                          </SelectTrigger>
+                      <FormLabel>Forma de Pagamento das Taxas</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={field.onChange}
+                          value={field.value}
+                          className="flex flex-col space-y-1"
+                        >
+                          <FormItem className="flex items-center space-x-3 space-y-0">
+                            <FormControl>
+                              <RadioGroupItem value="creditCard" />
+                            </FormControl>
+                              <FormLabel className="font-normal">
+                                Cartão de Crédito (até 12x)
+                              </FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-3 space-y-0">
+                              <FormControl>
+                                  <RadioGroupItem value="bankSlip" />
+                              </FormControl>
+                              <FormLabel className="font-normal">
+                                Boleto (36x ou 40x)
+                              </FormLabel>
+                            </FormItem>
+                          </RadioGroup>
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="creditCard">Cartão de Crédito</SelectItem>
-                          <SelectItem value="bankSlip">Boleto</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        <FormMessage />
+                      </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="notaryInstallments"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Parcelamento</FormLabel>
+                      <FormControl>
+                        <Select
+                          value={field.value?.toString()}
+                          onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o número de parcelas" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {watchedNotaryPaymentMethod === 'creditCard' ? (
+                              Array.from({ length: 12 }, (_, i) => i + 1).map((num) => (
+                                <SelectItem key={num} value={num.toString()}>
+                                  {num}x
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <>
+                                <SelectItem value="36">36x</SelectItem>
+                                <SelectItem value="40">40x</SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
+                {form.watch('notaryFees') && form.watch('notaryInstallments') && (
+                  <div className="p-4 bg-muted rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      Valor da parcela: {centsToBrl(calculateNotaryInstallment(
+                        form.watch('notaryFees') || 0,
+                        form.watch('notaryInstallments') || 0,
+                        form.watch('notaryPaymentMethod') || 'creditCard'
+                      ) * 100)}
+                    </p>
+                  </div>
+                )}
               </div>
 
-              <FormField
-                control={form.control}
-                name="notaryInstallments"
-                render={({ field }) => {
-                  const paymentMethod = form.watch('notaryPaymentMethod');
-                  const maxInstallments = paymentMethod === 'creditCard' ? 12 : 40;
-                  const installmentOptions = paymentMethod === 'creditCard' 
-                    ? Array.from({ length: 12 }, (_, i) => i + 1)
-                    : [36, 40];
-                  
-                  return (
-                    <FormItem>
-                      <FormLabel>Parcelamento</FormLabel>
-                      <Select onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)} value={field.value?.toString()}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o número de parcelas" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {installmentOptions.map((option) => (
-                            <SelectItem key={option} value={option.toString()}>
-                              {option}x
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
-              />
-            </CardContent>
-          </Card>
+              {/* Botões de Ação */}
+              <div className="flex gap-4">
+                <Button type="submit" className="simulation-button">
+                  <Calculator className="mr-2 h-4 w-4" />
+                  Simular
+                </Button>
+                <Button type="button" variant="outline" onClick={handleReset}>
+                  <Repeat className="mr-2 h-4 w-4" />
+                  Limpar
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
 
-          <div className="flex justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleReset}
-            >
-              Limpar Formulário
-            </Button>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleSetMinimumCondition}
-                className="flex items-center gap-2"
-              >
-                <Calculator className="h-4 w-4" />
-                Calcular Condição Mínima
-              </Button>
-              <Button type="submit" className="flex items-center gap-2">
-                <Calculator className="h-4 w-4" />
-                Calcular Simulação
-              </Button>
-            </div>
-          </div>
-        </form>
-      </Form>
-
+      {/* SEÇÃO DE RESULTADOS */}
       {results && (
         <div ref={resultsRef} className="space-y-6">
           <Card>
@@ -2323,109 +2015,197 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 <CheckCircle2 className="h-5 w-5" />
                 Resultados da Simulação
               </CardTitle>
-              <CardDescription>
-                Confira os resultados da simulação realizada.
-              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Validação de consistência dos pagamentos */}
-              {results.paymentValidation && (
-                <Alert className={results.paymentValidation.isValid ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}>
-                  {results.paymentValidation.isValid ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 text-red-600" />
-                  )}
-                  <AlertTitle className={results.paymentValidation.isValid ? "text-green-800" : "text-red-800"}>
-                    {results.paymentValidation.isValid ? "Pagamentos Consistentes" : "Inconsistência nos Pagamentos"}
-                  </AlertTitle>
-                  <AlertDescription className={results.paymentValidation.isValid ? "text-green-700" : "text-red-700"}>
-                    {results.paymentValidation.isValid 
-                      ? `A soma dos pagamentos (${centsToBrl(results.paymentValidation.actual * 100)}) corresponde ao valor esperado.`
-                      : results.paymentValidation.businessLogicViolation || 
-                        `A soma dos pagamentos (${centsToBrl(results.paymentValidation.actual * 100)}) não corresponde ao valor esperado (${centsToBrl(results.paymentValidation.expected * 100)}).`
-                    }
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold">Financiamento</h3>
-                  <div className="space-y-1">
-                    <div className="flex justify-between">
-                      <span>Valor Financiado:</span>
-                      <span className="font-medium">{centsToBrl(results.financedAmount * 100)}</span>
+            <CardContent className="space-y-6">
+              {/* Resumo dos Valores */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="text-2xl font-bold text-primary">
+                      {centsToBrl(results.financedAmount * 100)}
                     </div>
-                    <div className="flex justify-between">
-                      <span>Total com Juros:</span>
-                      <span className="font-medium">{centsToBrl(results.totalWithInterest * 100)}</span>
+                    <p className="text-xs text-muted-foreground">Valor Financiado</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="text-2xl font-bold text-primary">
+                      {centsToBrl(results.monthlyInstallment ? results.monthlyInstallment * 100 : 0)}
                     </div>
-                    <div className="flex justify-between">
-                      <span>Taxa Média:</span>
-                      <span className="font-medium">{formatPercentage(results.averageInterestRate)}</span>
+                    <p className="text-xs text-muted-foreground">Parcela Mensal</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="text-2xl font-bold text-primary">
+                      {centsToBrl(results.totalWithInterest * 100)}
                     </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold">Comprometimento</h3>
-                  <div className="space-y-1">
-                    <div className="flex justify-between">
-                      <span>Comprometimento de Renda:</span>
-                      <span className={`font-medium ${results.incomeCommitmentPercentage > 0.5 ? 'text-red-600' : 'text-green-600'}`}>
-                        {formatPercentage(results.incomeCommitmentPercentage)}
-                      </span>
+                    <p className="text-xs text-muted-foreground">Total com Juros</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="text-2xl font-bold text-primary">
+                      {formatPercentage(results.averageInterestRate)}
                     </div>
-                    <div className="flex justify-between">
-                      <span>Percentual Parcelado:</span>
-                      <span className={`font-medium ${results.proSolutoCommitmentPercentage > 0.18 ? 'text-red-600' : 'text-green-600'}`}>
-                        {formatPercentage(results.proSolutoCommitmentPercentage)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                    <p className="text-xs text-muted-foreground">Taxa Média</p>
+                  </CardContent>
+                </Card>
               </div>
 
-              {results.incomeError && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Atenção</AlertTitle>
-                  <AlertDescription>{results.incomeError}</AlertDescription>
-                </Alert>
-              )}
+              {/* Gráficos de Comprometimento */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {commitmentChartData && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Comprometimento de Renda</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResultChart data={commitmentChartData} value={results.incomeCommitmentPercentage * 100} />
+                      <div className="mt-4 text-center">
+                        <p className="text-2xl font-bold">
+                          {formatPercentage(results.incomeCommitmentPercentage)}
+                        </p>
+                        {results.incomeError && (
+                          <p className="text-sm text-destructive mt-2">{results.incomeError}</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
-              {results.proSolutoError && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Atenção</AlertTitle>
-                  <AlertDescription>{results.proSolutoError}</AlertDescription>
-                </Alert>
-              )}
+                {proSolutoChartData && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Percentual Parcelado</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResultChart data={proSolutoChartData} value={results.proSolutoCommitmentPercentage * 100} />
+                      <div className="mt-4 text-center">
+                        <p className="text-2xl font-bold">
+                          {formatPercentage(results.proSolutoCommitmentPercentage)}
+                        </p>
+                        {results.proSolutoError && (
+                          <p className="text-sm text-destructive mt-2">{results.proSolutoError}</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
 
-              {results.notaryInstallmentValue && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold">Parcelas de Cartório</h3>
-                  <div className="p-4 border rounded-lg">
-                    <div className="flex justify-between">
-                      <span>Valor da Parcela:</span>
-                      <span className="font-medium">{centsToBrl(results.notaryInstallmentValue * 100)}</span>
+              {/* Linha do Tempo de Pagamentos */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Linha do Tempo de Pagamentos</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Pagamentos Configurados</h4>
+                    <div className="space-y-2">
+                      {form.getValues('payments').map((payment, index) => (
+                        <div key={index} className="flex justify-between items-center p-3 border rounded-lg">
+                          <div>
+                            <span className="font-medium">{paymentFieldOptions.find(opt => opt.value === payment.type)?.label || payment.type}</span>
+                            <span className="text-sm text-muted-foreground ml-2">
+                              {format(payment.date, 'dd/MM/yyyy', { locale: ptBR })}
+                            </span>
+                          </div>
+                          <span className="font-bold">{centsToBrl(payment.value * 100)}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
+                </CardContent>
+              </Card>
+
+              {/* Seguro de Obras */}
+              {results.totalConstructionInsurance > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Seguro de Obras</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold">Total a Pagar:</span>
+                        <span className="text-xl font-bold text-primary">
+                          {centsToBrl(results.totalConstructionInsurance * 100)}
+                        </span>
+                      </div>
+                      
+                      {filteredInsuranceBreakdown.length > 0 && (
+                        <div className="max-h-64 overflow-y-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Mês</TableHead>
+                                <TableHead className="text-right">Valor</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {filteredInsuranceBreakdown.map((item, index) => (
+                                <TableRow key={index}>
+                                  <TableCell>{item.month}</TableCell>
+                                  <TableCell className="text-right">
+                                    {centsToBrl(item.value * 100)}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
               )}
 
-              <div className="flex justify-between pt-4">
-                <div>
-                  <h3 className="text-lg font-semibold">Dados do Corretor</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+              {/* Taxas de Cartório */}
+              {results.notaryInstallmentValue && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Taxas de Cartório</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span>Valor Total:</span>
+                        <span className="font-semibold">
+                          {centsToBrl((form.getValues('notaryFees') || 0) * 100)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Parcela Mensal:</span>
+                        <span className="font-semibold">
+                          {centsToBrl(results.notaryInstallmentValue * 100)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Número de Parcelas:</span>
+                        <span className="font-semibold">
+                          {form.getValues('notaryInstallments')}x
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Dados do Corretor */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Dados do Corretor</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="broker-name">Nome</Label>
+                      <Label htmlFor="broker-name">Nome do Corretor</Label>
                       <Input
                         id="broker-name"
                         value={brokerName}
                         onChange={(e) => setBrokerName(e.target.value)}
-                        placeholder="Nome do corretor"
+                        placeholder="Informe o nome do corretor"
                       />
                     </div>
                     <div>
@@ -2434,116 +2214,32 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                         id="broker-creci"
                         value={brokerCreci}
                         onChange={(e) => setBrokerCreci(e.target.value)}
-                        placeholder="CRECI do corretor"
+                        placeholder="Informe o CRECI"
                       />
                     </div>
                   </div>
-                </div>
+                </CardContent>
+              </Card>
+
+              {/* Botão de Download */}
+              <div className="flex justify-center">
                 <Button
                   onClick={handleGeneratePdf}
-                  disabled={isGeneratingPdf || !brokerName || !brokerCreci}
-                  className="flex items-center gap-2"
+                  disabled={isGeneratingPdf}
+                  size="lg"
                 >
                   {isGeneratingPdf ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
-                    <Download className="h-4 w-4" />
+                    <Download className="mr-2 h-4 w-4" />
                   )}
-                  Gerar PDF
+                  Baixar Proposta em PDF
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ListOrdered className="h-5 w-5" />
-                Linha do Tempo de Pagamentos
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {/* CORREÇÃO: Mudar paymentFields para payments */}
-              <PaymentTimeline
-                payments={form.getValues().payments}
-                constructionStartDate={constructionStartDateObj}
-                deliveryDate={deliveryDateObj}
-                simulationInstallmentValue={form.getValues().simulationInstallmentValue}
-                monthlyInsuranceBreakdown={results.monthlyInsuranceBreakdown}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Repeat className="h-5 w-5" />
-                Gráficos de Comprometimento
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* CORREÇÃO: Adicionar propriedades obrigatórias - chartTitle e value */}
-                <ResultChart
-                  chartTitle="Comprometimento de Renda"
-                  data={commitmentChartData || []}
-                  value={results.incomeCommitmentPercentage * 100}
-                />
-                <ResultChart
-                  chartTitle="Percentual Parcelado"
-                  data={proSolutoChartData || []}
-                  value={results.proSolutoCommitmentPercentage * 100}
-                />
               </div>
             </CardContent>
           </Card>
         </div>
       )}
-
-      <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Selecione uma Unidade</DialogTitle>
-            <DialogDescription>
-              Escolha uma unidade disponível no empreendimento.
-            </DialogDescription>
-          </DialogHeader>
-          {/* CORREÇÃO: Mudar allUnits para units */}
-          <UnitSelectorDialogContent
-            units={filteredUnits}
-            filters={{
-              status: statusFilter,
-              setStatus: setStatusFilter,
-              floor: floorFilter,
-              setFloor: setFloorFilter,
-              typology: typologyFilter,
-              setTypology: setTypologyFilter,
-              sunPosition: sunPositionFilter,
-              setSunPosition: setSunPositionFilter,
-            }}
-            filterOptions={filterOptions}
-            onUnitSelect={handleUnitSelect}
-            isReservaParque={selectedProperty?.enterpriseName.includes('Reserva Parque Clube') || false}
-          />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isTutorialOpen} onOpenChange={setIsTutorialOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Tutorial Interativo</DialogTitle>
-            <DialogDescription>
-              Aprenda a usar a calculadora de fluxo de pagamentos.
-            </DialogDescription>
-          </DialogHeader>
-          <InteractiveTutorial
-            isOpen={isTutorialOpen}
-            onClose={() => setIsTutorialOpen(false)}
-            form={form}
-            results={results}
-          />
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

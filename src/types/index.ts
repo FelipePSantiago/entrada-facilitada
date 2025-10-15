@@ -171,10 +171,11 @@ export interface ExtractPricingOutput {
 // #endregion
 
 // #region PDF & Generic Types
-export interface PdfFormValues extends FormValues {
+
+// CORREÇÃO: Remover a propriedade 'results' pois ela é passada separadamente
+export interface PdfFormValues extends Omit<FormValues, 'results'> {
   brokerName: string;
   brokerCreci: string;
-  results?: Results;
 }
 
 export type PdfResults = Results;
@@ -189,15 +190,10 @@ export interface PDFPageData extends UserOptions {
   } | null;
 }
 
-// CORREÇÃO: Atualizar interface para usar 'payments' em vez de 'paymentFields'
+// CORREÇÃO: Interface REAL do PaymentTimeline baseada no componente analisado
 export interface PaymentTimelineProps {
-  payments: PaymentField[];
-  constructionStartDate: Date | null;
-  deliveryDate: Date | null;
-  simulationInstallmentValue: number;
-  monthlyInsuranceBreakdown: MonthlyInsurance[];
-  steppedInstallments?: number[];
-  periodLengths?: number[];
+  results: Results;
+  formValues: FormValues;
 }
 
 export interface ChartData {
@@ -206,15 +202,16 @@ export interface ChartData {
   fill: string;
 }
 
-// CORREÇÃO: Adicionar propriedade 'value' obrigatória
+// CORREÇÃO: Interface REAL do ResultChart baseada no componente analisado
 export interface ResultChartProps {
-  chartTitle: string;
   data: ChartData[];
   value: number;
 }
 
+// CORREÇÃO: Atualizar interface para incluir allUnits e filteredUnits
 export interface UnitSelectorDialogContentProps {
-  units: CombinedUnit[];
+  allUnits: CombinedUnit[];
+  filteredUnits: CombinedUnit[];
   filters: {
     status: UnitStatus | "Todos";
     setStatus: (status: UnitStatus | "Todos") => void;
@@ -226,7 +223,6 @@ export interface UnitSelectorDialogContentProps {
     setSunPosition: (sunPosition: string) => void;
   };
   filterOptions: {
-    status: string[];
     floors: string[];
     typologies: string[];
     sunPositions: string[];
@@ -235,11 +231,12 @@ export interface UnitSelectorDialogContentProps {
   isReservaParque: boolean;
 }
 
+// CORREÇÃO: Permitir results ser null
 export interface InteractiveTutorialProps {
   isOpen: boolean;
   onClose: () => void;
-  form: any; // You might want to type this more specifically
-  results: Results;
+  form: any;
+  results: Results | null;
 }
 
 export type GenericObject<T = unknown> = Record<string, T>;
@@ -257,28 +254,76 @@ export interface DatePickerProps {
   placeholder?: string;
 }
 
-// CORREÇÃO: Atualizar interface para usar 'payments' em vez de 'paymentFields'
+// CORREÇÃO: Interface REAL do PaymentTimelineComponent baseada no componente analisado
 export interface PaymentTimelineComponentProps {
-  payments: PaymentField[];
-  constructionStartDate: Date | null;
-  deliveryDate: Date | null;
-  simulationInstallmentValue: number;
-  monthlyInsuranceBreakdown: MonthlyInsurance[];
-  steppedInstallments?: number[];
-  periodLengths?: number[];
+  results: Results;
+  formValues: FormValues;
 }
 
-// CORREÇÃO: Adicionar propriedade 'value' obrigatória
+// CORREÇÃO: Interface REAL do ResultChartComponent baseada no componente analisado
 export interface ResultChartComponentProps {
-  chartTitle: string;
   data: ChartData[];
   value: number;
 }
 
-// CORREÇÃO: Interface para a função generatePdf - remover parâmetro extra
-export interface GeneratePdfParams {
-  formValues: PdfFormValues;
-  property: Property;
+// NOVA INTERFACE: Para a função generatePdf
+export interface GeneratePdfFunction {
+  (formValues: PdfFormValues, results: PdfResults, selectedProperty: Property): Promise<void>;
 }
-// #endregion
+
+// Interface para dados extraídos
+export interface ExtractedData extends Partial<ExtractPricingOutput> {
+  grossIncome?: number;
+  simulationInstallmentValue?: number;
+}
+
+// Interface estendida para Results com paymentValidation
+export interface ExtendedResults extends Results {
+  paymentValidation?: {
+    isValid: boolean;
+    difference: number;
+    expected: number;
+    actual: number;
+    businessLogicViolation?: string;
+  };
+}
+
+// Interface para propriedades do PaymentFlowCalculator
+export interface PaymentFlowCalculatorProps {
+  properties: Property[];
+  isSinalCampaignActive: boolean;
+  sinalCampaignLimitPercent?: number;
+  isTutorialOpen: boolean;
+  setIsTutorialOpen: (isOpen: boolean) => void;
+}
+
+// Interface para UnitCard
+export interface UnitCardProps {
+  unit: CombinedUnit;
+  isReservaParque: boolean;
+  onUnitSelect: (unit: CombinedUnit) => void;
+  style?: React.CSSProperties;
+}
+
+// Interface para CurrencyFormField
+export interface CurrencyFormFieldProps {
+  name: keyof FormValues;
+  label: string;
+  control: any;
+  readOnly?: boolean;
+  placeholder?: string;
+  id?: string;
+}
+
+// Interface para o componente PaymentTimeline (alias para compatibilidade)
+export interface PaymentTimelineComponentProps {
+  results: Results;
+  formValues: FormValues;
+}
+
+// Interface para o componente ResultChart (alias para compatibilidade)
+export interface ResultChartComponentProps {
+  data: ChartData[];
+  value: number;
+}
 // #endregion

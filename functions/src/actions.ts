@@ -8,11 +8,7 @@ import { parseExcel } from "./parsers/excel-parser";
 import { getErrorMessage, getValue } from './utils';
 import pdf from 'pdf-parse';
 import { PropertyCache, UserCache, PdfExtractionCache, createFileHash, withCache } from './cache';
-
-// --- ATENÇÃO: FLAG PARA RESET DE 2FA ---
-// Defina como `true` UMA ÚNICA VEZ para forçar todos os usuários a reconfigurarem o 2FA no próximo login.
-// Após a implantação e a migração, retorne para `false`.
-const SHOULD_RESET_2FA = false;
+import { HttpsError } from 'firebase-functions/v2/https';
 
 // Lista de e-mails de administradores
 const adminEmails = [
@@ -462,6 +458,7 @@ export const generateTwoFactorSecretAction = async (uid: string): Promise<string
  */
 export const verifyAndEnableTwoFactorAction = async (data: { uid: string, secretUri: string, token: string }): Promise<boolean> => {
     const { uid, secretUri, token } = data;
+    console.log(`Iniciando habilitação de 2FA para o usuário: ${uid}`);
     try {
         if (typeof uid !== 'string' || !uid) {
             throw new Error("UID do usuário inválido ou não fornecido.");
@@ -476,22 +473,27 @@ export const verifyAndEnableTwoFactorAction = async (data: { uid: string, secret
         const secret = new URL(secretUri).searchParams.get('secret');
         if (!secret) throw new Error("Segredo inválido na URI.");
 
+        console.log(`Verificando token para o usuário: ${uid}`);
         const isValid = verifyTotp(secret, token);
         
         if (isValid) {
+            console.log(`Token válido para ${uid}. Atualizando documento no Firestore...`);
             const userDocRef = adminDb.collection("users").doc(uid);
             await userDocRef.set({ twoFactorURI: secretUri, twoFactorEnabled: true }, { merge: true });
+            console.log(`Documento do usuário ${uid} atualizado com sucesso no Firestore.`);
             
             // Invalidate user cache
             UserCache.invalidateUser(uid);
+            console.log(`Cache para o usuário ${uid} invalidado.`);
             
             return true;
         } else {
+            console.warn(`Token inválido fornecido para o usuário: ${uid}`);
             return false;
         }
 
     } catch (error: unknown) {
-        console.error("Error in verifyAndEnableTwoFactorAction: ", getErrorMessage(error));
+        console.error(`Erro ao habilitar 2FA para o usuário ${uid}:`, getErrorMessage(error));
         throw new Error(`Não foi possível habilitar o 2FA: ${getErrorMessage(error)}`);
     }
 };
@@ -536,19 +538,6 @@ export const getTwoFactorSecretAction = async (uid: string): Promise<string | nu
             UserCache.setUser(uid, userDoc);
         }
 
-        if (SHOULD_RESET_2FA && userDoc.twoFactorEnabled) {
-            const userDocRef = adminDb.collection("users").doc(uid);
-            await userDocRef.update({
-                twoFactorEnabled: false,
-                twoFactorURI: FieldValue.delete(),
-            });
-            
-            // Invalidate cache
-            UserCache.invalidateUser(uid);
-            
-            return null;
-        }
-
         return userDoc.twoFactorURI || null;
 
     } catch (error: unknown) {
@@ -557,14 +546,20 @@ export const getTwoFactorSecretAction = async (uid: string): Promise<string | nu
     }
 };
 
-export const verifyTokenAction = async (data: { uid: string, token: string }): Promise<boolean> => {
+export const verifyTokenAction = async (data: { uid: string, token: string }, context: any): Promise<boolean> => {
+    if (process.env.NODE_ENV !== 'development' && !context.app) {
+        throw new HttpsError('failed-precondition', 'A requisição não foi feita pelo app.');
+    }
+
     const { uid, token } = data;
     try {
         if (typeof uid !== 'string' || !uid) {
-            throw new Error("UID do usuário inválido ou não fornecido.");
+            console.error("Error in verifyTokenAction: UID do usuário inválido ou não fornecido.");
+            return false;
         }
         if (typeof token !== 'string' || !token) {
-            throw new Error("Token inválido ou não fornecido.");
+            console.error("Error in verifyTokenAction: Token inválido ou não fornecido.");
+            return false;
         }
 
         // Tentar obter do cache primeiro
@@ -575,7 +570,8 @@ export const verifyTokenAction = async (data: { uid: string, token: string }): P
             const userDocSnapshot = await userDocRef.get();
             
             if (!userDocSnapshot.exists) {
-                throw new Error("Usuário não encontrado.");
+                console.error(`Error in verifyTokenAction: Usuário não encontrado (UID: ${uid}).`);
+                return false;
             }
             
             userDoc = userDocSnapshot.data() as AppUser;
@@ -583,17 +579,22 @@ export const verifyTokenAction = async (data: { uid: string, token: string }): P
         }
 
         if (!userDoc.twoFactorEnabled || !userDoc.twoFactorURI) {
-            throw new Error("2FA não está habilitado para este usuário.");
+            console.warn(`Tentativa de verificação de token para usuário sem 2FA habilitado (UID: ${uid}).`);
+            return false;
         }
 
         const secret = new URL(userDoc.twoFactorURI).searchParams.get('secret');
-        if (!secret) throw new Error("Segredo inválido na URI do usuário.");
+        if (!secret) {
+            console.error(`Error in verifyTokenAction: Segredo inválido na URI do usuário (UID: ${uid}).`);
+            return false;
+        }
 
         return verifyTotp(secret, token);
 
     } catch (error: unknown) {
         console.error("Error in verifyTokenAction: ", getErrorMessage(error));
-        throw new Error(`Não foi possível verificar o token: ${getErrorMessage(error)}`);
+        // Em vez de relançar, que causa o erro 500, retornamos false
+        return false;
     }
 };
 
