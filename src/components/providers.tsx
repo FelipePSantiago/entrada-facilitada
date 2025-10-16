@@ -6,11 +6,11 @@ import { onSnapshot, doc, getFirestore, collection } from 'firebase/firestore';
 
 import { AuthContext } from '@/contexts/AuthContext';
 import type { Property, AppUser } from '@/types';
-import { auth, app, initializeFirebase, db } from '@/lib/firebase/clientApp';
+import { auth, app, db } from '@/lib/firebase/clientApp';
 import { getFunctions, type Functions, httpsCallable } from 'firebase/functions';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 
 interface ProvidersProps {
-
   children: React.ReactNode;
 }
 
@@ -31,7 +31,29 @@ export function Providers({ children }: ProvidersProps) {
   const [functions, setFunctions] = useState<Functions | null>(null);
 
   useEffect(() => {
-    initializeFirebase();
+    if (typeof window !== 'undefined') {
+      // ATENÇÃO: O token de debug só é habilitado se a aplicação NÃO estiver em produção.
+      if (process.env.NODE_ENV !== 'production') {
+        // @ts-expect-error - Firebase App Check debug token
+        self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+      }
+
+      const recaptchaSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+
+      if (!recaptchaSiteKey) {
+        console.error("ERRO CRÍTICO: A variável de ambiente NEXT_PUBLIC_RECAPTCHA_SITE_KEY não está definida.");
+      } else {
+        try {
+          initializeAppCheck(app, {
+            provider: new ReCaptchaV3Provider(recaptchaSiteKey),
+            isTokenAutoRefreshEnabled: true,
+          });
+        } catch (e) {
+          console.error("Falha ao inicializar o Firebase App Check:", e);
+        }
+      }
+    }
+    
     const funcs = getFunctions(app);
     setFunctions(funcs);
 
@@ -55,11 +77,12 @@ export function Providers({ children }: ProvidersProps) {
     return () => unsubscribeAuth();
   }, []);
 
+  // ... (o resto do arquivo permanece o mesmo) ...
+  
   useEffect(() => {
     setIsPageLoading(false);
   }, [pathname]);
 
-  // Step 1: Listen for the user object from Firebase Auth and fetch the user profile from Firestore.
   useEffect(() => {
     if (!user) {
       setAppUser(null);
@@ -76,14 +99,12 @@ export function Providers({ children }: ProvidersProps) {
     return () => unsubscribeUser();
   }, [user]);
 
-  // Step 2: Once the user profile (appUser) is loaded, check for 2FA status.
   useEffect(() => {
     if (appUser === undefined || !user || !functions) return;
     setAuthLoading(true);
 
     const checkTwoFactor = async () => {
       try {
-        // The backend function will create the user document if it doesn't exist
         const getTwoFactorSecret = httpsCallable(functions, 'getTwoFactorSecretAction');
         const result = await getTwoFactorSecret();
         const secret = result.data as string | null;
@@ -99,7 +120,7 @@ export function Providers({ children }: ProvidersProps) {
         }
 
       } catch (e) {
-        console.error("Failed to check 2FA status:", e);
+        console.error("Falha ao verificar o status do 2FA:", e);
         setHas2FA(false);
         setIsFullyAuthenticated(false);
       } finally {
@@ -107,11 +128,9 @@ export function Providers({ children }: ProvidersProps) {
       }
     };
     
-    // If appUser has loaded (is null or an object) and is not admin, check 2FA.
     if (appUser === null || !appUser.isAdmin) {
       checkTwoFactor();
     } else if (appUser.isAdmin) {
-      // Admins bypass the 2FA flow in the client
       setHas2FA(true); 
       setIsFullyAuthenticated(true);
       setAuthLoading(false);
@@ -119,22 +138,20 @@ export function Providers({ children }: ProvidersProps) {
 
   }, [appUser, user, functions, setIsFullyAuthenticated, setHas2FA, setAuthLoading]);
 
-  // Step 3: Handle routing based on the authentication and 2FA state.
   useEffect(() => {
     if (authLoading) return;
 
     if (!user) {
       if (pathname && !PUBLIC_PATHS.includes(pathname)) {
         router.replace('/login');
-        setIsPageLoading(true); // Indicate page is loading during redirect
+        setIsPageLoading(true);
       }
       return;
     }
 
-    // User is logged in
     const targetPath = appUser?.isAdmin ? '/admin/properties' : '/simulator';
 
-    if (isFullyAuthenticated) { // Fully authenticated (passed 2FA or is admin)
+    if (isFullyAuthenticated) {
       if (AUTH_ONLY_PATHS.includes(pathname) || pathname === '/login') {
          router.replace(targetPath);
          setIsPageLoading(true);
@@ -142,19 +159,18 @@ export function Providers({ children }: ProvidersProps) {
       return;
     }
     
-    // User is logged in but not fully authenticated (pending 2FA)
     if (AUTH_ONLY_PATHS.includes(pathname)) {
-      return; // Already on a 2FA page, stay put
+      return;
     }
 
-    if (has2FA === undefined) return; // Wait for 2FA check to complete
+    if (has2FA === undefined) return;
 
     if (has2FA) {
       router.replace('/verify-2fa');
     } else {
-      router.replace('/setup-2fa'); // Non-admin user needs to set up 2FA
+      router.replace('/setup-2fa');
     }
-    setIsPageLoading(true); // Indicate page is loading during redirect
+    setIsPageLoading(true);
 
   }, [authLoading, user, appUser, isFullyAuthenticated, has2FA, pathname, router]);
 
@@ -175,7 +191,7 @@ export function Providers({ children }: ProvidersProps) {
       setProperties(props);
       setPropertiesLoading(false);
     }, (error) => {
-      console.error("Error fetching properties: ", error);
+      console.error("Erro ao buscar propriedades: ", error);
       setPropertiesLoading(false);
     });
 
@@ -183,17 +199,15 @@ export function Providers({ children }: ProvidersProps) {
   }, [isFullyAuthenticated]);
 
   const isAdmin = appUser?.isAdmin ?? false;
-  // Check isPageLoading only if router is available, otherwise assume initial load
   const showLoader = authLoading || (user && appUser === undefined) || (router && isPageLoading);
 
   if (showLoader) {
     return (
-      // You can add a loader component here if needed
-      <div>Loading...</div> 
+      <div>Carregando...</div> 
     );
   }
 
-  return ( // Use non-null assertion if confident
+  return (
     <AuthContext.Provider value={{ 
         user, 
         isAdmin, 

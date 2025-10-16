@@ -15,15 +15,14 @@ let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
 
-function initializeFirebase() {
-  if (!getApps().length) {
-    app = initializeApp(firebaseConfig);
-  } else {
-    app = getApp();
-  }
-  auth = getAuth(app);
-  db = getFirestore(app);
+// Garante que o Firebase seja inicializado apenas uma vez.
+if (!getApps().length) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApp();
 }
 
-// Export a function to initialize and instances for use after initialization.
-export { initializeFirebase, app, auth, db };
+auth = getAuth(app);
+db = getFirestore(app);
+
+export { app, auth, db };

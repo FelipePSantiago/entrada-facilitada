@@ -7,13 +7,6 @@ const nextConfig = {
     unoptimized: true,
   },
 
-  // Otimizações de compilador
-  compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
-    reactRemoveProperties: process.env.NODE_ENV === 'production',
-  },
-
-  // Otimizações experimentais
   experimental: {
     optimizeCss: true,
     optimizePackageImports: [
@@ -44,9 +37,18 @@ const nextConfig = {
     ],
   },
 
-  // Configuração de webpack otimizada
+  // ABORDAGEM DE DEPURAÇÃO: Adicionando a URL exata e a com wildcard.
+  allowedDevOrigins: [
+    'https://*.cloudworkstations.dev',
+    'https://3000-firebase-studio-1754258520668.cluster-ve345ymguzcd6qqzuko2qbxtfe.cloudworkstations.dev'
+  ],
+
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production',
+    reactRemoveProperties: process.env.NODE_ENV === 'production',
+  },
+
   webpack: (config, { isServer, dev }) => {
-    // Prevenir bundling de 'original-fs' no client
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -57,7 +59,6 @@ const nextConfig = {
       };
     }
 
-    // Otimizações de bundle
     if (!dev && !isServer) {
       config.optimization = {
         ...config.optimization,
@@ -107,13 +108,11 @@ const nextConfig = {
       };
     }
 
-    // Otimizar resolução de módulos
     config.resolve.alias = {
       ...config.resolve.alias,
       '@': './src',
     };
 
-    // Configurar loader para otimizar imagens
     config.module.rules.push({
       test: /\.(png|jpe?g|gif|svg)$/i,
       type: 'asset',
@@ -127,7 +126,6 @@ const nextConfig = {
       },
     });
 
-    // Remover console.log em produção
     if (!dev) {
       config.optimization.minimizer.push(
         new TerserPlugin({
@@ -144,7 +142,6 @@ const nextConfig = {
     return config;
   },
 
-  // Headers de segurança
   async headers() {
     return [
       {
@@ -180,7 +177,6 @@ const nextConfig = {
     ];
   },
 
-  // Redirecionamentos
   async redirects() {
     return [
       {
@@ -191,10 +187,8 @@ const nextConfig = {
     ];
   },
 
-  // Compressão
   compress: true,
 
-  // Powered by header
   poweredByHeader: false,
 };
 

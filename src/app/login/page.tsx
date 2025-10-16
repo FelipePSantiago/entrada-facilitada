@@ -20,6 +20,7 @@ import { signInWithEmailAndPassword, sendEmailVerification } from "firebase/auth
 import { auth } from "@/lib/firebase/clientApp";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
+import { FirebaseError } from "firebase/app";
 
 export default function LoginPage() {
   const { toast } = useToast();
@@ -46,11 +47,35 @@ export default function LoginPage() {
         return;
       }
       // O redirecionamento é tratado pelo AuthContext/Providers
-    } catch {
+    } catch (e) {
+        const error = e as FirebaseError;
+        let title = "Erro no Login";
+        let description = "Ocorreu um erro inesperado. Por favor, tente novamente.";
+
+        switch (error.code) {
+          case 'auth/invalid-credential':
+          case 'auth/wrong-password':
+          case 'auth/user-not-found':
+            title = 'Credenciais Inválidas';
+            description = 'E-mail ou senha incorretos. Verifique seus dados e tente novamente.';
+            break;
+          case 'auth/user-disabled':
+            title = 'Conta Desativada';
+            description = 'Sua conta foi desativada. Entre em contato com o suporte para mais informações.';
+            break;
+          case 'appCheck/recaptcha-error':
+            title = 'Erro de Verificação';
+            description = 'Não foi possível verificar seu dispositivo. Recarregue a página e tente novamente.';
+            break;
+          default:
+            console.error('Erro de login não tratado:', error);
+            break;
+        }
+        
         toast({
             variant: "destructive",
-            title: "Erro no Login",
-            description: "Credenciais inválidas. Verifique seu e-mail e senha.",
+            title: title,
+            description: description,
         });
         setIsLoading(false);
     }
@@ -121,9 +146,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-    
-
-
-
-    
