@@ -2,34 +2,24 @@
 /node_modules
 /functions/node_modules
 
-# Build output
+# Build outputs
 /.next/
-/out/
 /build/
-/functions/lib/
-
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# IDE files
-.vscode/
-.idea/
-
-# Temporary files
-*.tmp
-*.swp
+/dist/
 
 # Firebase
-service-account-key.json
+.firebase/*
+!/.firebase/firebase.json
+!/.firebase/firebaserc
+firebase-debug.log
+firestore-debug.log
+*.log
 
-# Test data
-/test/data/
+# Local environment files
+.env.local
+
+# Puppeteer cache
+/functions/.local-chromium
+
+# TS build info
+*.tsbuildinfo
