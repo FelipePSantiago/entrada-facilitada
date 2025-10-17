@@ -5,7 +5,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getFunctions, httpsCallable, HttpsCallableResult } from "firebase/functions";
-import app from "@/firebase/config"; // Firebase config
+import { app } from "@/firebase/config"; // Firebase config
 import { useAuthState } from "react-firebase-hooks/auth";
 import { getAuth } from "firebase/auth";
 import { FaSpinner } from "react-icons/fa"; // Loading icon
