@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, memo, useCallback } from "react";
 import { useForm, useFieldArray, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable, getFunctions } from "firebase/functions";
 import { formatPercentage, centsToBrl } from "@/lib/business/formatters";
 import {
   Select,
@@ -84,8 +84,6 @@ import { ResultChart, type ChartData } from "@/components/business/result-chart"
 import { validateFileSize, validateMimeType } from "@/lib/validators";
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
-// Importação da configuração do Firebase
-import { functions } from "@/firebase/config";
 
 // Carregamento lazy para melhor performance
 const UnitSelectorDialogContent = dynamic(() => import('./unit-selector-dialog').then(mod => mod.UnitSelectorDialogContent), {
@@ -924,7 +922,8 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     }
 
     setIsExtracting(true);
-    // Usando a instância de functions importada do arquivo de configuração
+    // CORREÇÃO: Obter a instância do Firebase Functions corretamente
+    const functions = getFunctions();
     const extractPricing = httpsCallable<{ file: File }, ExtractPricingOutput>(functions, 'extractPricing');
 
     try {

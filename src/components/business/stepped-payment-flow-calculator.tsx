@@ -71,7 +71,7 @@ import { getNotaryFee } from "@/lib/business/notary-fees";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { DatePicker } from "@/components/ui/date-picker";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import React, { Fragment } from 'react';
+import React from 'react';
 import type { Property, Unit, CombinedUnit, PaymentField, Results, FormValues, PdfFormValues, PaymentFieldType, Tower, MonthlyInsurance, Floor } from "@/types";
 import { ResultChart, type ChartData } from "@/components/business/result-chart";
 import { formatPercentage, centsToBrl } from "@/lib/business/formatters";
@@ -81,8 +81,6 @@ import dynamic from 'next/dynamic';
 import { generatePdf } from "@/lib/generators/pdf-generator";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { cn } from "@/lib/utils";
-// Importação da configuração do Firebase
-import { functions } from "@/firebase/config";
 
 // Carregamento lazy para melhor performance
 const UnitSelectorDialogContent = dynamic(() => import('./unit-selector-dialog').then(mod => mod.UnitSelectorDialogContent), {
@@ -794,7 +792,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     }
     
     const bonusAdimplenciaValue = values.appraisalValue > values.saleValue ? values.appraisalValue - values.saleValue : 0;
-    const sinalAtoPayment = values.payments.find(p => p.type === 'sinalAto');
 
     const proSolutoPayment = values.payments.find(p => p.type === 'proSoluto');
     const hasProSoluto = !!proSolutoPayment;
@@ -965,7 +962,8 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
 
     setIsExtracting(true);
     try {
-      // Usando a instância de functions importada do arquivo de configuração
+      // CORREÇÃO: Obter a instância do Firebase Functions corretamente
+      const functions = getFunctions();
       const extractData = httpsCallable(functions, "extractSimulationData");
       const result = await extractData({ file });
       const data = result.data as ExtractedData;
@@ -1515,11 +1513,13 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
                               render={({ field }) => (
                                 <FormItem>
                                   <FormLabel>Data</FormLabel>
-                                  <DatePicker
-                                    value={field.value ? format(field.value, 'yyyy-MM-dd') : ''}
-                                    onChange={(date) => field.onChange(date ? new Date(date) : new Date())}
-                                    disabled={getDisabledDates(watchedPayments[index]?.type || 'sinalAto') || isDateLocked(watchedPayments[index]?.type || 'sinalAto')}
-                                  />
+                                  <FormControl>
+                                    <DatePicker
+                                      value={field.value ? format(field.value, 'yyyy-MM-dd') : ''}
+                                      onChange={(date) => field.onChange(date ? new Date(date) : new Date())}
+                                      disabled={getDisabledDates(watchedPayments[index]?.type || 'sinalAto') || isDateLocked(watchedPayments[index]?.type || 'sinalAto')}
+                                    />
+                                  </FormControl>
                                 </FormItem>
                               )}
                             />
