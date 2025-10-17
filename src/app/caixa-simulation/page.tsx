@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getFunctions, httpsCallable } from "firebase/functions";
+import { getFunctions, httpsCallable, HttpsCallableResult } from "firebase/functions";
 import app from "@/firebase/config"; // Firebase config
 import { useAuthState } from "react-firebase-hooks/auth";
 import { getAuth } from "firebase/auth";
@@ -17,11 +17,23 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
+// Interface for the simulation result data
+interface SimulationResult {
+  sucesso: boolean;
+  dados?: {
+    prazo: string;
+    valorFinanciamento: string;
+    primeiraPrestacao: string;
+    jurosEfetivos: string;
+  };
+  message?: string;
+}
+
 // This component contains the form for the automated Caixa simulation.
 const CaixaSimulationForm = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<SimulationResult['dados'] | null>(null);
   const [error, setError] = useState("");
 
   const [formData, setFormData] = useState({
@@ -44,21 +56,22 @@ const CaixaSimulationForm = () => {
 
     try {
       const functions = getFunctions(app);
-      const simularFinanciamento = httpsCallable(functions, 'simularFinanciamentoCaixa');
+      const simularFinanciamento = httpsCallable<Record<string, string>, SimulationResult>(functions, 'simularFinanciamentoCaixa');
       
-      const response = await simularFinanciamento(formData);
-      const data = response.data as any;
+      const response: HttpsCallableResult<SimulationResult> = await simularFinanciamento(formData);
+      const data = response.data;
 
-      if (data.sucesso) {
+      if (data.sucesso && data.dados) {
         setResult(data.dados);
         toast({ title: "Sucesso!", description: "Simulação realizada com sucesso." });
       } else {
         throw new Error(data.message || "Falha na simulação.");
       }
-    } catch (err: any) {
+    } catch (err) {
+      const errorMessage = (err instanceof Error) ? err.message : "Ocorreu um erro desconhecido.";
       console.error(err);
-      setError(err.message || "Ocorreu um erro desconhecido.");
-      toast({ variant: "destructive", title: "Erro na Simulação", description: err.message });
+      setError(errorMessage);
+      toast({ variant: "destructive", title: "Erro na Simulação", description: errorMessage });
     } finally {
       setLoading(false);
     }

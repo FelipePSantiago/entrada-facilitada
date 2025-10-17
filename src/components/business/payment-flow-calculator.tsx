@@ -5,7 +5,6 @@ import { useForm, useFieldArray, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { getAuth } from "firebase/auth";
 import { formatPercentage, centsToBrl } from "@/lib/business/formatters";
 import {
   Select,
@@ -58,12 +57,10 @@ import {
   Calculator,
   Info,
   TrendingUp,
-  FileText,
   Building,
   CreditCard,
-  PiggyBank,
 } from "lucide-react";
-import { addMonths, differenceInMonths, format, lastDayOfMonth, startOfMonth, parseISO, isValid } from "date-fns";
+import { addMonths, differenceInMonths, format, startOfMonth, parseISO, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Property, Unit, CombinedUnit, UnitStatus, PaymentField, Results, MonthlyInsurance, FormValues, PdfFormValues, PaymentFieldType, Tower, ExtractPricingOutput } from "@/types";
 import { cn } from "@/lib/utils";
@@ -241,6 +238,9 @@ const validatePaymentSumWithBusinessLogic = (
   actual: number;
   businessLogicViolation?: string;
 } => {
+  // CORREÇÃO: Marcar a variável como intencionalmente não utilizada para silenciar o warning
+  void sinalCampaignLimitPercent;
+
   const calculationTarget = Math.max(appraisalValue, saleValue);
   const totalPayments = payments.reduce((sum, payment) => sum + payment.value, 0);
   const difference = Math.abs(totalPayments - calculationTarget);
@@ -248,7 +248,6 @@ const validatePaymentSumWithBusinessLogic = (
   
   let businessLogicViolation: string | undefined;
   
-  // CORREÇÃO: Calcular valorFinalImovel localmente
   const descontoPayment = payments.find(p => p.type === 'desconto');
   const descontoValue = descontoPayment?.value || 0;
   const valorFinalImovel = saleValue - descontoValue;
@@ -272,7 +271,8 @@ const validatePaymentSumWithBusinessLogic = (
   };
 };
 
-// Função inteligente de recálculo que respeita a condição mínima
+// CORREÇÃO: Função marcada como intencionalmente não utilizada
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const recalculatePaymentsIntelligently = (
   payments: PaymentField[], 
   appraisalValue: number, 
@@ -305,7 +305,6 @@ const recalculatePaymentsIntelligently = (
   let sinalAtoValue = 0;
   let proSolutoValue = 0;
   
-  // CORREÇÃO: Calcular valorFinalImovel localmente
   const descontoPayment = newPayments.find(p => p.type === 'desconto');
   const descontoValue = descontoPayment?.value || 0;
   const valorFinalImovel = saleValue - descontoValue;
@@ -471,7 +470,6 @@ const applyMinimumCondition = (
 
   const descontoPayment = newPayments.find(p => p.type === 'desconto');
   const descontoValue = descontoPayment?.value || 0;
-  // CORREÇÃO: valorFinalImovel já está definido aqui
   const valorFinalImovel = saleValue - descontoValue;
 
   const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
@@ -778,16 +776,14 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   const watchedPropertyId = form.watch('propertyId');
   const watchedFinancingParticipants = form.watch('financingParticipants');
   const watchedNotaryPaymentMethod = form.watch('notaryPaymentMethod');
-  const watchedInstallments = form.watch('installments');
+  // CORREÇÃO: Removida variável 'watchedInstallments' não utilizada
 
   const { setValue, trigger, getValues } = form;
   
-  // CORREÇÃO: Adicionar useEffect para cálculo automático das taxas de cartório (igual ao stepped)
   useEffect(() => {
     const propertyDetails = properties.find((p: Property) => p.id === watchedPropertyId);
     if (!propertyDetails) return;
     
-    // CORREÇÃO: Usar appraisalValue em vez de saleValue
     const baseFee = getNotaryFee(watchedAppraisalValue);
     const participants = watchedFinancingParticipants || 0;
     const additionalFee = participants > 1 ? (participants - 1) * 110 : 0;
@@ -907,7 +903,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // CORREÇÃO: Adicionar segundo parâmetro para validateMimeType
     if (!validateMimeType(file, ['application/pdf'])) {
       toast({
         title: "Erro de upload",
@@ -1064,8 +1059,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       return;
     }
 
-    // CORREÇÃO: Usar appraisalValue em vez de saleValue e calcular parcela com juros
-    // CORREÇÃO: Garantir que notaryPaymentMethod não seja undefined
     const notaryFees = data.notaryFees || getNotaryFee(data.appraisalValue);
     const notaryInstallment = data.notaryInstallments && data.notaryInstallments > 0 && data.notaryPaymentMethod ? 
       calculateNotaryInstallment(notaryFees, data.notaryInstallments, data.notaryPaymentMethod) : 
@@ -1148,22 +1141,19 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
 
   const handleGeneratePdf = useCallback(async () => {
     if (!results) return;
-  
+
     setIsGeneratingPdf(true);
     try {
       const formValues = getValues();
       const propertyDetails = properties.find((p: Property) => p.id === formValues.propertyId);
-      const selectedUnit = allUnits.find((u) => u.unitNumber === formValues.selectedUnit);
-  
-      // CORREÇÃO: Remover unitDetails que não existe em PdfFormValues
+      // CORREÇÃO: Removida variável 'selectedUnit' não utilizada
+
       const pdfFormValues: PdfFormValues = {
         ...formValues,
-        // selectedUnit já está incluído no formValues pelo spread operator
         brokerName,
         brokerCreci,
       };
-  
-      // CORREÇÃO: Converter ExtendedResults para Results
+
       const pdfResults: Results = {
         summary: results.summary,
         financedAmount: results.financedAmount,
@@ -1179,8 +1169,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         incomeError: results.incomeError,
         proSolutoError: results.proSolutoError,
       };
-  
-      // CORREÇÃO: Passar 3 argumentos para generatePdf
+
       await generatePdf(pdfFormValues, pdfResults, propertyDetails!);
       
       toast({
@@ -1198,9 +1187,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     } finally {
       setIsGeneratingPdf(false);
     }
-  }, [results, form, properties, allUnits, brokerName, brokerCreci, toast]);
+    // CORREÇÃO: Adicionada dependência 'getValues' ao useCallback
+  }, [results, form, properties, allUnits, brokerName, brokerCreci, toast, getValues]);
 
-  // CORREÇÃO: Ajustar chartData para usar a interface ChartData correta
   const chartData = useMemo((): ChartData[] => {
     if (!results) return [];
 
@@ -1283,7 +1272,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     });
   }, [isSinalCampaignActive]);
 
-  // CORREÇÃO: Adicionar funções auxiliares para filtros
   const uniqueFloors = useMemo(() => {
     const floors = Array.from(new Set(allUnits.map(unit => unit.floor))).sort((a, b) => {
       const numA = parseInt(a);
@@ -1339,10 +1327,13 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Empreendimento *</FormLabel>
-                        <Select onValueChange={(value) => {
-                          field.onChange(value);
-                          handlePropertyChange(value);
-                        }} value={field.value}>
+                        <Select 
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            handlePropertyChange(value);
+                          }} 
+                          value={field.value}
+                        >
                           <FormControl>
                             <SelectTrigger className="bg-white">
                               <SelectValue placeholder="Selecione um empreendimento" />
@@ -1553,7 +1544,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   })}
                 </div>
 
-                {/* Lista de Pagamentos */}
+                {/* Lista de Pagamentos com estrutura correta do FormField */}
                 {fields.length > 0 && (
                   <div className="space-y-4">
                     <Label>Pagamentos Configurados</Label>
@@ -1561,6 +1552,34 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                       {fields.map((field, index) => (
                         <div key={field.id} className="flex flex-col sm:flex-row gap-3 items-start p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
                           <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <FormField
+                              control={form.control}
+                              name={`payments.${index}.type`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Tipo</FormLabel>
+                                  <Select
+                                    onValueChange={field.onChange}
+                                    value={field.value}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Selecione o tipo" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      {paymentFieldOptions.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                          {option.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
                             <FormField
                               control={form.control}
                               name={`payments.${index}.value`}
@@ -1589,7 +1608,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                                 <FormItem>
                                   <FormLabel>Data</FormLabel>
                                   <FormControl>
-                                    {/* CORREÇÃO: Converter Date para string ISO */}
                                     <DatePicker
                                       value={field.value ? field.value.toISOString().split('T')[0] : ''}
                                       onChange={(dateString) => field.onChange(dateString ? new Date(dateString) : new Date())}
@@ -1815,14 +1833,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 </div>
               </section>
             </form>
-            
-            {/* CORREÇÃO: Mover InteractiveTutorial para DENTRO do Form */}
-            <InteractiveTutorial
-              isOpen={isTutorialOpen}
-              onClose={() => setIsTutorialOpen(false)}
-              form={form}
-              results={convertToResults(results)}
-            />
           </Form>
         </CardContent>
       </Card>
@@ -1861,7 +1871,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               {chartData.length > 0 && (
                 <div className="space-y-4">
                   <h4 className="text-lg font-semibold text-slate-700">Distribuição dos Custos</h4>
-                  {/* CORREÇÃO: Adicionar propriedade value obrigatória */}
                   <ResultChart data={chartData} value={results.totalCost || 0} />
                 </div>
               )}
@@ -1988,7 +1997,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               Escolha uma unidade disponível para preencher automaticamente os valores.
             </DialogDescription>
           </DialogHeader>
-          {/* CORREÇÃO: Usar props corretas para UnitSelectorDialogContent com todas as funções set */}
           <UnitSelectorDialogContent
             allUnits={allUnits}
             filteredUnits={filteredUnits}
@@ -2012,6 +2020,13 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
           />
         </DialogContent>
       </Dialog>
+
+      <InteractiveTutorial
+        isOpen={isTutorialOpen}
+        onClose={() => setIsTutorialOpen(false)}
+        form={form}
+        results={convertToResults(results)}
+      />
     </div>
   );
 }

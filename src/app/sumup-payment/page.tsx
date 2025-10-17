@@ -8,7 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Importações do Firebase para chamar a função
-import { getFunctions, httpsCallable } from "firebase/functions";
+import { getFunctions, httpsCallable, HttpsCallableResult } from "firebase/functions";
+
+// Interface for the payment result data
+interface PaymentResult {
+    checkout_url?: string;
+}
 
 export default function SumUpPaymentPage() {
     const [amount, setAmount] = useState('50.00'); // Valor de exemplo
@@ -24,9 +29,9 @@ export default function SumUpPaymentPage() {
 
         try {
             const functions = getFunctions(); // Obtém a instância do Firebase Functions
-            const processSumupPayment = httpsCallable(functions, 'processSumupPaymentAction');
+            const processSumupPayment = httpsCallable<Record<string, string>, PaymentResult>(functions, 'processSumupPaymentAction');
 
-            const result: any = await processSumupPayment({
+            const result: HttpsCallableResult<PaymentResult> = await processSumupPayment({
                 amount,
                 currency,
                 email,
@@ -39,10 +44,11 @@ export default function SumUpPaymentPage() {
             } else {
                 throw new Error('URL de checkout não recebida.');
             }
-        } catch (err: any) {
+        } catch (err) {
+            const errorMessage = (err instanceof Error) ? err.message : 'Ocorreu um erro ao processar o pagamento. Tente novamente.';
             console.error("Erro ao chamar a função de pagamento:", err);
             // Define uma mensagem de erro amigável para o usuário
-            setError(err.message || 'Ocorreu um erro ao processar o pagamento. Tente novamente.');
+            setError(errorMessage);
         } finally {
             setIsLoading(false);
         }

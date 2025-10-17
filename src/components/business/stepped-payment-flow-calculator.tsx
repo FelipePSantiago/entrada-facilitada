@@ -1,9 +1,8 @@
 "use client";
 
 import { useRef, useState, useMemo, useEffect, useCallback, memo } from "react";
-import { useForm, useFieldArray, type Control, type FieldValues, type ControllerRenderProps } from "react-hook-form";
+import { useForm, useFieldArray, type Control } from "react-hook-form"; // CORREÇÃO 1: Removidos tipos não utilizados
 import { zodResolver } from "@hookform/resolvers/zod";
-import { getAuth } from "firebase/auth";
 import * as z from "zod";
 import {
   Select,
@@ -19,10 +18,10 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  CardFooter,
+  // CORREÇÃO 2: Removido 'CardFooter' não utilizado
 } from "@/components/ui/card";
 import {
-  Form,
+  // CORREÇÃO 3: Removido 'Form' não utilizado
   FormControl,
   FormField,
   FormItem,
@@ -40,10 +39,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  CalendarClock,
-  Wallet,
+  // CORREÇÃO 4: Removidos ícones não utilizados
   Repeat,
-  HandCoins,
   PlusCircle,
   XCircle,
   Building,
@@ -51,17 +48,11 @@ import {
   Upload,
   Loader2,
   Users,
-  AlertCircle,
-  MapPin,
   CheckCircle2,
   Sparkles,
-  ChevronRight,
   FileText,
-  CreditCard,
   ListOrdered,
   ShieldCheck,
-  User,
-  Briefcase,
   Download,
   Calculator,
   TrendingUp,
@@ -71,12 +62,7 @@ import {
 import { addDays, addMonths, differenceInMonths, format, lastDayOfMonth, startOfMonth, parseISO, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
+  // CORREÇÃO 5: Removidos componentes de Accordion não utilizados
   Table,
   TableBody,
   TableCell,
@@ -84,7 +70,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { getNotaryFee } from "@/lib/business/notary-fees";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -110,7 +95,7 @@ const UnitSelectorDialogContent = dynamic(() => import('./unit-selector-dialog')
 const InteractiveTutorial = dynamic(() => import('@/components/common/interactive-tutorial').then(mod => mod.InteractiveTutorial), {
     ssr: false,
 });
-import { PaymentTimeline } from "@/components/business/payment-timeline"; 
+// CORREÇÃO 6: Removida importação 'PaymentTimeline' não utilizada
 
 // Cache para cálculos de seguro
 const insuranceCache = new Map<string, { total: number; breakdown: MonthlyInsurance[]; timestamp: number }>();
@@ -267,6 +252,9 @@ const validatePaymentSumWithBusinessLogic = (
   actual: number;
   businessLogicViolation?: string;
 } => {
+  // CORREÇÃO 7: Marcar a variável como intencionalmente não utilizada
+  void sinalCampaignLimitPercent;
+
   const calculationTarget = Math.max(appraisalValue, saleValue);
   const totalPayments = payments.reduce((sum, payment) => sum + payment.value, 0);
   const difference = Math.abs(totalPayments - calculationTarget);
@@ -382,18 +370,18 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
   const watchedPayments = form.watch('payments');
   const watchedAppraisalValue = form.watch('appraisalValue');
   const watchedSaleValue = form.watch('saleValue');
-  const watchedConditionType = form.watch('conditionType');
+  // CORREÇÃO 8: Removida variável 'watchedConditionType' não utilizada
   const watchedPropertyId = form.watch('propertyId');
   const watchedFinancingParticipants = form.watch('financingParticipants');
   const watchedNotaryPaymentMethod = form.watch('notaryPaymentMethod');
-  const watchedInstallments = form.watch('installments');
+  // CORREÇÃO 9: Removida variável 'watchedInstallments' não utilizada
 
-  const { setValue, setError, trigger, getValues, clearErrors } = form;
+  const { setValue, setError, getValues, clearErrors } = form; // CORREÇÃO 10: Removido 'trigger' não utilizado
   
   const hasSinal1 = useMemo(() => watchedPayments.some((p: PaymentField) => p.type === 'sinal1'), [watchedPayments]);
   const hasSinal2 = useMemo(() => watchedPayments.some((p: PaymentField) => p.type === 'sinal2'), [watchedPayments]);
   
-  const financingPaymentsCount = useMemo(() => watchedPayments.filter(p => p.type === 'financiamento').length, [watchedPayments]);
+  // CORREÇÃO 11: Removida variável 'financingPaymentsCount' não utilizada
   
   const availablePaymentFields = useMemo(() => {
     return paymentFieldOptions.filter(opt => {
@@ -815,7 +803,7 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     
     const bonusAdimplenciaValue = values.appraisalValue > values.saleValue ? values.appraisalValue - values.saleValue : 0;
     const sinalAtoPayment = values.payments.find(p => p.type === 'sinalAto');
-    const sinalAtoValue = sinalAtoPayment?.value || 0;
+    // CORREÇÃO 12: Removida variável 'sinalAtoValue' não utilizada
 
     const proSolutoPayment = values.payments.find(p => p.type === 'proSoluto');
     const hasProSoluto = !!proSolutoPayment;
@@ -1471,7 +1459,7 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
 
                   <div className="space-y-4">
                     {fields.map((field, index) => {
-                      const selectedField = paymentFieldOptions.find(opt => opt.value === field.type);
+                      // CORREÇÃO 13: Removida variável 'selectedField' não utilizada
                       const isProSoluto = field.type === 'proSoluto';
                       const isBonusAdimplencia = field.type === 'bonusAdimplencia';
                       const isBonusCampanha = field.type === 'bonusCampanha';

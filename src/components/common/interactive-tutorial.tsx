@@ -12,7 +12,7 @@ import { UseFormReturn } from 'react-hook-form';
 interface InteractiveTutorialProps {
   isOpen: boolean;
   onClose: () => void;
-  form: UseFormReturn<FormValues>;
+  form: UseFormReturn<FormValues> | null | undefined; // Allow null or undefined
   results: Results | null;
 }
 
@@ -24,7 +24,7 @@ interface Step {
   isCompleted?: () => boolean;
 }
 
-export function InteractiveTutorial({ isOpen, onClose, form, results }: InteractiveTutorialProps) {
+const TutorialContent: React.FC<Omit<InteractiveTutorialProps, 'isOpen' | 'form'> & { form: UseFormReturn<FormValues> }> = ({ onClose, form, results }) => {
   const [step, setStep] = useState(0);
   const { toast } = useToast();
   const [highlightedElement, setHighlightedElement] = useState<HTMLElement | null>(null);
@@ -111,7 +111,7 @@ export function InteractiveTutorial({ isOpen, onClose, form, results }: Interact
         highlightedElement.classList.remove('tutorial-highlight');
     }
 
-    if (isOpen && currentStep) {
+    if (currentStep) {
         if (currentStep.targetId !== 'root-tutorial') {
             const target = document.getElementById(currentStep.targetId);
             if (target) {
@@ -129,7 +129,7 @@ export function InteractiveTutorial({ isOpen, onClose, form, results }: Interact
             highlightedElement.classList.remove('tutorial-highlight');
         }
     };
-  }, [step, isOpen, currentStep, highlightedElement]);
+  }, [step, currentStep, highlightedElement]);
 
   const handleNext = async () => {
     if (currentStep.isCompleted && !currentStep.isCompleted()) {
@@ -153,8 +153,6 @@ export function InteractiveTutorial({ isOpen, onClose, form, results }: Interact
       setStep(step - 1);
     }
   };
-
-  if (!isOpen) return null;
 
   return (
       <Card className="fixed bottom-4 right-4 sm:max-w-md w-full z-50 shadow-2xl animate-in slide-in-from-bottom-5">
@@ -190,4 +188,12 @@ export function InteractiveTutorial({ isOpen, onClose, form, results }: Interact
         </CardFooter>
       </Card>
   );
+}
+
+export function InteractiveTutorial({ isOpen, onClose, form, results }: InteractiveTutorialProps) {
+  if (!isOpen || !form) {
+    return null;
+  }
+
+  return <TutorialContent onClose={onClose} form={form} results={results} />;
 }

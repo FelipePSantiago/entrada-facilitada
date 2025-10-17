@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type { jsPDF } from 'jspdf';
 import type { UserOptions } from 'jspdf-autotable';
 import type { FieldValue, Timestamp } from 'firebase/firestore';
+// CORREÇÃO 1: Importar os tipos necessários do react-hook-form
+import { type UseFormReturn, type Control } from 'react-hook-form';
 
 // #region User & Auth Types
 export interface AppUser {
@@ -231,11 +233,12 @@ export interface UnitSelectorDialogContentProps {
   isReservaParque: boolean;
 }
 
-// CORREÇÃO: Permitir results ser null
+// CORREÇÃO: Permitir results ser null e usar o tipo correto para 'form'
 export interface InteractiveTutorialProps {
   isOpen: boolean;
   onClose: () => void;
-  form: any;
+  // CORREÇÃO 2: Substituir 'any' pelo tipo específico do react-hook-form
+  form: UseFormReturn<FormValues>;
   results: Results | null;
 }
 
@@ -309,7 +312,8 @@ export interface UnitCardProps {
 export interface CurrencyFormFieldProps {
   name: keyof FormValues;
   label: string;
-  control: any;
+  // CORREÇÃO 3: Substituir 'any' pelo tipo específico do react-hook-form
+  control: Control<FormValues>;
   readOnly?: boolean;
   placeholder?: string;
   id?: string;

@@ -7,12 +7,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { SinalCampaignToggle } from '@/components/common/SinalCampaignToggle';
 import { ExternalLink, Loader2 } from 'lucide-react';
-import type { UseFormReturn } from 'react-hook-form';
-import type { FormValues } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-// Lazy load the calculators and tutorial
+// Lazy load the calculators
 const PaymentFlowCalculator = dynamic(() =>
   import('@/components/business/payment-flow-calculator').then(mod => mod.PaymentFlowCalculator),
   {
@@ -28,14 +26,6 @@ const SteppedPaymentFlowCalculator = dynamic(() =>
     ssr: false
   }
 );
-
-const InteractiveTutorial = dynamic(() =>
-  import('@/components/common/interactive-tutorial').then(mod => mod.InteractiveTutorial),
-  {
-    ssr: false
-  }
-);
-
 
 const CalculatorSkeleton = () => (
     <div className="p-6 md:p-8">
@@ -96,14 +86,6 @@ export default function SimulatorPage() {
     
     return (
         <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-            {isTutorialOpen && (
-                <InteractiveTutorial
-                    isOpen={isTutorialOpen}
-                    onClose={() => setIsTutorialOpen(false)}
-                    form={undefined as unknown as UseFormReturn<FormValues>} 
-                    results={null}
-                />
-            )}
             <div className="w-full">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                      <Select value={activeCalculator} onValueChange={(value) => setActiveCalculator(value as CalculatorType)}>

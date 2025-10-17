@@ -12,8 +12,9 @@ const firebaseConfig = {
 };
 
 let app: FirebaseApp;
-let auth: Auth;
-let db: Firestore;
+// CORREÇÃO: Mudar 'let' para 'const' pois as variáveis não são reatribuídas
+const auth: Auth;
+const db: Firestore;
 
 // Garante que o Firebase seja inicializado apenas uma vez.
 if (!getApps().length) {
