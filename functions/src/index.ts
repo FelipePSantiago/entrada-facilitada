@@ -47,11 +47,11 @@ const humanDelay = (min = 300, max = 700) => {
 // ================================ FUNÇÕES AUXILIARES =================================
 // =======================================================================================
 
-export const extractDataFromSimulationPdfAction = onCall({ ...publicOptions, maxInstances: 10}, withSecurity(async (request: CallableRequest) => {
+export const extractPricing = onCall({ ...publicOptions, maxInstances: 10}, withSecurity(async (request: CallableRequest) => {
     const uid = ensureAuth(request);
     if (!request.data?.dataUrl) throw new HttpsError('invalid-argument', 'Nenhum arquivo enviado.');
     const dataUrl = sanitizeInput.fileBase64(request.data.dataUrl, 10);
-    return actions.extractDataFromSimulationPdfAction({ file: dataUrl });
+    return actions.extractPricingAction({ file: dataUrl });
   }, { requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.PDF_EXTRACTION, allowedOrigins, maxFileSize: 10 }));
 
 export const processSumupPaymentAction = onCall({ ...publicOptions, secrets: ["SUMUP_APIKEY"], maxInstances: 20 }, withSecurity((request: CallableRequest) => processSumupPayment(request), { requireAuth: false, rateLimitConfig: RATE_LIMIT_CONFIGS.API, allowedOrigins }));

@@ -19,7 +19,7 @@ const adminEmails = [
 /**
  * Extrai dados de um PDF de simulação da Caixa com cache
  */
-export const extractDataFromSimulationPdfAction = withCache(
+export const extractPricingAction = withCache(
   async (fileHash: string) => `pdf_extraction:${fileHash}`,
   async (data: { file: string }): Promise<ExtractPricingOutput> => {
     try {
