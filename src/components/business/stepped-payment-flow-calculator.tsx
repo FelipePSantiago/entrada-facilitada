@@ -81,6 +81,8 @@ import dynamic from 'next/dynamic';
 import { generatePdf } from "@/lib/generators/pdf-generator";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { cn } from "@/lib/utils";
+// Importação da configuração do Firebase
+import { functions } from "@/firebase/config";
 
 // Carregamento lazy para melhor performance
 const UnitSelectorDialogContent = dynamic(() => import('./unit-selector-dialog').then(mod => mod.UnitSelectorDialogContent), {
@@ -963,7 +965,7 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
 
     setIsExtracting(true);
     try {
-      const functions = getFunctions();
+      // Usando a instância de functions importada do arquivo de configuração
       const extractData = httpsCallable(functions, "extractSimulationData");
       const result = await extractData({ file });
       const data = result.data as ExtractedData;
