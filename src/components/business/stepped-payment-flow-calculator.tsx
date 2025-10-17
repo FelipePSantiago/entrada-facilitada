@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useMemo, useEffect, useCallback, memo } from "react";
-import { useForm, useFieldArray, type Control } from "react-hook-form"; // CORREÇÃO 1: Removidos tipos não utilizados
+import { useForm, useFieldArray, type Control, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import {
@@ -18,10 +18,8 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  // CORREÇÃO 2: Removido 'CardFooter' não utilizado
 } from "@/components/ui/card";
 import {
-  // CORREÇÃO 3: Removido 'Form' não utilizado
   FormControl,
   FormField,
   FormItem,
@@ -39,7 +37,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  // CORREÇÃO 4: Removidos ícones não utilizados
   Repeat,
   PlusCircle,
   XCircle,
@@ -62,7 +59,6 @@ import {
 import { addDays, addMonths, differenceInMonths, format, lastDayOfMonth, startOfMonth, parseISO, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  // CORREÇÃO 5: Removidos componentes de Accordion não utilizados
   Table,
   TableBody,
   TableCell,
@@ -95,7 +91,6 @@ const UnitSelectorDialogContent = dynamic(() => import('./unit-selector-dialog')
 const InteractiveTutorial = dynamic(() => import('@/components/common/interactive-tutorial').then(mod => mod.InteractiveTutorial), {
     ssr: false,
 });
-// CORREÇÃO 6: Removida importação 'PaymentTimeline' não utilizada
 
 // Cache para cálculos de seguro
 const insuranceCache = new Map<string, { total: number; breakdown: MonthlyInsurance[]; timestamp: number }>();
@@ -252,7 +247,6 @@ const validatePaymentSumWithBusinessLogic = (
   actual: number;
   businessLogicViolation?: string;
 } => {
-  // CORREÇÃO 7: Marcar a variável como intencionalmente não utilizada
   void sinalCampaignLimitPercent;
 
   const calculationTarget = Math.max(appraisalValue, saleValue);
@@ -370,18 +364,14 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
   const watchedPayments = form.watch('payments');
   const watchedAppraisalValue = form.watch('appraisalValue');
   const watchedSaleValue = form.watch('saleValue');
-  // CORREÇÃO 8: Removida variável 'watchedConditionType' não utilizada
   const watchedPropertyId = form.watch('propertyId');
   const watchedFinancingParticipants = form.watch('financingParticipants');
   const watchedNotaryPaymentMethod = form.watch('notaryPaymentMethod');
-  // CORREÇÃO 9: Removida variável 'watchedInstallments' não utilizada
 
-  const { setValue, setError, getValues, clearErrors } = form; // CORREÇÃO 10: Removido 'trigger' não utilizado
+  const { setValue, setError, getValues, clearErrors } = form;
   
   const hasSinal1 = useMemo(() => watchedPayments.some((p: PaymentField) => p.type === 'sinal1'), [watchedPayments]);
   const hasSinal2 = useMemo(() => watchedPayments.some((p: PaymentField) => p.type === 'sinal2'), [watchedPayments]);
-  
-  // CORREÇÃO 11: Removida variável 'financingPaymentsCount' não utilizada
   
   const availablePaymentFields = useMemo(() => {
     return paymentFieldOptions.filter(opt => {
@@ -803,7 +793,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     
     const bonusAdimplenciaValue = values.appraisalValue > values.saleValue ? values.appraisalValue - values.saleValue : 0;
     const sinalAtoPayment = values.payments.find(p => p.type === 'sinalAto');
-    // CORREÇÃO 12: Removida variável 'sinalAtoValue' não utilizada
 
     const proSolutoPayment = values.payments.find(p => p.type === 'proSoluto');
     const hasProSoluto = !!proSolutoPayment;
@@ -890,7 +879,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
       );
     }
 
-    // CORREÇÃO: Definir mensagens de erro como string ou undefined
     let incomeError: string | undefined = undefined;
     let proSolutoError: string | undefined = undefined;
 
@@ -1023,7 +1011,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     try {
       const formValues = getValues();
       
-      // CORREÇÃO: Criar objeto results compatível com a função generatePdf
       const pdfResults: Results = {
         summary: results.summary,
         financedAmount: results.financedAmount,
@@ -1042,13 +1029,10 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
 
       const pdfData: PdfFormValues = {
         ...formValues,
-        // CORREÇÃO: Remover propertyName que não existe em PdfFormValues
-        // Usar apenas as propriedades definidas na interface PdfFormValues
         brokerName,
         brokerCreci,
       };
 
-      // CORREÇÃO: Passar os 3 argumentos necessários
       await generatePdf(pdfData, pdfResults, selectedProperty);
       
       toast({
@@ -1067,7 +1051,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     }
   };
 
-  // CORREÇÃO: Ajustar chartData para usar a interface ChartData correta
   const chartData: ChartData[] = useMemo(() => {
     if (!results) return [];
     return [
@@ -1140,7 +1123,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     completeOperation();
   }, [append, deliveryDateObj, canProceedWithOperation, completeOperation]);
 
-  // CORREÇÃO: Função para obter datas desabilitadas
   const getDisabledDates = (type: PaymentFieldType): ((date: Date) => boolean) | undefined => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -1238,7 +1220,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
                         <h3 className="font-semibold text-lg text-slate-900">
                           {selectedProperty.enterpriseName}
                         </h3>
-                        {/* CORREÇÃO: Usar propriedades existentes em Property */}
                         <p className="text-slate-600 text-sm">
                           {selectedProperty.brand} • {selectedProperty.deliveryDate ? format(parseISO(selectedProperty.deliveryDate), "dd/MM/yyyy") : "Data não definida"}
                         </p>
@@ -1459,7 +1440,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
 
                   <div className="space-y-4">
                     {fields.map((field, index) => {
-                      // CORREÇÃO 13: Removida variável 'selectedField' não utilizada
                       const isProSoluto = field.type === 'proSoluto';
                       const isBonusAdimplencia = field.type === 'bonusAdimplencia';
                       const isBonusCampanha = field.type === 'bonusCampanha';
@@ -1533,7 +1513,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
                               render={({ field }) => (
                                 <FormItem>
                                   <FormLabel>Data</FormLabel>
-                                  {/* CORREÇÃO: Usar DatePicker corretamente e acessar o tipo do watchedPayments */}
                                   <DatePicker
                                     value={field.value ? format(field.value, 'yyyy-MM-dd') : ''}
                                     onChange={(date) => field.onChange(date ? new Date(date) : new Date())}
@@ -1726,7 +1705,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
                         Parcelas Escalonadas
                       </h4>
                       
-                      {/* CORREÇÃO: Verificar se steppedInstallments existe */}
                       {results.steppedInstallments && results.steppedInstallments.map((installment, index) => (
                         <div key={index} className="bg-slate-800/50 rounded-lg p-4">
                           <div className="flex justify-between items-center mb-2">
@@ -1741,7 +1719,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
                             <div 
                               className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
                               style={{ 
-                                // CORREÇÃO: Verificar se steppedInstallments existe e tem valores
                                 width: `${(installment / Math.max(...(results.steppedInstallments || [1]))) * 100}%` 
                               }}
                             />
@@ -1813,7 +1790,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {/* CORREÇÃO: Adicionar propriedade value obrigatória */}
                     <ResultChart data={chartData} value={results.totalCost || 0} />
                     
                     <div className="grid grid-cols-2 gap-4 mt-6 text-sm">
@@ -1983,7 +1959,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
             </DialogDescription>
           </DialogHeader>
           
-          {/* CORREÇÃO: Usar props corretas para UnitSelectorDialogContent */}
           {selectedProperty && (
             <UnitSelectorDialogContent
               allUnits={allUnits}
@@ -2010,27 +1985,29 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
         </DialogContent>
       </Dialog>
 
-      {/* CORREÇÃO: Converter ExtendedResults para Results para o InteractiveTutorial */}
-      <InteractiveTutorial
-        isOpen={isTutorialOpen}
-        onClose={() => setIsTutorialOpen(false)}
-        form={form}
-        results={results ? {
-          summary: results.summary,
-          financedAmount: results.financedAmount,
-          steppedInstallments: results.steppedInstallments || [0, 0, 0, 0],
-          periodLengths: results.periodLengths || [0, 0, 0, 0],
-          totalWithInterest: results.totalWithInterest,
-          totalConstructionInsurance: results.totalConstructionInsurance,
-          monthlyInsuranceBreakdown: results.monthlyInsuranceBreakdown || [],
-          incomeCommitmentPercentage: results.incomeCommitmentPercentage,
-          proSolutoCommitmentPercentage: results.proSolutoCommitmentPercentage,
-          averageInterestRate: results.averageInterestRate,
-          notaryInstallmentValue: results.notaryInstallmentValue,
-          incomeError: results.incomeError,
-          proSolutoError: results.proSolutoError,
-        } : null}
-      />
+      {/* CORREÇÃO FINAL: Envolver o InteractiveTutorial em um FormProvider para fornecer o contexto */}
+      <FormProvider {...form}>
+        <InteractiveTutorial
+          isOpen={isTutorialOpen}
+          onClose={() => setIsTutorialOpen(false)}
+          form={form}
+          results={results ? {
+            summary: results.summary,
+            financedAmount: results.financedAmount,
+            steppedInstallments: results.steppedInstallments || [0, 0, 0, 0],
+            periodLengths: results.periodLengths || [0, 0, 0, 0],
+            totalWithInterest: results.totalWithInterest,
+            totalConstructionInsurance: results.totalConstructionInsurance,
+            monthlyInsuranceBreakdown: results.monthlyInsuranceBreakdown || [],
+            incomeCommitmentPercentage: results.incomeCommitmentPercentage,
+            proSolutoCommitmentPercentage: results.proSolutoCommitmentPercentage,
+            averageInterestRate: results.averageInterestRate,
+            notaryInstallmentValue: results.notaryInstallmentValue,
+            incomeError: results.incomeError,
+            proSolutoError: results.proSolutoError,
+          } : null}
+        />
+      </FormProvider>
     </div>
   );
 }

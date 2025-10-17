@@ -11,19 +11,12 @@ const firebaseConfig = {
     appId: "1:173059756960:web:051d6a05f1c84d8e278ac5",
 };
 
-let app: FirebaseApp;
-// CORREÇÃO: Mudar 'let' para 'const' pois as variáveis não são reatribuídas
-const auth: Auth;
-const db: Firestore;
+// CORREÇÃO: Declara e inicializa 'app' em uma única linha usando um operador ternário.
+// Isso garante que o app seja inicializado apenas uma vez.
+const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Garante que o Firebase seja inicializado apenas uma vez.
-if (!getApps().length) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApp();
-}
-
-auth = getAuth(app);
-db = getFirestore(app);
+// CORREÇÃO: Agora que 'app' está garantidamente inicializado, podemos declarar e inicializar 'auth' e 'db' como constantes.
+const auth: Auth = getAuth(app);
+const db: Firestore = getFirestore(app);
 
 export { app, auth, db };
