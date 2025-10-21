@@ -641,68 +641,77 @@ interface UnitCardProps {
 }
 
 const UnitCard = memo(({ unit, isReservaParque, onUnitSelect, style }: UnitCardProps) => {
-    const unitDisplay = useMemo(() => 
-      isReservaParque ? `Torre ${unit.block}` : `Bloco ${unit.block}`,
-      [isReservaParque, unit.block]
-    );
-    
-    const handleClick = useCallback(() => {
-        if (unit.status === 'Disponível') {
-            onUnitSelect(unit);
-        }
-    }, [unit, onUnitSelect]);
-    
-    return (
-        <div style={style} className="transform transition-all duration-300 hover:scale-105">
-            <Card 
-                className={cn(
-                    "cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl border-2 rounded-xl overflow-hidden group h-full flex flex-col",
-                    getStatusBadgeClass(unit.status),
-                    unit.status === 'Disponível' && 'hover:border-blue-400 hover:shadow-blue-100'
-                )}
-                onClick={handleClick}
-            >
-                <CardHeader className="p-3 sm:p-4 pb-2 flex-row justify-between items-start bg-gradient-to-r from-gray-50 to-white">
-                    <div>
-                        <p className="font-bold text-sm sm:text-base text-gray-900">{unitDisplay}</p>
-                        <p className="font-semibold text-xs sm:text-sm text-blue-700">Unidade {unit.unitNumber}</p>
-                        <p className="text-xs text-gray-600">{unit.floor}</p>
-                    </div>
-                    <div className={cn("text-xs font-bold px-2 sm:px-3 py-1 rounded-full transition-all duration-200", getStatusBadgeClass(unit.status).replace(/hover:[a-z-]+/g, ''))}>
-                    {unit.status}
-                    </div>
-                </CardHeader>
-                <CardContent className="p-3 sm:p-4 pt-2 text-xs space-y-2 flex-grow bg-white">
-                    <div className="flex justify-between items-baseline pt-2 border-b border-gray-100">
-                        <span className="font-semibold text-gray-600">Venda:</span>
-                        <span className="font-bold text-sm sm:text-lg text-blue-700 break-words">{centsToBrl(unit.saleValue)}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-gray-700">
-                        <div className="flex items-center gap-1">
-                            <Grid3X3 className="h-3 w-3 text-blue-600" />
-                            <span className="text-xs"><strong>Tipologia:</strong> {unit.typology}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <Ruler className="h-3 w-3 text-blue-600" />
-                            <span className="text-xs"><strong>Área:</strong> {(unit.privateArea).toFixed(1)}m²</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <Sun className="h-3 w-3 text-blue-600" />
-                            <span className="text-xs"><strong>Sol:</strong> {unit.sunPosition}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <Car className="h-3 w-3 text-blue-600" />
-                            <span className="text-xs"><strong>Vagas:</strong> {unit.parkingSpaces}</span>
-                        </div>
-                    </div>
-                    <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-                        <span className="text-xs text-gray-600">Avaliação:</span>
-                        <span className="text-xs font-semibold text-gray-800">{centsToBrl(unit.appraisalValue)}</span>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
-    );
+  const unitDisplay = useMemo(() => 
+    isReservaParque ? `Torre ${unit.block}` : `Bloco ${unit.block}`,
+    [isReservaParque, unit.block]
+  );
+  
+  const handleClick = useCallback(() => {
+      if (unit.status === 'Disponível') {
+          onUnitSelect(unit);
+      }
+  }, [unit, onUnitSelect]);
+  
+  return (
+      <div style={style} className="transform transition-all duration-300 hover:scale-105">
+          <Card 
+              className={cn(
+                  "cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl border-2 rounded-xl overflow-hidden group h-full flex flex-col",
+                  "bg-card text-card-foreground",
+                  unit.status === 'Disponível' && 'hover:border-primary hover:shadow-primary/20',
+                  unit.status === 'Vendido' && 'opacity-60 cursor-not-allowed',
+                  unit.status === 'Reservado' && 'opacity-80 cursor-not-allowed',
+                  unit.status === 'Indisponível' && 'opacity-60 cursor-not-allowed'
+              )}
+              onClick={handleClick}
+          >
+              <CardHeader className="p-3 sm:p-4 pb-2 flex-row justify-between items-start bg-gradient-to-r from-card to-muted/20">
+                  <div>
+                      <p className="font-bold text-sm sm:text-base text-foreground">{unitDisplay}</p>
+                      <p className="font-semibold text-xs sm:text-sm text-primary">Unidade {unit.unitNumber}</p>
+                      <p className="text-xs text-muted-foreground">{unit.floor}</p>
+                  </div>
+                  <div className={cn(
+                      "text-xs font-bold px-2 sm:px-3 py-1 rounded-full transition-all duration-200",
+                      unit.status === 'Disponível' && 'bg-primary/10 text-primary border border-primary/20',
+                      unit.status === 'Vendido' && 'bg-muted text-muted-foreground border border-muted',
+                      unit.status === 'Reservado' && 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
+                      unit.status === 'Indisponível' && 'bg-muted text-muted-foreground border border-muted'
+                  )}>
+                  {unit.status}
+                  </div>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4 pt-2 text-xs space-y-2 flex-grow bg-card">
+                  <div className="flex justify-between items-baseline pt-2 border-b border-border">
+                      <span className="font-semibold text-muted-foreground">Venda:</span>
+                      <span className="font-bold text-sm sm:text-lg text-primary break-words">{centsToBrl(unit.saleValue)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                          <Grid3X3 className="h-3 w-3 text-primary" />
+                          <span className="text-xs"><strong>Tipologia:</strong> {unit.typology}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                          <Ruler className="h-3 w-3 text-primary" />
+                          <span className="text-xs"><strong>Área:</strong> {(unit.privateArea).toFixed(1)}m²</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                          <Sun className="h-3 w-3 text-primary" />
+                          <span className="text-xs"><strong>Sol:</strong> {unit.sunPosition}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                          <Car className="h-3 w-3 text-primary" />
+                          <span className="text-xs"><strong>Vagas:</strong> {unit.parkingSpaces}</span>
+                      </div>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-border">
+                      <span className="text-xs text-muted-foreground">Avaliação:</span>
+                      <span className="text-xs font-semibold text-foreground">{centsToBrl(unit.appraisalValue)}</span>
+                  </div>
+              </CardContent>
+          </Card>
+      </div>
+  );
 });
 UnitCard.displayName = 'UnitCard';
 
@@ -2098,97 +2107,97 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         </Card>
       )}
 
-      <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
-        <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto sm:max-w-full sm:w-[95vw] sm:mx-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Selecione uma Unidade</DialogTitle>
-            <DialogDescription className="text-sm sm:text-base">
-              Escolha uma unidade disponível no empreendimento selecionado.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <Label>Status</Label>
-                <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todos</SelectItem>
-                    <SelectItem value="Disponível">Disponível</SelectItem>
-                    <SelectItem value="Vendido">Vendido</SelectItem>
-                    <SelectItem value="Reservado">Reservado</SelectItem>
-                    <SelectItem value="Indisponível">Indisponível</SelectItem>
-                  </SelectContent>
-                </Select>
+        <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
+          <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">Selecione uma Unidade</DialogTitle>
+              <DialogDescription className="text-sm sm:text-base">
+                Escolha uma unidade disponível no empreendimento selecionado.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <Label>Status</Label>
+                  <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Todos">Todos</SelectItem>
+                      <SelectItem value="Disponível">Disponível</SelectItem>
+                      <SelectItem value="Vendido">Vendido</SelectItem>
+                      <SelectItem value="Reservado">Reservado</SelectItem>
+                      <SelectItem value="Indisponível">Indisponível</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Andar</Label>
+                  <Select value={floorFilter} onValueChange={setFloorFilter}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Todos">Todos</SelectItem>
+                      {filterOptions.floors.map((floor) => (
+                        <SelectItem key={floor} value={floor}>
+                          {floor}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Tipologia</Label>
+                  <Select value={typologyFilter} onValueChange={setTypologyFilter}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Todos">Todos</SelectItem>
+                      {filterOptions.typologies.map((typology) => (
+                        <SelectItem key={typology} value={typology}>
+                          {typology}
+                        </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Posição Solar</Label>
+                  <Select value={sunPositionFilter} onValueChange={setSunPositionFilter}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Todos">Todos</SelectItem>
+                      {filterOptions.sunPositions.map((position) => (
+                        <SelectItem key={position} value={position}>
+                          {position}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
-              <div>
-                <Label>Andar</Label>
-                <Select value={floorFilter} onValueChange={setFloorFilter}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todos</SelectItem>
-                    {filterOptions.floors.map((floor) => (
-                      <SelectItem key={floor} value={floor}>
-                        {floor}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>Tipologia</Label>
-                <Select value={typologyFilter} onValueChange={setTypologyFilter}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todos</SelectItem>
-                    {filterOptions.typologies.map((typology) => (
-                      <SelectItem key={typology} value={typology}>
-                        {typology}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>Posição Solar</Label>
-                <Select value={sunPositionFilter} onValueChange={setSunPositionFilter}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todos</SelectItem>
-                    {filterOptions.sunPositions.map((position) => (
-                      <SelectItem key={position} value={position}>
-                        {position}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {filteredUnits.map((unit) => (
+                  <UnitCard
+                    key={unit.unitId}
+                    unit={unit}
+                    isReservaParque={selectedProperty?.enterpriseName.includes('Reserva Parque Clube') || false}
+                    onUnitSelect={handleUnitSelect}
+                  />
+                ))}
               </div>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredUnits.map((unit) => (
-                <UnitCard
-                  key={unit.unitId}
-                  unit={unit}
-                  isReservaParque={selectedProperty?.enterpriseName.includes('Reserva Parque Clube') || false}
-                  onUnitSelect={handleUnitSelect}
-                />
-              ))}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
 
       <InteractiveTutorial
         isOpen={isTutorialOpen}
