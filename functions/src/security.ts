@@ -165,71 +165,73 @@ export const getClientIP = (request: functions.https.Request): string => {
   return request.ip || 'unknown';
 };
 
-
-// Middleware de segurança completo
+// Middleware de segurança completo (Refatorado com Currying)
 export const withSecurity = (
-  handler: any,
   options: {
     requireAuth?: boolean;
     requireAdmin?: boolean;
+    // ... cole aqui o resto das suas opções que já existem
     rateLimitConfig?: RATE_LIMIT_CONFIGS[keyof RATE_LIMIT_CONFIGS];
     allowedOrigins?: string[];
     maxFileSize?: number;
   } = {}
 ) => {
-  return async (request: any) => {
-    try {
-      // Validar origem para funções 'onCall'
-      if (options.allowedOrigins && request.rawRequest) {
-        const origin = request.rawRequest.headers.origin;
-        if (!validateOrigin(origin, options.allowedOrigins)) {
-          throw new functions.https.HttpsError('permission-denied', 'Origem não permitida');
-        }
-      }
-      
-      // Rate limiting
-      if (options.rateLimitConfig) {
-        const ip = getClientIP(request);
-        const rateLimitKey = RateLimitKeys.byIP(ip);
-        const rateLimiter = withRateLimit(options.rateLimitConfig);
-        rateLimiter(rateLimitKey);
-      }
-      
-      // Autenticação
-      let uid = null;
-      if (options.requireAuth || options.requireAdmin) {
-        if (!request.auth || !request.auth.uid) {
-          throw new functions.https.HttpsError('unauthenticated', 'Autenticação necessária');
-        }
-        uid = request.auth.uid;
-        
-        // Verificar admin
-        if (options.requireAdmin) {
-          const isAdmin = await validatePermissions.isAdmin(uid);
-          if (!isAdmin) {
-            throw new functions.https.HttpsError('permission-denied', 'Permissão de administrador necessária');
+  return (handler: any) => { // A função agora retorna outra função que recebe o handler
+    return async (request: any) => {
+      try {
+        // ... toda a sua lógica de segurança existente permanece AQUI, inalterada
+        // Validar origem para funções 'onCall'
+        if (options.allowedOrigins && request.rawRequest) {
+          const origin = request.rawRequest.headers.origin;
+          if (!validateOrigin(origin, options.allowedOrigins)) {
+            throw new functions.https.HttpsError('permission-denied', 'Origem não permitida');
           }
-          securityLogger.logAdminAction(uid, 'function_call', request.path);
         }
+        
+        // Rate limiting
+        if (options.rateLimitConfig) {
+          const ip = getClientIP(request);
+          const rateLimitKey = RateLimitKeys.byIP(ip);
+          const rateLimiter = withRateLimit(options.rateLimitConfig);
+          rateLimiter(rateLimitKey);
+        }
+        
+        // Autenticação
+        let uid = null;
+        if (options.requireAuth || options.requireAdmin) {
+          if (!request.auth || !request.auth.uid) {
+            throw new functions.https.HttpsError('unauthenticated', 'Autenticação necessária');
+          }
+          uid = request.auth.uid;
+          
+          // Verificar admin
+          if (options.requireAdmin) {
+            const isAdmin = await validatePermissions.isAdmin(uid);
+            if (!isAdmin) {
+              throw new functions.https.HttpsError('permission-denied', 'Permissão de administrador necessária');
+            }
+            securityLogger.logAdminAction(uid, 'function_call', request.path);
+          }
+        }
+        
+        // Validar tamanho de arquivo
+        if (options.maxFileSize && request.data?.dataUrl) {
+          sanitizeInput.fileBase64(request.data.dataUrl, options.maxFileSize);
+        }
+        
+        // Executar handler
+        return await handler(request);
+        
+      } catch (error: any) {
+        securityLogger.logSuspiciousActivity(
+          request.auth?.uid || 'anonymous',
+          'security_violation',
+          { error: error.message, path: request.path }
+        );
+        throw error;
       }
-      
-      // Validar tamanho de arquivo
-      if (options.maxFileSize && request.data?.dataUrl) {
-        sanitizeInput.fileBase64(request.data.dataUrl, options.maxFileSize);
-      }
-      
-      // Executar handler
-      return await handler(request);
-      
-    } catch (error: any) {
-      securityLogger.logSuspiciousActivity(
-        request.auth?.uid || 'anonymous',
-        'security_violation',
-        { error: error.message, path: request.path }
-      );
-      throw error;
-    }
-  };
+    };
+  }
 };
 
 export default {

@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 import type { jsPDF } from 'jspdf';
 import type { UserOptions } from 'jspdf-autotable';
@@ -233,6 +234,14 @@ export interface UnitSelectorDialogContentProps {
   isReservaParque: boolean;
 }
 
+export interface Step {
+  id: string;
+  title: string;
+  description: string | React.ReactNode;
+  targetId: string;
+  isCompleted?: () => boolean;
+}
+
 // CORREÇÃO: Permitir results ser null e usar o tipo correto para 'form'
 export interface InteractiveTutorialProps {
   isOpen: boolean;
@@ -240,6 +249,7 @@ export interface InteractiveTutorialProps {
   // CORREÇÃO 2: Substituir 'any' pelo tipo específico do react-hook-form
   form: UseFormReturn<FormValues>;
   results: Results | null;
+  steps: Step[];
 }
 
 export type GenericObject<T = unknown> = Record<string, T>;

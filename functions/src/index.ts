@@ -47,27 +47,85 @@ const humanDelay = (min = 300, max = 700) => {
 // ================================ FUNÇÕES AUXILIARES =================================
 // =======================================================================================
 
-export const extractPricing = onCall({ ...publicOptions, maxInstances: 10}, withSecurity(async (request: CallableRequest) => {
+export const extractPricing = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.PDF_EXTRACTION, allowedOrigins, maxFileSize: 10 })
+  (async (request: CallableRequest) => {
     const uid = ensureAuth(request);
     if (!request.data?.dataUrl) throw new HttpsError('invalid-argument', 'Nenhum arquivo enviado.');
     const dataUrl = sanitizeInput.fileBase64(request.data.dataUrl, 10);
     return actions.extractPricingAction({ file: dataUrl });
-  }, { requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.PDF_EXTRACTION, allowedOrigins, maxFileSize: 10 }));
+  })
+);
 
-export const processSumupPaymentAction = onCall({ ...publicOptions, secrets: ["SUMUP_APIKEY"], maxInstances: 20 }, withSecurity((request: CallableRequest) => processSumupPayment(request), { requireAuth: false, rateLimitConfig: RATE_LIMIT_CONFIGS.API, allowedOrigins }));
-export const savePropertyAction = onCall({ ...publicOptions, maxInstances: 5 }, withSecurity((request: CallableRequest) => (ensureAuth(request), actions.savePropertyAction({ ...request.data, idToken: request.data.idToken })), { requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins }));
-export const batchCreatePropertiesAction = onCall({ ...publicOptions, maxInstances: 3 }, withSecurity((request: CallableRequest) => (ensureAuth(request), actions.batchCreatePropertiesAction({ ...request.data, idToken: request.data.idToken })), { requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins }));
-export const deletePropertyAction = onCall({ ...publicOptions, maxInstances: 5 }, withSecurity((request: CallableRequest) => (ensureAuth(request), actions.deletePropertyAction({ ...request.data, idToken: request.data.idToken })), { requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins }));
-export const deleteAllPropertiesAction = onCall({ ...publicOptions, maxInstances: 1 }, withSecurity((request: CallableRequest) => (ensureAuth(request), actions.deleteAllPropertiesAction({ ...request.data, idToken: request.data.idToken })), { requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins }));
-export const updatePropertyPricingAction = onCall({ ...publicOptions, maxInstances: 5 }, withSecurity((request: CallableRequest) => (ensureAuth(request), actions.updatePropertyPricingAction({ ...request.data, idToken: request.data.idToken })), { requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins }));
-export const deletePropertyPricingAction = onCall({ ...publicOptions, maxInstances: 5 }, withSecurity((request: CallableRequest) => (ensureAuth(request), actions.deletePropertyPricingAction({ ...request.data, idToken: request.data.idToken })), { requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins }));
-export const generateTwoFactorSecretAction = onCall({ ...publicOptions, maxInstances: 10 }, withSecurity((request: CallableRequest) => actions.generateTwoFactorSecretAction(ensureAuth(request)), { requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins }));
-export const verifyAndEnableTwoFactorAction = onCall({ ...publicOptions, maxInstances: 10 }, withSecurity((request: CallableRequest) => actions.verifyAndEnableTwoFactorAction({ ...request.data, uid: ensureAuth(request) }), { requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins }));
-export const getTwoFactorSecretAction = onCall({ ...publicOptions, maxInstances: 10 }, withSecurity((request: CallableRequest) => actions.getTwoFactorSecretAction(ensureAuth(request)), { requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins }));
-export const verifyTokenAction = onCall({ ...publicOptions, maxInstances: 20 }, withSecurity((request: CallableRequest) => actions.verifyTokenAction({ uid: ensureAuth(request), token: request.data.token }, request), { requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins }));
-export const handleUnitStatusChangeAction = onCall({ ...publicOptions, maxInstances: 10 }, withSecurity((request: CallableRequest) => (ensureAuth(request), actions.handleUnitStatusChangeAction(request.data)), { requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins }));
-export const updatePropertyAvailabilityAction = onCall({ ...publicOptions, maxInstances: 10 }, withSecurity((request: CallableRequest) => (ensureAuth(request), actions.updatePropertyAvailabilityAction(request.data)), { requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins }));
-export const getPropertiesAction = onCall({ ...publicOptions, maxInstances: 20 }, withSecurity(async (request: CallableRequest) => (ensureAuth(request), { properties: await actions.getPropertiesAction() }), { requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.API, allowedOrigins }));
+export const processSumupPaymentAction = onCall({ ...publicOptions, secrets: ["SUMUP_APIKEY"], maxInstances: 20 }, 
+  withSecurity({ requireAuth: false, rateLimitConfig: RATE_LIMIT_CONFIGS.API, allowedOrigins })
+  ((request: CallableRequest) => processSumupPayment(request))
+);
+
+export const savePropertyAction = onCall({ ...publicOptions, maxInstances: 5 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.savePropertyAction({ ...request.data, idToken: request.data.idToken })))
+);
+
+export const batchCreatePropertiesAction = onCall({ ...publicOptions, maxInstances: 3 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.batchCreatePropertiesAction({ ...request.data, idToken: request.data.idToken })))
+);
+
+export const deletePropertyAction = onCall({ ...publicOptions, maxInstances: 5 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.deletePropertyAction({ ...request.data, idToken: request.data.idToken })))
+);
+
+export const deleteAllPropertiesAction = onCall({ ...publicOptions, maxInstances: 1 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.deleteAllPropertiesAction({ ...request.data, idToken: request.data.idToken })))
+);
+
+export const updatePropertyPricingAction = onCall({ ...publicOptions, maxInstances: 5 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.updatePropertyPricingAction({ ...request.data, idToken: request.data.idToken })))
+);
+
+export const deletePropertyPricingAction = onCall({ ...publicOptions, maxInstances: 5 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.deletePropertyPricingAction({ ...request.data, idToken: request.data.idToken })))
+);
+
+export const generateTwoFactorSecretAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins })
+  ((request: CallableRequest) => actions.generateTwoFactorSecretAction(ensureAuth(request)))
+);
+
+export const verifyAndEnableTwoFactorAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins })
+  ((request: CallableRequest) => actions.verifyAndEnableTwoFactorAction({ ...request.data, uid: ensureAuth(request) }))
+);
+
+export const getTwoFactorSecretAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins })
+  ((request: CallableRequest) => actions.getTwoFactorSecretAction(ensureAuth(request)))
+);
+
+export const verifyTokenAction = onCall({ ...publicOptions, maxInstances: 20 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins })
+  ((request: CallableRequest) => actions.verifyTokenAction({ uid: ensureAuth(request), token: request.data.token }, request))
+);
+
+export const handleUnitStatusChangeAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.handleUnitStatusChangeAction(request.data)))
+);
+
+export const updatePropertyAvailabilityAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.updatePropertyAvailabilityAction(request.data)))
+);
+
+export const getPropertiesAction = onCall({ ...publicOptions, maxInstances: 20 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.API, allowedOrigins })
+  (async (request: CallableRequest) => (ensureAuth(request), { properties: await actions.getPropertiesAction() }))
+);
 
 
 // =======================================================================================
@@ -123,109 +181,109 @@ export const simularFinanciamentoCaixa = onCall({
     memory: "2GiB",
     maxInstances: 5,
     timeoutSeconds: 300,
-}, withSecurity(
-    async (request: CallableRequest) => {
-        const uid = ensureAuth(request);
-        const { renda, dataNascimento, valorImovel, sistemaAmortizacao } = request.data;
-        const prazoObra = '36';
+}, 
+  withSecurity({
+      requireAuth: true,
+      rateLimitConfig: RATE_LIMIT_CONFIGS.SIMULATION,
+      allowedOrigins,
+  })
+  (async (request: CallableRequest) => {
+      const uid = ensureAuth(request);
+      const { renda, dataNascimento, valorImovel, sistemaAmortizacao } = request.data;
+      const prazoObra = '36';
 
-        if (!renda || !dataNascimento || !valorImovel || !sistemaAmortizacao) {
-            throw new HttpsError('invalid-argument', 'Faltam dados obrigatórios para a simulação.');
-        }
+      if (!renda || !dataNascimento || !valorImovel || !sistemaAmortizacao) {
+          throw new HttpsError('invalid-argument', 'Faltam dados obrigatórios para a simulação.');
+      }
 
-        console.log(`Iniciando simulação completa para o usuário: ${uid}.`);
-        let browser = null;
+      console.log(`Iniciando simulação completa para o usuário: ${uid}.`);
+      let browser = null;
 
-        try {
-            browser = await puppeteer.launch({
-                args: chromium.args,
-                defaultViewport: chromium.defaultViewport,
-                executablePath: await chromium.executablePath(),
-                headless: chromium.headless,
-                ignoreHTTPSErrors: true,
-            });
-            
-            const page = await browser.newPage();
-            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36');
-            page.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT);
+      try {
+          browser = await puppeteer.launch({
+              args: chromium.args,
+              defaultViewport: chromium.defaultViewport,
+              executablePath: await chromium.executablePath(),
+              headless: chromium.headless,
+              ignoreHTTPSErrors: true,
+          });
+          
+          const page = await browser.newPage();
+          await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36');
+          page.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT);
 
-            // ETAPA 1
-            await page.goto('https://www.portaldeempreendimentos.caixa.gov.br/simulador/', { waitUntil: 'networkidle2' });
-            await page.select(SELECTORS.pagina1.origemRecurso, '15');
-            await Promise.all([
-                page.waitForNavigation(),
-                page.click(SELECTORS.pagina1.submitButton)
-            ]);
+          // ETAPA 1
+          await page.goto('https://www.portaldeempreendimentos.caixa.gov.br/simulador/', { waitUntil: 'networkidle2' });
+          await page.select(SELECTORS.pagina1.origemRecurso, '15');
+          await Promise.all([
+              page.waitForNavigation(),
+              page.click(SELECTORS.pagina1.submitButton)
+          ]);
 
-            // ETAPA 2
-            await page.waitForSelector(SELECTORS.pagina2.categoriaImovel);
-            await page.select(SELECTORS.pagina2.categoriaImovel, '16');
-            await page.type(SELECTORS.pagina2.cidade, 'Brasília - DF', { delay: 100 });
-            await page.type(SELECTORS.pagina2.valorImovel, valorImovel, { delay: 100 });
-            await page.type(SELECTORS.pagina2.rendaFamiliar, renda, { delay: 100 });
-            await Promise.all([
-                page.waitForNavigation(),
-                page.click(SELECTORS.pagina2.submitButton)
-            ]);
+          // ETAPA 2
+          await page.waitForSelector(SELECTORS.pagina2.categoriaImovel);
+          await page.select(SELECTORS.pagina2.categoriaImovel, '16');
+          await page.type(SELECTORS.pagina2.cidade, 'Brasília - DF', { delay: 100 });
+          await page.type(SELECTORS.pagina2.valorImovel, valorImovel, { delay: 100 });
+          await page.type(SELECTORS.pagina2.rendaFamiliar, renda, { delay: 100 });
+          await Promise.all([
+              page.waitForNavigation(),
+              page.click(SELECTORS.pagina2.submitButton)
+          ]);
 
-            // ETAPA 3
-            await page.waitForSelector(SELECTORS.pagina3.dataNascimento);
-            await page.type(SELECTORS.pagina3.dataNascimento, dataNascimento, { delay: 100 });
-            await Promise.all([
-                page.waitForNavigation(),
-                page.click(SELECTORS.pagina3.submitButton)
-            ]);
+          // ETAPA 3
+          await page.waitForSelector(SELECTORS.pagina3.dataNascimento);
+          await page.type(SELECTORS.pagina3.dataNascimento, dataNascimento, { delay: 100 });
+          await Promise.all([
+              page.waitForNavigation(),
+              page.click(SELECTORS.pagina3.submitButton)
+          ]);
 
-            // ETAPA 4
-            await page.waitForSelector(SELECTORS.pagina4.opcaoEnquadramento);
-            await Promise.all([
-                page.waitForNavigation(),
-                page.click(SELECTORS.pagina4.opcaoEnquadramento)
-            ]);
+          // ETAPA 4
+          await page.waitForSelector(SELECTORS.pagina4.opcaoEnquadramento);
+          await Promise.all([
+              page.waitForNavigation(),
+              page.click(SELECTORS.pagina4.opcaoEnquadramento)
+          ]);
 
-            // ETAPA 5
-            await page.waitForSelector(SELECTORS.pagina5.sistemaAmortizacao);
-            const valorSistemaAmortizacao = sistemaAmortizacao === 'SAC TR' ? '793' : '794';
-            await page.select(SELECTORS.pagina5.sistemaAmortizacao, valorSistemaAmortizacao);
-            await Promise.all([
-                page.waitForNavigation(),
-                page.click(SELECTORS.pagina5.submitButton)
-            ]);
+          // ETAPA 5
+          await page.waitForSelector(SELECTORS.pagina5.sistemaAmortizacao);
+          const valorSistemaAmortizacao = sistemaAmortizacao === 'SAC TR' ? '793' : '794';
+          await page.select(SELECTORS.pagina5.sistemaAmortizacao, valorSistemaAmortizacao);
+          await Promise.all([
+              page.waitForNavigation(),
+              page.click(SELECTORS.pagina5.submitButton)
+          ]);
 
-            // ETAPA 6
-            await page.waitForSelector(SELECTORS.pagina6.quantidadeMeses);
-            await page.type(SELECTORS.pagina6.quantidadeMeses, prazoObra, { delay: 100 });
-            await Promise.all([
-                page.waitForNavigation(),
-                page.click(SELECTORS.pagina6.submitButton)
-            ]);
-            await page.waitForSelector(SELECTORS.pagina6.submitButton);
-            await humanDelay(500, 800);
-            await Promise.all([
-                page.waitForNavigation(),
-                page.click(SELECTORS.pagina6.submitButton)
-            ]);
+          // ETAPA 6
+          await page.waitForSelector(SELECTORS.pagina6.quantidadeMeses);
+          await page.type(SELECTORS.pagina6.quantidadeMeses, prazoObra, { delay: 100 });
+          await Promise.all([
+              page.waitForNavigation(),
+              page.click(SELECTORS.pagina6.submitButton)
+          ]);
+          await page.waitForSelector(SELECTORS.pagina6.submitButton);
+          await humanDelay(500, 800);
+          await Promise.all([
+              page.waitForNavigation(),
+              page.click(SELECTORS.pagina6.submitButton)
+          ]);
 
-            // ETAPA 7
-            await page.waitForSelector(SELECTORS.pagina7.resultsTable);
-            const simulationData = await extractResults(page);
+          // ETAPA 7
+          await page.waitForSelector(SELECTORS.pagina7.resultsTable);
+          const simulationData = await extractResults(page);
 
-            return { sucesso: true, mensagem: "Simulação concluída com sucesso.", dados: simulationData };
+          return { sucesso: true, mensagem: "Simulação concluída com sucesso.", dados: simulationData };
 
-        } catch (error: any) {
-            console.error(`Erro detalhado na simulação da Caixa: ${error.stack}`);
-            if (error instanceof HttpsError) throw error;
-            throw new HttpsError('internal', `Erro inesperado na automação: ${error.message}`);
-        } finally {
-            if (browser) {
-                await browser.close();
-                console.log("Browser fechado com sucesso.");
-            }
-        }
-    },
-    {
-        requireAuth: true,
-        rateLimitConfig: RATE_LIMIT_CONFIGS.SIMULATION,
-        allowedOrigins,
-    }
-));
+      } catch (error: any) {
+          console.error(`Erro detalhado na simulação da Caixa: ${error.stack}`);
+          if (error instanceof HttpsError) throw error;
+          throw new HttpsError('internal', `Erro inesperado na automação: ${error.message}`);
+      } finally {
+          if (browser) {
+              await browser.close();
+              console.log("Browser fechado com sucesso.");
+          }
+      }
+  })
+);
