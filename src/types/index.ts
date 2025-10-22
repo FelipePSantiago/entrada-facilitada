@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 import type { jsPDF } from 'jspdf';
 import type { UserOptions } from 'jspdf-autotable';
@@ -234,11 +233,12 @@ export interface UnitSelectorDialogContentProps {
   isReservaParque: boolean;
 }
 
+// CORREÇÃO: Atualizar interface Step para usar content e target em vez de description e targetId
 export interface Step {
   id: string;
   title: string;
-  description: string | React.ReactNode;
-  targetId: string;
+  content: string | React.ReactNode;
+  target: string;
   isCompleted?: () => boolean;
 }
 

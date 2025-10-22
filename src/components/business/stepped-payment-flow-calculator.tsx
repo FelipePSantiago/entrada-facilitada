@@ -68,7 +68,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { DatePicker } from "@/components/ui/date-picker";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import React from 'react';
-import type { Property, Unit, CombinedUnit, PaymentField, Results, FormValues, PdfFormValues, PaymentFieldType, Tower, MonthlyInsurance, Floor } from "@/types";
+import type { Property, Unit, CombinedUnit, PaymentField, Results, FormValues, PdfFormValues, PaymentFieldType, Tower, MonthlyInsurance, Floor, Step } from "@/types";
 import { formatPercentage, centsToBrl } from "@/lib/business/formatters";
 import { validateFileSize, validateMimeType } from "@/lib/validators";
 import { Skeleton } from '../ui/skeleton';
@@ -98,60 +98,60 @@ const insuranceCache = new Map<string, { total: number; breakdown: MonthlyInsura
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
 // Definição dos passos do tutorial interativo
-const TUTORIAL_STEPS = [
+const TUTORIAL_STEPS: Step[] = [
   {
     id: 'property-selection',
     title: 'Seleção do Empreendimento',
-    description: 'Primeiro, selecione o empreendimento onde deseja simular a compra do imóvel com parcelas escalonadas.',
-    targetId: '[data-testid="property-select"]'
+    content: 'Primeiro, selecione o empreendimento onde deseja simular a compra do imóvel com parcelas escalonadas.',
+    target: '[data-testid="property-select"]'
   },
   {
     id: 'unit-selection',
     title: 'Seleção da Unidade',
-    description: 'Clique no botão ao lado para selecionar uma unidade específica ou preencha os valores manualmente.',
-    targetId: '[data-testid="unit-select-button"]'
+    content: 'Clique no botão ao lado para selecionar uma unidade específica ou preencha os valores manualmente.',
+    target: '[data-testid="unit-select-button"]'
   },
   {
     id: 'property-values',
     title: 'Valores do Imóvel',
-    description: 'Informe o valor de avaliação e o valor de venda do imóvel. Estes valores são essenciais para o cálculo.',
-    targetId: '[data-testid="property-values"]'
+    content: 'Informe o valor de avaliação e o valor de venda do imóvel. Estes valores são essenciais para o cálculo.',
+    target: '[data-testid="property-values"]'
   },
   {
     id: 'income-values',
     title: 'Dados Financeiros',
-    description: 'Preencha sua renda bruta mensal e o valor da parcela da simulação para análise de viabilidade.',
-    targetId: '[data-testid="income-values"]'
+    content: 'Preencha sua renda bruta mensal e o valor da parcela da simulação para análise de viabilidade.',
+    target: '[data-testid="income-values"]'
   },
   {
     id: 'payments-section',
     title: 'Pagamentos',
-    description: 'Adicione os pagamentos como sinal, pró-soluto, financiamento, etc. As parcelas escalonadas serão calculadas automaticamente.',
-    targetId: '[data-testid="payments-section"]'
+    content: 'Adicione os pagamentos como sinal, pró-soluto, financiamento, etc. As parcelas escalonadas serão calculadas automaticamente.',
+    target: '[data-testid="payments-section"]'
   },
   {
     id: 'condition-section',
     title: 'Condições de Pagamento',
-    description: 'Defina as condições como número de parcelas e tipo de condição (padrão ou especial) para o cálculo escalonado.',
-    targetId: '[data-testid="condition-section"]'
+    content: 'Defina as condições como número de parcelas e tipo de condição (padrão ou especial) para o cálculo escalonado.',
+    target: '[data-testid="condition-section"]'
   },
   {
     id: 'notary-section',
     title: 'Taxas Cartorárias',
-    description: 'Configure as taxas cartorárias e método de pagamento. Os valores são calculados automaticamente.',
-    targetId: '[data-testid="notary-section"]'
+    content: 'Configure as taxas cartorárias e método de pagamento. Os valores são calculados automaticamente.',
+    target: '[data-testid="notary-section"]'
   },
   {
     id: 'action-buttons',
     title: 'Ações',
-    description: 'Use os botões para calcular, aplicar condição mínima ou fazer upload de um PDF com os dados.',
-    targetId: '[data-testid="action-buttons"]'
+    content: 'Use os botões para calcular, aplicar condição mínima ou fazer upload de um PDF com os dados.',
+    target: '[data-testid="action-buttons"]'
   },
   {
     id: 'results-section',
     title: 'Resultados',
-    description: 'Após calcular, visualize aqui os resultados detalhados da simulação com as parcelas escalonadas.',
-    targetId: '[data-testid="results-section"]'
+    content: 'Após calcular, visualize aqui os resultados detalhados da simulação com as parcelas escalonadas.',
+    target: '[data-testid="results-section"]'
   }
 ];
 

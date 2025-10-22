@@ -71,7 +71,7 @@ import {
 } from "lucide-react";
 import { addMonths, differenceInMonths, format, lastDayOfMonth, startOfMonth, parseISO, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { Property, Unit, CombinedUnit, UnitStatus, PaymentField, Results, MonthlyInsurance, FormValues, PdfFormValues, PaymentFieldType, Tower, ExtractPricingOutput } from "@/types";
+import type { Property, Unit, CombinedUnit, UnitStatus, PaymentField, Results, MonthlyInsurance, FormValues, PdfFormValues, PaymentFieldType, Tower, ExtractPricingOutput, Step } from "@/types";
 import { cn } from "@/lib/utils";
 import {
   Accordion,
@@ -109,60 +109,60 @@ const insuranceCache = new Map<string, { total: number; breakdown: MonthlyInsura
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
 // Definição dos passos do tutorial interativo
-const TUTORIAL_STEPS = [
+const TUTORIAL_STEPS: Step[] = [
   {
     id: 'property-selection',
     title: 'Seleção do Empreendimento',
-    description: 'Primeiro, selecione o empreendimento onde deseja simular a compra do imóvel.',
-    targetId: '[data-testid="property-select"]'
+    content: 'Primeiro, selecione o empreendimento onde deseja simular a compra do imóvel.',
+    target: '[data-testid="property-select"]'
   },
   {
     id: 'unit-selection',
     title: 'Seleção da Unidade',
-    description: 'Clique no botão ao lado para selecionar uma unidade específica ou preencha os valores manualmente.',
-    targetId: '[data-testid="unit-select-button"]'
+    content: 'Clique no botão ao lado para selecionar uma unidade específica ou preencha os valores manualmente.',
+    target: '[data-testid="unit-select-button"]'
   },
   {
     id: 'property-values',
     title: 'Valores do Imóvel',
-    description: 'Informe o valor de avaliação e o valor de venda do imóvel. Estes valores são essenciais para o cálculo.',
-    targetId: '[data-testid="property-values"]'
+    content: 'Informe o valor de avaliação e o valor de venda do imóvel. Estes valores são essenciais para o cálculo.',
+    target: '[data-testid="property-values"]'
   },
   {
     id: 'income-values',
     title: 'Dados Financeiros',
-    description: 'Preencha sua renda bruta mensal e o valor da parcela da simulação para análise de viabilidade.',
-    targetId: '[data-testid="income-values"]'
+    content: 'Preencha sua renda bruta mensal e o valor da parcela da simulação para análise de viabilidade.',
+    target: '[data-testid="income-values"]'
   },
   {
     id: 'payments-section',
     title: 'Pagamentos',
-    description: 'Adicione os pagamentos como sinal, pró-soluto, financiamento, etc. Cada tipo de pagamento tem regras específicas.',
-    targetId: '[data-testid="payments-section"]'
+    content: 'Adicione os pagamentos como sinal, pró-soluto, financiamento, etc. Cada tipo de pagamento tem regras específicas.',
+    target: '[data-testid="payments-section"]'
   },
   {
     id: 'condition-section',
     title: 'Condições de Pagamento',
-    description: 'Defina as condições como número de parcelas e tipo de condição (padrão ou especial).',
-    targetId: '[data-testid="condition-section"]'
+    content: 'Defina as condições como número de parcelas e tipo de condição (padrão ou especial).',
+    target: '[data-testid="condition-section"]'
   },
   {
     id: 'notary-section',
     title: 'Taxas Cartorárias',
-    description: 'Configure as taxas cartorárias e método de pagamento. Os valores são calculados automaticamente.',
-    targetId: '[data-testid="notary-section"]'
+    content: 'Configure as taxas cartorárias e método de pagamento. Os valores são calculados automaticamente.',
+    target: '[data-testid="notary-section"]'
   },
   {
     id: 'action-buttons',
     title: 'Ações',
-    description: 'Use os botões para calcular, aplicar condição mínima ou fazer upload de um PDF com os dados.',
-    targetId: '[data-testid="action-buttons"]'
+    content: 'Use os botões para calcular, aplicar condição mínima ou fazer upload de um PDF com os dados.',
+    target: '[data-testid="action-buttons"]'
   },
   {
     id: 'results-section',
     title: 'Resultados',
-    description: 'Após calcular, visualize aqui os resultados detalhados da simulação com análise de viabilidade.',
-    targetId: '[data-testid="results-section"]'
+    content: 'Após calcular, visualize aqui os resultados detalhados da simulação com análise de viabilidade.',
+    target: '[data-testid="results-section"]'
   }
 ];
 
@@ -641,77 +641,68 @@ interface UnitCardProps {
 }
 
 const UnitCard = memo(({ unit, isReservaParque, onUnitSelect, style }: UnitCardProps) => {
-  const unitDisplay = useMemo(() => 
-    isReservaParque ? `Torre ${unit.block}` : `Bloco ${unit.block}`,
-    [isReservaParque, unit.block]
-  );
-  
-  const handleClick = useCallback(() => {
-      if (unit.status === 'Disponível') {
-          onUnitSelect(unit);
-      }
-  }, [unit, onUnitSelect]);
-  
-  return (
-      <div style={style} className="transform transition-all duration-300 hover:scale-105">
-          <Card 
-              className={cn(
-                  "cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl border-2 rounded-xl overflow-hidden group h-full flex flex-col",
-                  "bg-card text-card-foreground",
-                  unit.status === 'Disponível' && 'hover:border-primary hover:shadow-primary/20',
-                  unit.status === 'Vendido' && 'opacity-60 cursor-not-allowed',
-                  unit.status === 'Reservado' && 'opacity-80 cursor-not-allowed',
-                  unit.status === 'Indisponível' && 'opacity-60 cursor-not-allowed'
-              )}
-              onClick={handleClick}
-          >
-              <CardHeader className="p-3 sm:p-4 pb-2 flex-row justify-between items-start bg-gradient-to-r from-card to-muted/20">
-                  <div>
-                      <p className="font-bold text-sm sm:text-base text-foreground">{unitDisplay}</p>
-                      <p className="font-semibold text-xs sm:text-sm text-primary">Unidade {unit.unitNumber}</p>
-                      <p className="text-xs text-muted-foreground">{unit.floor}</p>
-                  </div>
-                  <div className={cn(
-                      "text-xs font-bold px-2 sm:px-3 py-1 rounded-full transition-all duration-200",
-                      unit.status === 'Disponível' && 'bg-primary/10 text-primary border border-primary/20',
-                      unit.status === 'Vendido' && 'bg-muted text-muted-foreground border border-muted',
-                      unit.status === 'Reservado' && 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
-                      unit.status === 'Indisponível' && 'bg-muted text-muted-foreground border border-muted'
-                  )}>
-                  {unit.status}
-                  </div>
-              </CardHeader>
-              <CardContent className="p-3 sm:p-4 pt-2 text-xs space-y-2 flex-grow bg-card">
-                  <div className="flex justify-between items-baseline pt-2 border-b border-border">
-                      <span className="font-semibold text-muted-foreground">Venda:</span>
-                      <span className="font-bold text-sm sm:text-lg text-primary break-words">{centsToBrl(unit.saleValue)}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                          <Grid3X3 className="h-3 w-3 text-primary" />
-                          <span className="text-xs"><strong>Tipologia:</strong> {unit.typology}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                          <Ruler className="h-3 w-3 text-primary" />
-                          <span className="text-xs"><strong>Área:</strong> {(unit.privateArea).toFixed(1)}m²</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                          <Sun className="h-3 w-3 text-primary" />
-                          <span className="text-xs"><strong>Sol:</strong> {unit.sunPosition}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                          <Car className="h-3 w-3 text-primary" />
-                          <span className="text-xs"><strong>Vagas:</strong> {unit.parkingSpaces}</span>
-                      </div>
-                  </div>
-                  <div className="flex justify-between items-center pt-2 border-t border-border">
-                      <span className="text-xs text-muted-foreground">Avaliação:</span>
-                      <span className="text-xs font-semibold text-foreground">{centsToBrl(unit.appraisalValue)}</span>
-                  </div>
-              </CardContent>
-          </Card>
-      </div>
-  );
+    const unitDisplay = useMemo(() => 
+      isReservaParque ? `Torre ${unit.block}` : `Bloco ${unit.block}`,
+      [isReservaParque, unit.block]
+    );
+    
+    const handleClick = useCallback(() => {
+        if (unit.status === 'Disponível') {
+            onUnitSelect(unit);
+        }
+    }, [unit, onUnitSelect]);
+    
+    return (
+        <div style={style} className="transform transition-all duration-300 hover:scale-105">
+            <Card 
+                className={cn(
+                    "cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl border-2 rounded-xl overflow-hidden group h-full flex flex-col",
+                    getStatusBadgeClass(unit.status),
+                    unit.status === 'Disponível' && 'hover:border-blue-400 hover:shadow-blue-100'
+                )}
+                onClick={handleClick}
+            >
+                <CardHeader className="p-3 sm:p-4 pb-2 flex-row justify-between items-start bg-gradient-to-r from-gray-50 to-white">
+                    <div>
+                        <p className="font-bold text-sm sm:text-base text-gray-900">{unitDisplay}</p>
+                        <p className="font-semibold text-xs sm:text-sm text-blue-700">Unidade {unit.unitNumber}</p>
+                        <p className="text-xs text-gray-600">{unit.floor}</p>
+                    </div>
+                    <div className={cn("text-xs font-bold px-2 sm:px-3 py-1 rounded-full transition-all duration-200", getStatusBadgeClass(unit.status).replace(/hover:[a-z-]+/g, ''))}>
+                    {unit.status}
+                    </div>
+                </CardHeader>
+                <CardContent className="p-3 sm:p-4 pt-2 text-xs space-y-2 flex-grow bg-white">
+                    <div className="flex justify-between items-baseline pt-2 border-b border-gray-100">
+                        <span className="font-semibold text-gray-600">Venda:</span>
+                        <span className="font-bold text-sm sm:text-lg text-blue-700 break-words">{centsToBrl(unit.saleValue)}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-gray-700">
+                        <div className="flex items-center gap-1">
+                            <Grid3X3 className="h-3 w-3 text-blue-600" />
+                            <span className="text-xs"><strong>Tipologia:</strong> {unit.typology}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <Ruler className="h-3 w-3 text-blue-600" />
+                            <span className="text-xs"><strong>Área:</strong> {(unit.privateArea).toFixed(1)}m²</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <Sun className="h-3 w-3 text-blue-600" />
+                            <span className="text-xs"><strong>Sol:</strong> {unit.sunPosition}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <Car className="h-3 w-3 text-blue-600" />
+                            <span className="text-xs"><strong>Vagas:</strong> {unit.parkingSpaces}</span>
+                        </div>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                        <span className="text-xs text-gray-600">Avaliação:</span>
+                        <span className="text-xs font-semibold text-gray-800">{centsToBrl(unit.appraisalValue)}</span>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    );
 });
 UnitCard.displayName = 'UnitCard';
 
@@ -2107,97 +2098,97 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         </Card>
       )}
 
-        <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
-          <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">Selecione uma Unidade</DialogTitle>
-              <DialogDescription className="text-sm sm:text-base">
-                Escolha uma unidade disponível no empreendimento selecionado.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <Label>Status</Label>
-                  <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Todos">Todos</SelectItem>
-                      <SelectItem value="Disponível">Disponível</SelectItem>
-                      <SelectItem value="Vendido">Vendido</SelectItem>
-                      <SelectItem value="Reservado">Reservado</SelectItem>
-                      <SelectItem value="Indisponível">Indisponível</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Andar</Label>
-                  <Select value={floorFilter} onValueChange={setFloorFilter}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Todos">Todos</SelectItem>
-                      {filterOptions.floors.map((floor) => (
-                        <SelectItem key={floor} value={floor}>
-                          {floor}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Tipologia</Label>
-                  <Select value={typologyFilter} onValueChange={setTypologyFilter}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Todos">Todos</SelectItem>
-                      {filterOptions.typologies.map((typology) => (
-                        <SelectItem key={typology} value={typology}>
-                          {typology}
-                        </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Posição Solar</Label>
-                  <Select value={sunPositionFilter} onValueChange={setSunPositionFilter}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Todos">Todos</SelectItem>
-                      {filterOptions.sunPositions.map((position) => (
-                        <SelectItem key={position} value={position}>
-                          {position}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+      <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
+        <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto sm:max-w-full sm:w-[95vw] sm:mx-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Selecione uma Unidade</DialogTitle>
+            <DialogDescription className="text-sm sm:text-base">
+              Escolha uma unidade disponível no empreendimento selecionado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <Label>Status</Label>
+                <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Todos</SelectItem>
+                    <SelectItem value="Disponível">Disponível</SelectItem>
+                    <SelectItem value="Vendido">Vendido</SelectItem>
+                    <SelectItem value="Reservado">Reservado</SelectItem>
+                    <SelectItem value="Indisponível">Indisponível</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {filteredUnits.map((unit) => (
-                  <UnitCard
-                    key={unit.unitId}
-                    unit={unit}
-                    isReservaParque={selectedProperty?.enterpriseName.includes('Reserva Parque Clube') || false}
-                    onUnitSelect={handleUnitSelect}
-                  />
-                ))}
+              <div>
+                <Label>Andar</Label>
+                <Select value={floorFilter} onValueChange={setFloorFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Todos</SelectItem>
+                    {filterOptions.floors.map((floor) => (
+                      <SelectItem key={floor} value={floor}>
+                        {floor}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Tipologia</Label>
+                <Select value={typologyFilter} onValueChange={setTypologyFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Todos</SelectItem>
+                    {filterOptions.typologies.map((typology) => (
+                      <SelectItem key={typology} value={typology}>
+                        {typology}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Posição Solar</Label>
+                <Select value={sunPositionFilter} onValueChange={setSunPositionFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Todos</SelectItem>
+                    {filterOptions.sunPositions.map((position) => (
+                      <SelectItem key={position} value={position}>
+                        {position}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredUnits.map((unit) => (
+                <UnitCard
+                  key={unit.unitId}
+                  unit={unit}
+                  isReservaParque={selectedProperty?.enterpriseName.includes('Reserva Parque Clube') || false}
+                  onUnitSelect={handleUnitSelect}
+                />
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <InteractiveTutorial
         isOpen={isTutorialOpen}
