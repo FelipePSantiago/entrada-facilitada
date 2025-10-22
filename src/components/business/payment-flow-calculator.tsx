@@ -60,6 +60,8 @@ import {
   Car,
   Tag,
   Calculator,
+  ChevronUp,
+  ChevronDown,
   Info,
   TrendingUp,
   User,
@@ -757,6 +759,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   const [isSaleValueLocked, setIsSaleValueLocked] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [brokerData, setBrokerData] = useState({ name: '', creci: '' });
+  const [showInsuranceDetails, setShowInsuranceDetails] = useState(false);
   
   const [allUnits, setAllUnits] = useState<CombinedUnit[]>([]);
   const [statusFilter, setStatusFilter] = useState<UnitStatus | "Todos">("Disponível");
@@ -1865,194 +1868,177 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       </Card>
 
       {results && (
-        <Card ref={resultsRef}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              Resultados da Simulação
-            </CardTitle>
-            <CardDescription>
-              Confira abaixo os detalhes da simulação realizada.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <Card ref={resultsRef}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            Resultados da Simulação
+          </CardTitle>
+          <CardDescription>
+            Confira abaixo os detalhes da simulação realizada.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 sm:p-6">
+          <div className="space-y-4 sm:space-y-6">
+            {/* Cards de Resumo Rápido */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <Card>
-                <CardContent className="p-4">
+                <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center gap-2">
                     <Wallet className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm font-medium">Valor Financiado</span>
+                    <span className="text-xs sm:text-sm font-medium">Valor Financiado</span>
                   </div>
-                  <p className="text-2xl font-bold text-blue-600">
+                  <p className="text-lg sm:text-2xl font-bold text-blue-600 break-words">
                     {centsToBrl((results.financedAmount || 0) * 100)}
                   </p>
                 </CardContent>
               </Card>
-
               <Card>
-                <CardContent className="p-4">
+                <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center gap-2">
                     <CreditCard className="h-4 w-4 text-green-600" />
-                    <span className="text-sm font-medium">Parcela Mensal</span>
+                    <span className="text-xs sm:text-sm font-medium">Parcela Mensal</span>
                   </div>
-                  <p className="text-2xl font-bold text-green-600">
+                  <p className="text-lg sm:text-2xl font-bold text-green-600 break-words">
                     {centsToBrl((results.monthlyInstallment || 0) * 100)}
                   </p>
                 </CardContent>
               </Card>
-
               <Card>
-                <CardContent className="p-4">
+                <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center gap-2">
                     <TrendingUp className="h-4 w-4 text-purple-600" />
-                    <span className="text-sm font-medium">Taxa de Juros</span>
+                    <span className="text-xs sm:text-sm font-medium">Taxa de Juros</span>
                   </div>
-                  <p className="text-2xl font-bold text-purple-600">
-                    {formatPercentage(results.averageInterestRate / 100)}
+                  <p className="text-lg sm:text-2xl font-bold text-purple-600 break-words">
+                    {formatPercentage((results.averageInterestRate || 0) / 100)}
                   </p>
                 </CardContent>
               </Card>
-
               <Card>
-                <CardContent className="p-4">
+                <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4 text-orange-600" />
-                    <span className="text-sm font-medium">Seguro Obra</span>
+                    <span className="text-xs sm:text-sm font-medium">Seguro Obra</span>
                   </div>
-                  <p className="text-2xl font-bold text-orange-600">
+                  <p className="text-lg sm:text-2xl font-bold text-orange-600 break-words">
                     {centsToBrl((results.totalConstructionInsurance || 0) * 100)}
                   </p>
                 </CardContent>
               </Card>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Resumo de Custos e Análise de Renda */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Resumo de Custos</CardTitle>
+                <CardHeader className="pb-3 sm:pb-4">
+                  <CardTitle className="text-base sm:text-lg">Resumo de Custos</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Entrada</span>
-                      <span className="font-medium">{centsToBrl((results.totalEntryCost || 0) * 100)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Pró-Soluto</span>
-                      <span className="font-medium">{centsToBrl((results.totalProSolutoCost || 0) * 100)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Financiamento</span>
-                      <span className="font-medium">{centsToBrl((results.totalFinancedCost || 0) * 100)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Taxas Cartorárias</span>
-                      <span className="font-medium">{centsToBrl((results.totalNotaryCost || 0) * 100)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Seguro Obra</span>
-                      <span className="font-medium">{centsToBrl((results.totalInsuranceCost || 0) * 100)}</span>
-                    </div>
+                    <div className="flex justify-between"><span>Entrada</span><span className="font-medium">{centsToBrl((results.totalEntryCost || 0) * 100)}</span></div>
+                    <div className="flex justify-between"><span>Pró-Soluto</span><span className="font-medium">{centsToBrl((results.totalProSolutoCost || 0) * 100)}</span></div>
+                    <div className="flex justify-between"><span>Financiamento</span><span className="font-medium">{centsToBrl((results.totalFinancedCost || 0) * 100)}</span></div>
+                    <div className="flex justify-between"><span>Taxas Cartorárias</span><span className="font-medium">{centsToBrl((results.totalNotaryCost || 0) * 100)}</span></div>
+                    <div className="flex justify-between"><span>Seguro Obra</span><span className="font-medium">{centsToBrl((results.totalInsuranceCost || 0) * 100)}</span></div>
                     <Separator />
-                    <div className="flex justify-between font-bold">
-                      <span>Total</span>
-                      <span>{centsToBrl((results.totalCost || 0) * 100)}</span>
-                    </div>
+                    <div className="flex justify-between font-bold"><span>Total</span><span>{centsToBrl((results.totalCost || 0) * 100)}</span></div>
                   </div>
                 </CardContent>
               </Card>
-
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Análise de Renda</CardTitle>
+                <CardHeader className="pb-3 sm:pb-4">
+                  <CardTitle className="text-base sm:text-lg">Análise de Renda</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <div>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-sm">Comprometimento de Renda</span>
-                        <span className="text-sm font-medium">{results.incomeCommitmentPercentage.toFixed(2)}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full ${
-                            results.incomeCommitmentPercentage > 50
-                              ? 'bg-red-500'
-                              : results.incomeCommitmentPercentage > 30
-                              ? 'bg-yellow-500'
-                              : 'bg-green-500'
-                          }`}
-                          style={{ width: `${Math.min(results.incomeCommitmentPercentage, 100)}%` }}
-                        />
-                      </div>
+                      <div className="flex justify-between mb-2"><span className="text-sm">Comprometimento de Renda</span><span className="text-sm font-medium">{(results.incomeCommitmentPercentage || 0).toFixed(2)}%</span></div>
+                      <div className="w-full bg-gray-200 rounded-full h-2"><div className={`h-2 rounded-full ${results.incomeCommitmentPercentage > 50 ? 'bg-red-500' : results.incomeCommitmentPercentage > 30 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.incomeCommitmentPercentage || 0, 100)}%` }} /></div>
                     </div>
-
                     <div>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-sm">Percentual Pró-Soluto</span>
-                        <span className="text-sm font-medium">{results.proSolutoCommitmentPercentage.toFixed(2)}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full ${
-                            results.proSolutoCommitmentPercentage > 100
-                              ? 'bg-red-500'
-                              : results.proSolutoCommitmentPercentage > 50
-                              ? 'bg-yellow-500'
-                              : 'bg-green-500'
-                          }`}
-                          style={{ width: `${Math.min(results.proSolutoCommitmentPercentage, 100)}%` }}
-                        />
-                      </div>
+                      <div className="flex justify-between mb-2"><span className="text-sm">Percentual Pró-Soluto</span><span className="text-sm font-medium">{(results.proSolutoCommitmentPercentage || 0).toFixed(2)}%</span></div>
+                      <div className="w-full bg-gray-200 rounded-full h-2"><div className={`h-2 rounded-full ${results.proSolutoCommitmentPercentage > 100 ? 'bg-red-500' : results.proSolutoCommitmentPercentage > 50 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.proSolutoCommitmentPercentage || 0, 100)}%` }} /></div>
                     </div>
-
-                    {results.incomeError && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>Atenção</AlertTitle>
-                        <AlertDescription>{results.incomeError}</AlertDescription>
-                      </Alert>
-                    )}
-
-                    {results.proSolutoError && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>Atenção</AlertTitle>
-                        <AlertDescription>{results.proSolutoError}</AlertDescription>
-                      </Alert>
-                    )}
+                    {results.incomeError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.incomeError}</AlertDescription></Alert>}
+                    {results.proSolutoError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.proSolutoError}</AlertDescription></Alert>}
                   </div>
                 </CardContent>
               </Card>
             </div>
 
+            {/* Cronograma de Pagamentos */}
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Cronograma de Pagamentos</h3>
-              <PaymentTimeline results={results} formValues={form.getValues()} />
+              <h3 className="text-base sm:text-lg font-semibold">Cronograma de Pagamentos</h3>
+              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                <PaymentTimeline results={results} formValues={form.getValues()} />
+              </div>
             </div>
-
+            
+            {/* Detalhamento do Seguro de Obras */}
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Gráfico de Evolução</h3>
-              <ResultChart data={[]} value={form.getValues('saleValue')} />
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <h3 className="text-base sm:text-lg font-semibold">Detalhamento do Seguro de Obras</h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowInsuranceDetails(!showInsuranceDetails)}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2"
+                >
+                  {showInsuranceDetails ? (
+                    <>
+                      <ChevronUp className="h-4 w-4" />
+                      Ocultar Detalhes
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-4 w-4" />
+                      Exibir Detalhes
+                    </>
+                  )}
+                </Button>
+              </div>
+              
+              {showInsuranceDetails && (
+                <Card>
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs sm:text-sm">Mês</TableHead>
+                            <TableHead className="text-xs sm:text-sm">Valor</TableHead>
+                            <TableHead className="text-xs sm:text-sm">Progresso</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredInsuranceBreakdown.map((item, index) => (
+                            <TableRow key={index}>
+                              <TableCell className="text-xs sm:text-sm">{item.month}</TableCell>
+                              <TableCell className="text-xs sm:text-sm">{centsToBrl(item.value * 100)}</TableCell>
+                              <TableCell className="text-xs sm:text-sm">{(item.progressRate * 100).toFixed(1)}%</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
-
-            <div className="flex gap-4">
-              <Button
-                onClick={handleGeneratePdf}
-                disabled={isGeneratingPdf}
-                className="flex-1"
-              >
-                {isGeneratingPdf ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Download className="h-4 w-4 mr-2" />
-                )}
+            
+            {/* Botão de Gerar PDF */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button onClick={handleGeneratePdf} disabled={isGeneratingPdf} className="w-full sm:flex-1">
+                {isGeneratingPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
                 Gerar PDF
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        </CardContent>
+      </Card>
+    )}
 
       <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
         <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">

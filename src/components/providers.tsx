@@ -112,10 +112,8 @@ export function Providers({ children }: ProvidersProps) {
         const hasTwoFactor = !!secret;
         setHas2FA(hasTwoFactor);
 
-        if (hasTwoFactor) {
-          const isVerifiedInStorage = localStorage.getItem(`2fa-verified-${user.uid}`) === 'true';
-          setIsFullyAuthenticated(isVerifiedInStorage);
-        } else {
+        // Define isFullyAuthenticated com base no status do 2FA no backend e se o usuário não é admin
+        if (!hasTwoFactor && !appUser?.isAdmin) {
           setIsFullyAuthenticated(appUser?.isAdmin || false);
         }
 
