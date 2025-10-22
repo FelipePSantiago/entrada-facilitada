@@ -64,14 +64,11 @@ import {
   TrendingUp,
   User,
   Calendar,
-  PiggyBank,
-  ChevronDown,
-  ChevronUp,
-  RotateCcw,
+  RefreshCw,
 } from "lucide-react";
 import { addMonths, differenceInMonths, format, lastDayOfMonth, startOfMonth, parseISO, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { Property, Unit, CombinedUnit, UnitStatus, PaymentField, Results, MonthlyInsurance, FormValues, PdfFormValues, PaymentFieldType, Tower, ExtractPricingOutput, Step } from "@/types";
+import type { Property, Unit, CombinedUnit, UnitStatus, PaymentField, Results, MonthlyInsurance, FormValues, PdfFormValues, PaymentFieldType, Tower, ExtractPricingOutput } from "@/types";
 import { cn } from "@/lib/utils";
 import {
   Accordion,
@@ -94,77 +91,15 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { generatePdf } from "@/lib/generators/pdf-generator";
 import React from 'react';
+import { InteractiveTutorial } from "@/components/common/interactive-tutorial";
+import { ResultChart, type ChartData } from "@/components/business/result-chart";
 import { PaymentTimeline } from "@/components/business/payment-timeline";
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { InteractiveTutorialProps } from "@/types";
-
-const InteractiveTutorial = dynamic<InteractiveTutorialProps>(
-  () => import('@/components/common/interactive-tutorial').then(mod => mod.InteractiveTutorial),
-  { ssr: false }
-);
 
 // Cache para cálculos de seguro
 const insuranceCache = new Map<string, { total: number; breakdown: MonthlyInsurance[]; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
-
-// Definição dos passos do tutorial interativo
-const TUTORIAL_STEPS: Step[] = [
-  {
-    id: 'property-selection',
-    title: 'Seleção do Empreendimento',
-    content: 'Primeiro, selecione o empreendimento onde deseja simular a compra do imóvel.',
-    target: '[data-testid="property-select"]'
-  },
-  {
-    id: 'unit-selection',
-    title: 'Seleção da Unidade',
-    content: 'Clique no botão ao lado para selecionar uma unidade específica ou preencha os valores manualmente.',
-    target: '[data-testid="unit-select-button"]'
-  },
-  {
-    id: 'property-values',
-    title: 'Valores do Imóvel',
-    content: 'Informe o valor de avaliação e o valor de venda do imóvel. Estes valores são essenciais para o cálculo.',
-    target: '[data-testid="property-values"]'
-  },
-  {
-    id: 'income-values',
-    title: 'Dados Financeiros',
-    content: 'Preencha sua renda bruta mensal e o valor da parcela da simulação para análise de viabilidade.',
-    target: '[data-testid="income-values"]'
-  },
-  {
-    id: 'payments-section',
-    title: 'Pagamentos',
-    content: 'Adicione os pagamentos como sinal, pró-soluto, financiamento, etc. Cada tipo de pagamento tem regras específicas.',
-    target: '[data-testid="payments-section"]'
-  },
-  {
-    id: 'condition-section',
-    title: 'Condições de Pagamento',
-    content: 'Defina as condições como número de parcelas e tipo de condição (padrão ou especial).',
-    target: '[data-testid="condition-section"]'
-  },
-  {
-    id: 'notary-section',
-    title: 'Taxas Cartorárias',
-    content: 'Configure as taxas cartorárias e método de pagamento. Os valores são calculados automaticamente.',
-    target: '[data-testid="notary-section"]'
-  },
-  {
-    id: 'action-buttons',
-    title: 'Ações',
-    content: 'Use os botões para calcular, aplicar condição mínima ou fazer upload de um PDF com os dados.',
-    target: '[data-testid="action-buttons"]'
-  },
-  {
-    id: 'results-section',
-    title: 'Resultados',
-    content: 'Após calcular, visualize aqui os resultados detalhados da simulação com análise de viabilidade.',
-    target: '[data-testid="results-section"]'
-  }
-];
 
 const paymentFieldSchema = z.object({
   type: z.enum([
@@ -275,6 +210,18 @@ interface ExtendedPdfFormValues extends PdfFormValues {
 // Interface para PaymentTimelineProps
 interface PaymentTimelineProps {
   paymentFields?: PaymentField[];
+}
+
+// Interface para InteractiveTutorialProps
+interface InteractiveTutorialProps {
+  isOpen: boolean;
+  onClose: () => void;
+  steps?: {
+    id: string;
+    title: string;
+    content: string;
+    target: string;
+  }[];
 }
 
 // Função auxiliar para status badge
@@ -662,20 +609,20 @@ const UnitCard = memo(({ unit, isReservaParque, onUnitSelect, style }: UnitCardP
                 )}
                 onClick={handleClick}
             >
-                <CardHeader className="p-3 sm:p-4 pb-2 flex-row justify-between items-start bg-gradient-to-r from-gray-50 to-white">
+                <CardHeader className="p-4 pb-2 flex-row justify-between items-start bg-gradient-to-r from-gray-50 to-white">
                     <div>
-                        <p className="font-bold text-sm sm:text-base text-gray-900">{unitDisplay}</p>
-                        <p className="font-semibold text-xs sm:text-sm text-blue-700">Unidade {unit.unitNumber}</p>
+                        <p className="font-bold text-base text-gray-900">{unitDisplay}</p>
+                        <p className="font-semibold text-sm text-blue-700">Unidade {unit.unitNumber}</p>
                         <p className="text-xs text-gray-600">{unit.floor}</p>
                     </div>
-                    <div className={cn("text-xs font-bold px-2 sm:px-3 py-1 rounded-full transition-all duration-200", getStatusBadgeClass(unit.status).replace(/hover:[a-z-]+/g, ''))}>
+                    <div className={cn("text-xs font-bold px-3 py-1 rounded-full transition-all duration-200", getStatusBadgeClass(unit.status).replace(/hover:[a-z-]+/g, ''))}>
                     {unit.status}
                     </div>
                 </CardHeader>
-                <CardContent className="p-3 sm:p-4 pt-2 text-xs space-y-2 flex-grow bg-white">
+                <CardContent className="p-4 pt-2 text-xs space-y-2 flex-grow bg-white">
                     <div className="flex justify-between items-baseline pt-2 border-b border-gray-100">
                         <span className="font-semibold text-gray-600">Venda:</span>
-                        <span className="font-bold text-sm sm:text-lg text-blue-700 break-words">{centsToBrl(unit.saleValue)}</span>
+                        <span className="font-bold text-lg text-blue-700">{centsToBrl(unit.saleValue)}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-gray-700">
                         <div className="flex items-center gap-1">
@@ -810,9 +757,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   const [isSaleValueLocked, setIsSaleValueLocked] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [brokerData, setBrokerData] = useState({ name: '', creci: '' });
-  const [isCalculating, setIsCalculating] = useState(false);
-  const [showInsuranceDetails, setShowInsuranceDetails] = useState(false);
-
+  
   const [allUnits, setAllUnits] = useState<CombinedUnit[]>([]);
   const [statusFilter, setStatusFilter] = useState<UnitStatus | "Todos">("Disponível");
   const [floorFilter, setFloorFilter] = useState<string>("Todos");
@@ -850,7 +795,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   const watchedFinancingParticipants = form.watch('financingParticipants');
   const watchedNotaryPaymentMethod = form.watch('notaryPaymentMethod');
 
-  const { setValue, trigger, getValues, setError, clearErrors, reset } = form;
+  const { setValue, trigger, getValues, setError, clearErrors } = form;
   
   const hasSinal1 = watchedPayments.some(p => p.type === 'sinal1');
   const hasSinal2 = watchedPayments.some(p => p.type === 'sinal2');
@@ -1073,9 +1018,53 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     });
   }, [setValue, toast]);
 
-  // Função para resetar o formulário
-  const handleResetForm = useCallback(() => {
-    reset({
+  // Função para aplicar a condição mínima
+  const handleApplyMinimumCondition = useCallback(() => {
+    const values = form.getValues();
+    
+    if (!selectedProperty || !deliveryDateObj) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Selecione um imóvel para aplicar a condição mínima.",
+      });
+      return;
+    }
+
+    if (!values.saleValue || values.saleValue <= 0) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Informe o valor de venda para aplicar a condição mínima.",
+      });
+      return;
+    }
+
+    const newPayments = applyMinimumCondition(
+      values.payments,
+      values.appraisalValue,
+      values.saleValue,
+      isSinalCampaignActive,
+      sinalCampaignLimitPercent,
+      values.conditionType,
+      selectedProperty.enterpriseName,
+      values.grossIncome,
+      values.simulationInstallmentValue,
+      values.installments || 0,
+      deliveryDateObj
+    );
+
+    replace(newPayments);
+    
+    toast({
+      title: "Condição Mínima Aplicada",
+      description: "Os pagamentos foram ajustados conforme a condição mínima.",
+    });
+  }, [form, selectedProperty, deliveryDateObj, toast, replace, isSinalCampaignActive, sinalCampaignLimitPercent]);
+
+  // Função para limpar todos os campos
+  const handleClearAll = useCallback(() => {
+    form.reset({
       propertyId: "",
       selectedUnit: "",
       payments: [],
@@ -1100,10 +1089,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     setSunPositionFilter("Todos");
     
     toast({
-      title: "Formulário Resetado",
-      description: "Todos os campos foram limpos com sucesso.",
+      title: "Formulário Limpo",
+      description: "Todos os campos foram limpos. Você pode começar uma nova simulação.",
     });
-  }, [reset, toast]);
+  }, [form, toast]);
 
   const processExtractedData = useCallback(async (extractedData: ExtractedDataType) => {
     try {
@@ -1309,7 +1298,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   }, []);
 
   const onSubmit = useCallback((values: FormValues) => {
-    setIsCalculating(true);
     clearErrors();
 
     if (!selectedProperty || !deliveryDateObj || !constructionStartDateObj) {
@@ -1387,12 +1375,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       values.notaryPaymentMethod as 'creditCard' | 'bankSlip'
     );
 
-    const caixaInstallmentValue = values.simulationInstallmentValue;
-
     const { total: insuranceTotal, breakdown: insuranceBreakdown } = calculateConstructionInsuranceLocal(
       constructionStartDateObj,
       deliveryDateObj,
-      caixaInstallmentValue
+      priceInstallmentValue
     );
 
     const totalEntryCost = values.payments
@@ -1408,19 +1394,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     const totalInsuranceCost = insuranceTotal;
     const totalCost = totalEntryCost + totalProSolutoCost + totalFinancedCost + totalNotaryCost + totalInsuranceCost;
 
-    // NOVO CÁLCULO: Encontrar o valor da parcela de seguro mais alta
-    const maxInsuranceInstallmentValue = insuranceBreakdown.length > 0 
-      ? Math.max(...insuranceBreakdown.map(item => item.value)) 
-      : 0;
-
-    // NOVO CÁLCULO: Calcular o custo mensal máximo (Pró-Soluto + Seguro mais caro)
-    const highestMonthlyCost = priceInstallmentValue + maxInsuranceInstallmentValue;
-
-    // NOVO CÁLCULO: Calcular o percentual de comprometimento com base nesse custo máximo
     const incomeCommitmentPercentage = values.grossIncome > 0 
-      ? (highestMonthlyCost / values.grossIncome) * 100 
+      ? ((priceInstallmentValue + (insuranceBreakdown[0]?.value || 0)) / values.grossIncome) * 100 
       : 0;
-    
+
     const proSolutoCommitmentPercentage = values.saleValue > 0
       ? (proSolutoValue / values.saleValue) * 100
       : 0;
@@ -1461,7 +1438,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
 
     setResults(newResults);
     resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
-    setIsCalculating(false);
   }, [clearErrors, selectedProperty, deliveryDateObj, constructionStartDateObj, setError, toast, isSinalCampaignActive, sinalCampaignLimitPercent, validatePaymentSumWithBusinessLogic, calculatePriceInstallment, calculateNotaryInstallment, calculateConstructionInsuranceLocal, calculateRate, results]);
 
   const handleGeneratePdf = useCallback(async () => {
@@ -1473,7 +1449,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       });
       return;
     }
-  
+
     setIsGeneratingPdf(true);
     try {
       const pdfValues: ExtendedPdfFormValues = {
@@ -1482,20 +1458,13 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         brokerName: brokerData.name,
         brokerCreci: brokerData.creci,
       };
-  
+
       const selectedPropertyForPdf = properties.find(p => p.id === form.getValues('propertyId'));
-      
       if (!selectedPropertyForPdf) {
-        toast({
-          variant: 'destructive',
-          title: 'Erro',
-          description: 'A propriedade selecionada não foi encontrada. Não é possível gerar o PDF.',
-        });
-        setIsGeneratingPdf(false);
-        return;
+        throw new Error('Selecione uma unidade antes');
       }
-  
       await generatePdf(pdfValues, results, selectedPropertyForPdf);
+
       toast({
         title: "PDF Gerado",
         description: "O PDF foi gerado com sucesso.",
@@ -1524,34 +1493,40 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             Preencha os dados abaixo para simular as condições de pagamento do imóvel.
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-4 sm:p-6">
+        <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6" data-testid="property-selection">
-                <FormField
-                  control={form.control}
-                  name="propertyId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Empreendimento</FormLabel>
-                      <Select onValueChange={handlePropertyChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="property-select">
-                            <SelectValue placeholder="Selecione um empreendimento" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {filteredProperties.map((property) => (
-                            <SelectItem key={property.id} value={property.id}>
-                              {property.enterpriseName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+              control={form.control}
+              name="propertyId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Empreendimento</FormLabel>
+                  <Select 
+                    value={field.value || ""} // Garante que valor vazio seja tratado corretamente
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      handlePropertyChange(value);
+                    }}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione um empreendimento" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {filteredProperties.map((property) => (
+                        <SelectItem key={property.id} value={property.id}>
+                          {property.enterpriseName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
                 <FormField
                   control={form.control}
@@ -1559,27 +1534,20 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Unidade Selecionada</FormLabel>
-                      <div className="flex gap-2" data-testid="unit-selection">
+                      <div className="flex gap-2">
                         <FormControl>
                           <Input
                             {...field}
                             placeholder="Selecione uma unidade"
                             readOnly
-                            className={cn(
-                              "border transition-all duration-200 text-sm",
-                              isSaleValueLocked 
-                                ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100 font-medium" 
-                                : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100"
-                            )}
+                            className="bg-gray-50"
                           />
                         </FormControl>
                         <Button
                           type="button"
                           variant="outline"
-                          size="sm"
                           onClick={() => setIsUnitSelectorOpen(true)}
                           disabled={!selectedProperty}
-                          data-testid="unit-select-button"
                         >
                           <Building className="h-4 w-4" />
                         </Button>
@@ -1587,7 +1555,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                           <Button
                             type="button"
                             variant="outline"
-                            size="sm"
                             onClick={handleClearUnitSelection}
                           >
                             <XCircle className="h-4 w-4" />
@@ -1600,7 +1567,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6" data-testid="property-values">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <CurrencyFormField
                   name="appraisalValue"
                   label="Valor de Avaliação"
@@ -1616,7 +1583,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6" data-testid="income-values">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <CurrencyFormField
                   name="grossIncome"
                   label="Renda Bruta Mensal"
@@ -1629,9 +1596,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 />
               </div>
 
-              <div className="space-y-4" data-testid="payments-section">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <h3 className="text-base sm:text-lg font-semibold">Pagamentos</h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Pagamentos</h3>
                   <Button
                     type="button"
                     variant="outline"
@@ -1646,7 +1613,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                       }
                     }}
                     disabled={availablePaymentFields.length === 0}
-                    className="w-full sm:w-auto"
                   >
                     <PlusCircle className="h-4 w-4 mr-2" />
                     Adicionar Pagamento
@@ -1655,7 +1621,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
 
                 <div className="space-y-4">
                   {fields.map((field, index) => (
-                    <div key={field.id} className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+                    <div key={field.id} className="flex gap-4 items-end">
                       <FormField
                         control={form.control}
                         name={`payments.${index}.type`}
@@ -1721,7 +1687,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                         variant="outline"
                         size="icon"
                         onClick={() => remove(index)}
-                        className="mt-6 sm:mt-0"
                       >
                         <XCircle className="h-4 w-4" />
                       </Button>
@@ -1730,7 +1695,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6" data-testid="condition-section">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <FormField
                   control={form.control}
                   name="conditionType"
@@ -1797,7 +1762,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6" data-testid="notary-section">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <CurrencyFormField
                   name="notaryFees"
                   label="Taxas Cartorárias"
@@ -1847,51 +1812,27 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 />
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4" data-testid="action-buttons">
-                <Button type="submit" className="w-full sm:flex-1">
+              <div className="flex gap-4">
+                <Button type="submit" className="flex-1">
                   <Calculator className="h-4 w-4 mr-2" />
                   Calcular
                 </Button>
                 
                 <Button
                   type="button"
-                  variant="secondary"
-                  className="w-full sm:flex-1"
-                  onClick={() => {
-                    if (!selectedProperty) return;
-                    const currentValues = form.getValues();
-                    const newPayments = applyMinimumCondition(
-                      currentValues.payments,
-                      currentValues.appraisalValue,
-                      currentValues.saleValue,
-                      isSinalCampaignActive,
-                      sinalCampaignLimitPercent,
-                      currentValues.conditionType,
-                      selectedProperty.enterpriseName,
-                      currentValues.grossIncome,
-                      currentValues.simulationInstallmentValue,
-                      currentValues.installments || 0,
-                      deliveryDateObj
-                    );
-                    form.setValue('payments', newPayments, { shouldValidate: true, shouldDirty: true });
-                    form.handleSubmit(onSubmit)();
-                    toast({
-                      title: "Condição Mínima Aplicada",
-                      description: "Os campos de pagamento foram recalculados para a condição mínima.",
-                    });
-                  }}
-                  disabled={isCalculating}
+                  variant="outline"
+                  onClick={handleApplyMinimumCondition}
+                  disabled={!selectedProperty || !deliveryDateObj || !form.getValues('saleValue')}
                 >
-                  <PiggyBank className="h-4 w-4 mr-2" />
-                  Usar Condição Mínima
+                  <ShieldCheck className="h-4 w-4 mr-2" />
+                  Condição Mínima
                 </Button>
-
+                
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isExtracting}
-                  className="w-full sm:w-auto"
                 >
                   {isExtracting ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1903,13 +1844,11 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={handleResetForm}
-                  title="Resetar formulário"
-                  className="w-full sm:w-auto"
+                  variant="destructive"
+                  onClick={handleClearAll}
                 >
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Resetar
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Limpar
                 </Button>
                 
                 <input
@@ -1926,7 +1865,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       </Card>
 
       {results && (
-        <Card ref={resultsRef} data-testid="results-section">
+        <Card ref={resultsRef}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
@@ -1936,178 +1875,195 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               Confira abaixo os detalhes da simulação realizada.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-4 sm:p-6">
-            <div className="space-y-4 sm:space-y-6">
-              {/* Cards de Resumo Rápido */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card>
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex items-center gap-2">
-                      <Wallet className="h-4 w-4 text-blue-600" />
-                      <span className="text-xs sm:text-sm font-medium">Valor Financiado</span>
-                    </div>
-                    <p className="text-lg sm:text-2xl font-bold text-blue-600 break-words">
-                      {centsToBrl((results.financedAmount || 0) * 100)}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex items-center gap-2">
-                      <CreditCard className="h-4 w-4 text-green-600" />
-                      <span className="text-xs sm:text-sm font-medium">Parcela Mensal</span>
-                    </div>
-                    <p className="text-lg sm:text-2xl font-bold text-green-600 break-words">
-                      {centsToBrl((results.monthlyInstallment || 0) * 100)}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-purple-600" />
-                      <span className="text-xs sm:text-sm font-medium">Taxa de Juros</span>
-                    </div>
-                    <p className="text-lg sm:text-2xl font-bold text-purple-600 break-words">
-                      {formatPercentage((results.averageInterestRate || 0) / 100)}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-orange-600" />
-                      <span className="text-xs sm:text-sm font-medium">Seguro Obra</span>
-                    </div>
-                    <p className="text-lg sm:text-2xl font-bold text-orange-600 break-words">
-                      {centsToBrl((results.totalConstructionInsurance || 0) * 100)}
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-medium">Valor Financiado</span>
+                  </div>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {centsToBrl((results.financedAmount || 0) * 100)}
+                  </p>
+                </CardContent>
+              </Card>
 
-              {/* Resumo de Custos e Análise de Renda */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader className="pb-3 sm:pb-4">
-                    <CardTitle className="text-base sm:text-lg">Resumo de Custos</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex justify-between"><span>Entrada</span><span className="font-medium">{centsToBrl((results.totalEntryCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between"><span>Pró-Soluto</span><span className="font-medium">{centsToBrl((results.totalProSolutoCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between"><span>Financiamento</span><span className="font-medium">{centsToBrl((results.totalFinancedCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between"><span>Taxas Cartorárias</span><span className="font-medium">{centsToBrl((results.totalNotaryCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between"><span>Seguro Obra</span><span className="font-medium">{centsToBrl((results.totalInsuranceCost || 0) * 100)}</span></div>
-                      <Separator />
-                      <div className="flex justify-between font-bold"><span>Total</span><span>{centsToBrl((results.totalCost || 0) * 100)}</span></div>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-3 sm:pb-4">
-                    <CardTitle className="text-base sm:text-lg">Análise de Renda</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex justify-between mb-2"><span className="text-sm">Comprometimento de Renda</span><span className="text-sm font-medium">{(results.incomeCommitmentPercentage || 0).toFixed(2)}%</span></div>
-                        <div className="w-full bg-gray-200 rounded-full h-2"><div className={`h-2 rounded-full ${results.incomeCommitmentPercentage > 50 ? 'bg-red-500' : results.incomeCommitmentPercentage > 30 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.incomeCommitmentPercentage || 0, 100)}%` }} /></div>
-                      </div>
-                      <div>
-                        <div className="flex justify-between mb-2"><span className="text-sm">Percentual Pró-Soluto</span><span className="text-sm font-medium">{(results.proSolutoCommitmentPercentage || 0).toFixed(2)}%</span></div>
-                        <div className="w-full bg-gray-200 rounded-full h-2"><div className={`h-2 rounded-full ${results.proSolutoCommitmentPercentage > 100 ? 'bg-red-500' : results.proSolutoCommitmentPercentage > 50 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.proSolutoCommitmentPercentage || 0, 100)}%` }} /></div>
-                      </div>
-                      {results.incomeError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.incomeError}</AlertDescription></Alert>}
-                      {results.proSolutoError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.proSolutoError}</AlertDescription></Alert>}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-green-600" />
+                    <span className="text-sm font-medium">Parcela Mensal</span>
+                  </div>
+                  <p className="text-2xl font-bold text-green-600">
+                    {centsToBrl((results.monthlyInstallment || 0) * 100)}
+                  </p>
+                </CardContent>
+              </Card>
 
-              {/* Cronograma de Pagamentos */}
-              <div className="space-y-4">
-                <h3 className="text-base sm:text-lg font-semibold">Cronograma de Pagamentos</h3>
-                <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-                  <PaymentTimeline results={results} formValues={form.getValues()} />
-                </div>
-              </div>
-              
-              {/* Detalhamento do Seguro de Obras */}
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <h3 className="text-base sm:text-lg font-semibold">Detalhamento do Seguro de Obras</h3>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowInsuranceDetails(!showInsuranceDetails)}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2"
-                  >
-                    {showInsuranceDetails ? (
-                      <>
-                        <ChevronUp className="h-4 w-4" />
-                        Ocultar Detalhes
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="h-4 w-4" />
-                        Exibir Detalhes
-                      </>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-purple-600" />
+                    <span className="text-sm font-medium">Taxa de Juros</span>
+                  </div>
+                  <p className="text-2xl font-bold text-purple-600">
+                    {formatPercentage(results.averageInterestRate / 100)}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-orange-600" />
+                    <span className="text-sm font-medium">Seguro Obra</span>
+                  </div>
+                  <p className="text-2xl font-bold text-orange-600">
+                    {centsToBrl((results.totalConstructionInsurance || 0) * 100)}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Resumo de Custos</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>Entrada</span>
+                      <span className="font-medium">{centsToBrl((results.totalEntryCost || 0) * 100)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Pró-Soluto</span>
+                      <span className="font-medium">{centsToBrl((results.totalProSolutoCost || 0) * 100)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Financiamento</span>
+                      <span className="font-medium">{centsToBrl((results.totalFinancedCost || 0) * 100)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Taxas Cartorárias</span>
+                      <span className="font-medium">{centsToBrl((results.totalNotaryCost || 0) * 100)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Seguro Obra</span>
+                      <span className="font-medium">{centsToBrl((results.totalInsuranceCost || 0) * 100)}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between font-bold">
+                      <span>Total</span>
+                      <span>{centsToBrl((results.totalCost || 0) * 100)}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Análise de Renda</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between mb-2">
+                        <span className="text-sm">Comprometimento de Renda</span>
+                        <span className="text-sm font-medium">{results.incomeCommitmentPercentage.toFixed(2)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full ${
+                            results.incomeCommitmentPercentage > 50
+                              ? 'bg-red-500'
+                              : results.incomeCommitmentPercentage > 30
+                              ? 'bg-yellow-500'
+                              : 'bg-green-500'
+                          }`}
+                          style={{ width: `${Math.min(results.incomeCommitmentPercentage, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between mb-2">
+                        <span className="text-sm">Percentual Pró-Soluto</span>
+                        <span className="text-sm font-medium">{results.proSolutoCommitmentPercentage.toFixed(2)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full ${
+                            results.proSolutoCommitmentPercentage > 100
+                              ? 'bg-red-500'
+                              : results.proSolutoCommitmentPercentage > 50
+                              ? 'bg-yellow-500'
+                              : 'bg-green-500'
+                          }`}
+                          style={{ width: `${Math.min(results.proSolutoCommitmentPercentage, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {results.incomeError && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Atenção</AlertTitle>
+                        <AlertDescription>{results.incomeError}</AlertDescription>
+                      </Alert>
                     )}
-                  </Button>
-                </div>
-                
-                {showInsuranceDetails && (
-                  <Card>
-                    <CardContent className="p-3 sm:p-4">
-                      <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="text-xs sm:text-sm">Mês</TableHead>
-                              <TableHead className="text-xs sm:text-sm">Valor</TableHead>
-                              <TableHead className="text-xs sm:text-sm">Progresso</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredInsuranceBreakdown.map((item, index) => (
-                              <TableRow key={index}>
-                                <TableCell className="text-xs sm:text-sm">{item.month}</TableCell>
-                                <TableCell className="text-xs sm:text-sm">{centsToBrl(item.value * 100)}</TableCell>
-                                <TableCell className="text-xs sm:text-sm">{(item.progressRate * 100).toFixed(1)}%</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </CardContent>
-                  </Card>
+
+                    {results.proSolutoError && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Atenção</AlertTitle>
+                        <AlertDescription>{results.proSolutoError}</AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Cronograma de Pagamentos</h3>
+              <PaymentTimeline results={results} formValues={form.getValues()} />
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Gráfico de Evolução</h3>
+              <ResultChart data={[]} value={form.getValues('saleValue')} />
+            </div>
+
+            <div className="flex gap-4">
+              <Button
+                onClick={handleGeneratePdf}
+                disabled={isGeneratingPdf}
+                className="flex-1"
+              >
+                {isGeneratingPdf ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
                 )}
-              </div>
-              
-              {/* Botão de Gerar PDF */}
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Button onClick={handleGeneratePdf} disabled={isGeneratingPdf} className="w-full sm:flex-1">
-                  {isGeneratingPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                  Gerar PDF
-                </Button>
-              </div>
+                Gerar PDF
+              </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
       <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
-        <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto sm:max-w-full sm:w-[95vw] sm:mx-auto">
+        <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Selecione uma Unidade</DialogTitle>
-            <DialogDescription className="text-sm sm:text-base">
+            <DialogTitle>Selecione uma Unidade</DialogTitle>
+            <DialogDescription>
               Escolha uma unidade disponível no empreendimento selecionado.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <Label>Status</Label>
                 <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
@@ -2176,7 +2132,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredUnits.map((unit) => (
                 <UnitCard
                   key={unit.unitId}
@@ -2195,7 +2151,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         onClose={() => setIsTutorialOpen(false)}
         form={form}
         results={results}
-        steps={TUTORIAL_STEPS}
       />
     </div>
   );
