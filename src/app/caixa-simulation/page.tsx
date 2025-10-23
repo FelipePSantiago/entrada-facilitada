@@ -219,31 +219,43 @@ const CaixaSimulationForm = () => {
           title: "Sucesso!", 
           description: "Simulação realizada com sucesso." 
         });
+      } else if (data.message) {
+        // If data.sucesso is false but there's a message, throw an error with the message
+        throw new Error(data.message);
       } else {
-        throw new Error(data.message || "Falha na simulação.");
+        // If neither success nor a specific message, throw a generic error
+        throw new Error("Falha na simulação.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Erro detalhado:', err);
       
       let errorMessage = "Ocorreu um erro desconhecido.";
       
       if (err instanceof Error) {
+        // Handle standard JavaScript Errors
         errorMessage = err.message;
-      } else if (err.details) {
-        errorMessage = err.details;
-      } else if (err.code) {
-        switch (err.code) {
-          case 'internal':
-            errorMessage = "Erro interno no servidor. Tente novamente.";
-            break;
-          case 'invalid-argument':
-            errorMessage = "Dados inválidos fornecidos. Verifique os campos.";
-            break;
-          case 'unauthenticated':
-            errorMessage = "Você precisa estar logado para realizar a simulação.";
-            break;
-          default:
-            errorMessage = `Erro: ${err.code}`;
+      } else if (typeof err === 'object' && err !== null && 'details' in err) {
+        // Handle errors with a 'details' property (common in some APIs)
+        const errorWithDetails = err as { details?: unknown };
+        if (typeof errorWithDetails.details === 'string') {
+          errorMessage = errorWithDetails.details;
+        }
+      } else if (typeof err === 'object' && err !== null && 'code' in err) {
+        const errorWithCode = err as { code?: string };
+        if (typeof errorWithCode.code === 'string') {
+          switch (errorWithCode.code) {
+            case 'internal':
+              errorMessage = "Erro interno no servidor. Tente novamente.";
+              break;
+            case 'invalid-argument':
+              errorMessage = "Dados inválidos fornecidos. Verifique os campos.";
+              break;
+            case 'unauthenticated':
+              errorMessage = "Você precisa estar logado para realizar a simulação.";
+              break;
+            default:
+              errorMessage = `Erro: ${errorWithCode.code}`;
+          }
         }
       }
       
