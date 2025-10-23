@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useMemo, useEffect, useCallback, memo } from "react";
-import { useForm, useFieldArray, type Control } from "react-hook-form";
+import { useForm, useFieldArray, type Control, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import {
@@ -58,6 +58,9 @@ import {
   PlusCircle,
   Grid3X3,
   RotateCcw,
+  RefreshCw,
+  Sun,
+  Car,
 } from "lucide-react";
 import { addDays, addMonths, differenceInMonths, format, lastDayOfMonth, startOfMonth, parseISO, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -68,7 +71,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { DatePicker } from "@/components/ui/date-picker";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import React from 'react';
-import type { Property, Unit, CombinedUnit, PaymentField, Results, FormValues, PdfFormValues, PaymentFieldType, Tower, MonthlyInsurance, Floor, Step } from "@/types";
+import type { Property, Unit, CombinedUnit, PaymentField, Results, FormValues, PdfFormValues, PaymentFieldType, Tower, MonthlyInsurance, Floor, Step, ExtractFinancialDataInput, ExtractPricingOutput } from "@/types";
 import { formatPercentage, centsToBrl } from "@/lib/business/formatters";
 import { validateFileSize, validateMimeType } from "@/lib/validators";
 import { Skeleton } from '../ui/skeleton';
@@ -86,6 +89,11 @@ const InteractiveTutorial = dynamic<InteractiveTutorialProps>(
   () => import('@/components/common/interactive-tutorial').then(mod => mod.InteractiveTutorial),
   { ssr: false }
 );
+
+const ResultChart = dynamic(() => import('@/components/business/result-chart').then(mod => ({ default: mod.ResultChart })), {
+  ssr: false,
+  loading: () => <Skeleton className="h-64 w-full" />
+});
 
 // Carregamento lazy para melhor performance
 const UnitSelectorDialogContent = dynamic(() => import('./unit-selector-dialog').then(mod => mod.UnitSelectorDialogContent), {
@@ -255,16 +263,21 @@ interface ExtendedResults extends Results {
   notaryFees?: number;
   notaryPaymentMethod?: string;
   notaryInstallments?: number;
+  maxCommitmentMonth?: number;
+  maxCommitmentDate?: Date;
 }
 
 // Interface estendida para PdfFormValues
-interface ExtendedPdfFormValues extends PdfFormValues {
+interface ExtendedPdfFormValues extends Omit<PdfFormValues, 'brokerName' | 'brokerCreci'> {
+  brokerName?: string;
+  brokerCreci?: string;
   property?: Property;
 }
 
 // Interface para PaymentTimelineProps
 interface PaymentTimelineProps {
-  paymentFields?: PaymentField[];
+  results: Results;
+  formValues: FormValues;
 }
 
 // Tipo para o resultado do cálculo de parcelas
@@ -278,6 +291,13 @@ type SteppedInstallmentResult = {
 type FixedInstallmentResult = {
   installment: number;
   total: number;
+};
+
+// Tipo para dados do gráfico
+type ChartData = {
+  name: string;
+  value: number;
+  fill: string;
 };
 
 // Função para calcular parcela de preço
@@ -318,8 +338,7 @@ const calculatePriceInstallment = (
     annuityFactor += discountFactor;
   }
   
-  if (annuityFactor === 0) return { installment: 0, total: principal };
-  
+  if (annuityFactor === 0) return { installment: 0, total: principal };  
   const baseInstallment = principal / annuityFactor;
   
   let correctedInstallment = baseInstallment;
@@ -333,6 +352,9 @@ const calculatePriceInstallment = (
   return { installment: correctedInstallment, total: correctedInstallment * installments };
 };
 
+// ===================================================================
+// INÍCIO DA ALTERAÇÃO 1: Lógica do Seguro de Obras
+// ===================================================================
 // Função otimizada de cálculo de seguro de obras com cache
 const calculateConstructionInsuranceLocal = (
   constructionStartDate: Date | null,
@@ -343,6 +365,7 @@ const calculateConstructionInsuranceLocal = (
         return { total: 0, breakdown: [] };
     }
 
+    // CORREÇÃO: Usar uma chave de cache mais estável, sem o timestamp atual
     const cacheKey = `${constructionStartDate.getTime()}-${deliveryDate.getTime()}-${caixaInstallmentValue}`;
     const cached = insuranceCache.get(cacheKey);
     
@@ -350,16 +373,21 @@ const calculateConstructionInsuranceLocal = (
         return { total: cached.total, breakdown: cached.breakdown };
     }
     
-    const totalMonths = differenceInMonths(deliveryDate, constructionStartDate);
-    if (totalMonths < 0) return { total: 0, breakdown: [] };
+    // CORREÇÃO: Calcular o número total de meses no período de forma inclusiva
+    const totalMonths = differenceInMonths(deliveryDate, constructionStartDate) + 1;
+    if (totalMonths <= 1) return { total: 0, breakdown: [] };
 
     let totalPayable = 0;
     const breakdown: MonthlyInsurance[] = [];
     const today = new Date();
     
-    for (let i = 0; i <= totalMonths; i++) {
+    // CORREÇÃO: O loop deve executar exatamente 'totalMonths' vezes
+    for (let i = 0; i < totalMonths; i++) {
         const monthDate = addMonths(constructionStartDate, i);
-        const progressRate = totalMonths > 0 ? i / totalMonths : 1;
+        
+        // CORREÇÃO: A fórmula da taxa de progresso deve ser i / (totalMonths - 1)
+        // para que o primeiro mês seja 0 e o último seja 1.
+        const progressRate = i / (totalMonths - 1);
         const insuranceValue = progressRate * caixaInstallmentValue;
 
         if (monthDate >= today) {
@@ -379,6 +407,9 @@ const calculateConstructionInsuranceLocal = (
     insuranceCache.set(cacheKey, result);
     return result;
 };
+// ===================================================================
+// FIM DA ALTERAÇÃO 1
+// ===================================================================
 
 // Função de validação centralizada
 const validatePaymentSumWithBusinessLogic = (
@@ -827,10 +858,12 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     setFloorFilter("Todos");
     setTypologyFilter("Todos");
     setSunPositionFilter("Todos");
+    setBrokerName('');
+    setBrokerCreci('');
     
     toast({
-      title: "Formulário Resetado",
-      description: "Todos os campos foram limpos com sucesso.",
+      title: "✅ Simulação Limpa",
+      description: "Todos os campos foram limpos. Você pode começar uma nova simulação.",
     });
   }, [reset, toast]);
 
@@ -908,6 +941,92 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     const totalPaid = steppedInstallments.reduce((acc, val, idx) => acc + val * periodLengths[idx], 0);
 
     return { installments: steppedInstallments, total: totalPaid, periodLengths };
+  }, []);
+
+  // Função para calcular o comprometimento de renda com correção de juros
+  const calculateIncomeCommitmentWithInterest = useCallback((
+    steppedInstallments: number[],
+    periodLengths: number[],
+    insuranceBreakdown: MonthlyInsurance[],
+    simulationInstallmentValue: number,
+    grossIncome: number,
+    deliveryDate: Date | null,
+    payments: PaymentField[]
+  ): {
+    maxCommitmentPercentage: number;
+    maxCommitmentMonth: number;
+    maxCommitmentDate: Date;
+    commitmentDetails: Array<{
+      month: number;
+      date: Date;
+      installmentValue: number;
+      insuranceValue: number;
+      totalValue: number;
+      commitmentPercentage: number;
+    }>;
+  } => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const commitmentDetails = [];
+    let maxCommitmentPercentage = 0;
+    let maxCommitmentMonth = 1;
+    let maxCommitmentDate = new Date();
+    
+    const totalInstallments = periodLengths.reduce((sum, length) => sum + length, 0);
+    
+    // Itera sobre todas as parcelas para encontrar o mês com maior comprometimento
+    for (let i = 1; i <= totalInstallments; i++) {
+      const monthDate = addMonths(today, i);
+      const monthStart = startOfMonth(monthDate);
+      
+      // Determina o valor da parcela do pró-soluto para este mês
+      let currentInstallment: number;
+      let installmentCount = 0;
+      let periodIndex = 0;
+      
+      // Encontra em qual período (1, 2, 3 ou 4) esta parcela se encaixa
+      for (let p = 0; p < 4; p++) {
+        installmentCount += periodLengths[p];
+        if (installmentCount >= i) {
+          periodIndex = p;
+          break;
+        }
+      }
+      
+      currentInstallment = steppedInstallments[periodIndex];
+      
+      // Determina o valor do seguro para este mês
+      const insuranceMonth = format(monthDate, "MMMM/yyyy", { locale: ptBR });
+      const insuranceValue = insuranceBreakdown.find(item => item.month === insuranceMonth)?.value || 0;
+      
+      // Calcula o valor total comprometido neste mês
+      const totalValue = currentInstallment + insuranceValue;
+      const commitmentPercentage = grossIncome > 0 ? (totalValue / grossIncome) * 100 : 0;
+      
+      commitmentDetails.push({
+        month: i,
+        date: monthDate,
+        installmentValue: currentInstallment,
+        insuranceValue,
+        totalValue,
+        commitmentPercentage
+      });
+      
+      // Atualiza o máximo comprometimento se necessário
+      if (commitmentPercentage > maxCommitmentPercentage) {
+        maxCommitmentPercentage = commitmentPercentage;
+        maxCommitmentMonth = i;
+        maxCommitmentDate = monthDate;
+      }
+    }
+    
+    return {
+      maxCommitmentPercentage,
+      maxCommitmentMonth,
+      maxCommitmentDate,
+      commitmentDetails
+    };
   }, []);
 
   const calculateNotaryInstallment = useCallback((
@@ -1040,8 +1159,6 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
         ? 0.1799 
         : (isReservaParque ? 0.1799 : 0.1499);
     
-    const maxProSolutoCorrigido = proSolutoLimitPercent * saleValue;
-    
     let correctionFactor = 1;
     let gracePeriodMonths = 1;
     if (payments.some(p => p.type === 'sinal1')) gracePeriodMonths++;
@@ -1056,7 +1173,7 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
       correctionFactor *= (1 + rate);
     }
     
-    const proSolutoByPercentage = maxProSolutoCorrigido / correctionFactor;
+    const proSolutoByPercentage = proSolutoLimitPercent * saleValue;
     
     finalProSolutoValue = Math.min(finalProSolutoValue, proSolutoByPercentage);
 
@@ -1149,7 +1266,7 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
 
   const onSubmit = useCallback((values: FormValues) => {
     clearErrors();
-  
+
     if (!selectedProperty || !deliveryDateObj || !constructionStartDateObj) {
       setError("propertyId", { message: "Selecione um imóvel para continuar." });
       return;
@@ -1162,7 +1279,7 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
       isSinalCampaignActive,
       sinalCampaignLimitPercent
     );
-  
+
     if (!validation.isValid) {
       toast({
         variant: "destructive",
@@ -1171,7 +1288,7 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
       });
       return;
     }
-  
+
     if (validation.businessLogicViolation) {
       toast({
         variant: "destructive",
@@ -1182,10 +1299,10 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
     }
     
     const bonusAdimplenciaValue = values.appraisalValue > values.saleValue ? values.appraisalValue - values.saleValue : 0;
-  
+
     const proSolutoPayment = values.payments.find(p => p.type === 'proSoluto');
     const hasProSoluto = !!proSolutoPayment;
-  
+
     if (hasProSoluto && values.installments !== undefined && values.installments > 0) {
       const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
       let maxInstallments;
@@ -1199,304 +1316,357 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
         return;
       }
     }
-  
+
     const sumOfOtherPayments = values.payments.reduce((acc, payment) => {
       if (!['proSoluto', 'bonusAdimplencia', 'bonusCampanha'].includes(payment.type)) {
         return acc + (payment.value || 0);
       }
       return acc;
     }, 0);
-  
+
     let proSolutoValue = values.appraisalValue - sumOfOtherPayments - bonusAdimplenciaValue;
     proSolutoValue = Math.max(0, proSolutoValue);
-  
+
     const financedAmount = proSolutoValue;
     const installments = values.installments ?? 0;
-  
+
     if (financedAmount <= 0 && hasProSoluto) {
       setResults({
         summary: { remaining: 0, okTotal: true },
         financedAmount: 0,
-        monthlyInstallment: 0,
         totalWithInterest: 0,
         totalConstructionInsurance: 0,
         monthlyInsuranceBreakdown: [],
         incomeCommitmentPercentage: 0,
         proSolutoCommitmentPercentage: 0,
         averageInterestRate: 0,
-        notaryInstallmentValue: undefined,
-        incomeError: undefined,
-        proSolutoError: undefined,
-        steppedInstallments: [],
-        periodLengths: [],
         paymentValidation: validation,
-        totalEntryCost: sumOfOtherPayments,
-        totalProSolutoCost: 0,
-        totalFinancedCost: 0,
-        totalNotaryCost: values.notaryFees || 0,
-        totalInsuranceCost: 0,
-        totalCost: sumOfOtherPayments + (values.notaryFees || 0),
-        effectiveSaleValue: values.saleValue,
-        paymentFields: values.payments,
+        appraisalValue: values.appraisalValue,
+        saleValue: values.saleValue,
+        grossIncome: values.grossIncome,
+        simulationInstallmentValue: values.simulationInstallmentValue,
+        financingParticipants: values.financingParticipants,
+        conditionType: values.conditionType,
+        installments: values.installments,
+        notaryFees: values.notaryFees,
+        notaryPaymentMethod: values.notaryPaymentMethod,
+        notaryInstallments: values.notaryInstallments,
       });
       return;
     }
-  
-    if(hasProSoluto && !installments) {
-      setError("installments", { message: "Número de parcelas é obrigatório para Pró-Soluto."})
-      return;
+
+    let steppedInstallments: number[] = [];
+    let periodLengths: number[] = [];
+    let totalWithInterest = 0;
+    let monthlyInstallment = 0;
+
+    if (hasProSoluto && installments > 0) {
+      const result = calculateSteppedInstallments(financedAmount, installments, deliveryDateObj, values.payments);
+      steppedInstallments = result.installments;
+      periodLengths = result.periodLengths;
+      totalWithInterest = result.total;
+    } else if (hasProSoluto) {
+      const result = calculatePriceInstallment(financedAmount, installments, deliveryDateObj, values.payments);
+      monthlyInstallment = result.installment;
+      totalWithInterest = result.total;
     }
-  
-    const isSteppedCalculator = true;
-  
-    let installmentCalculation: SteppedInstallmentResult | FixedInstallmentResult;
-    let monthlyInstallment: number;
-    let totalWithInterest: number;
-    let averageInterestRate: number;
-  
-    if (isSteppedCalculator) {
-      installmentCalculation = calculateSteppedInstallments(
-        financedAmount,
-        installments,
-        deliveryDateObj,
-        values.payments
-      );
-      monthlyInstallment = installmentCalculation.installments[0];
-      totalWithInterest = installmentCalculation.total;
-      averageInterestRate = calculateRate(installments, monthlyInstallment, financedAmount) * 100;
-    } else {
-      installmentCalculation = calculatePriceInstallment(
-        financedAmount,
-        installments,
-        deliveryDateObj,
-        values.payments
-      );
-      monthlyInstallment = installmentCalculation.installment;
-      totalWithInterest = installmentCalculation.total;
-      averageInterestRate = calculateRate(installments, monthlyInstallment, financedAmount) * 100;
-    }
-  
-    const constructionInsurance = calculateConstructionInsuranceLocal(
+
+    const { total: totalInsurance, breakdown: monthlyInsuranceBreakdown } = calculateConstructionInsuranceLocal(
       constructionStartDateObj,
       deliveryDateObj,
       values.simulationInstallmentValue
     );
-  
-    // Cálculo do comprometimento de renda considerando todas as parcelas
-    // do pró-soluto (decrescentes) e do seguro (crescentes)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
-    let maxMonthlyCommitment = 0;
-    let maxCommitmentMonth = 1;
-    let maxCommitmentDate = new Date();
+    const notaryInstallmentValue = values.notaryFees && values.notaryInstallments
+      ? calculateNotaryInstallment(values.notaryFees, values.notaryInstallments, values.notaryPaymentMethod || 'creditCard')
+      : undefined;
 
-    // Itera sobre todas as parcelas para encontrar o mês com maior comprometimento
-    for (let i = 1; i <= installments; i++) {
-      const monthDate = addMonths(today, i);
-      const monthStart = startOfMonth(monthDate);
-      
-      // Determina o valor da parcela do pró-soluto para este mês
-      let currentInstallment: number;
-      if (isSteppedCalculator && 'installments' in installmentCalculation && 'periodLengths' in installmentCalculation) {
-        const steppedResult = installmentCalculation as SteppedInstallmentResult;
-        let installmentCount = 0;
-        let periodIndex = 0;
-        
-        // Encontra em qual período (1, 2, 3 ou 4) esta parcela se encaixa
-        for (let p = 0; p < 4; p++) {
-          installmentCount += steppedResult.periodLengths[p];
-          if (installmentCount >= i) {
-            periodIndex = p;
-            break;
-          }
-        }
-        
-        currentInstallment = steppedResult.installments[periodIndex];
-      } else {
-        currentInstallment = monthlyInstallment;
-      }
-      
-      // Encontra o valor do seguro para este mês específico
-      const insuranceValue = constructionInsurance.breakdown.find(item => {
-        const itemDate = startOfMonth(item.date);
-        return itemDate.getTime() === monthStart.getTime();
-      })?.value || 0;
-      
-      // Calcula o comprometimento de renda para este mês
-      const monthlyCommitment = (currentInstallment + insuranceValue) / values.grossIncome;
-      
-      // Verifica se este é o mês com maior comprometimento
-      if (monthlyCommitment > maxMonthlyCommitment) {
-        maxMonthlyCommitment = monthlyCommitment;
-        maxCommitmentMonth = i;
-        maxCommitmentDate = monthDate;
-      }
-    }
+    let incomeCommitmentPercentage = 0;
+    let proSolutoCommitmentPercentage = 0;
+    let incomeError = '';
+    let proSolutoError = '';
 
-    // Converte para percentual
-    const incomeCommitmentPercentage = maxMonthlyCommitment * 100;
-  
-    let proSolutoCorrigido = financedAmount;
-  
-    if (hasProSoluto) {
-      const proSolutoPayment = values.payments.find(p => p.type === 'proSoluto');
-      const proSolutoDate = proSolutoPayment?.date || deliveryDateObj || new Date();
-      
-      const deliveryMonth = startOfMonth(deliveryDateObj);
-      const proSolutoMonth = startOfMonth(proSolutoDate);
-      
-      if (proSolutoMonth < deliveryMonth) {
-        const monthsBeforeDelivery = differenceInMonths(proSolutoMonth, deliveryMonth);
-        proSolutoCorrigido *= Math.pow(1.005, monthsBeforeDelivery);
-      } else {
-        const monthsAfterDelivery = differenceInMonths(deliveryMonth, proSolutoMonth);
-        proSolutoCorrigido *= Math.pow(1.015, monthsAfterDelivery);
-      }
-    }
-  
-    const proSolutoCommitmentPercentage = values.saleValue > 0
-      ? (proSolutoCorrigido / values.saleValue) * 100
-      : 0;
-  
-    let notaryInstallmentValue: number | undefined = undefined;
-    if (values.notaryFees && values.notaryInstallments && values.notaryPaymentMethod) {
-      notaryInstallmentValue = calculateNotaryInstallment(
-        values.notaryFees,
-        values.notaryInstallments,
-        values.notaryPaymentMethod
+    if (values.grossIncome > 0) {
+      const maxMonthlyPayment = values.grossIncome * 0.5;
+      const { maxCommitmentPercentage } = calculateIncomeCommitmentWithInterest(
+        steppedInstallments,
+        periodLengths,
+        monthlyInsuranceBreakdown,
+        values.simulationInstallmentValue,
+        values.grossIncome,
+        deliveryDateObj,
+        values.payments
       );
-    }
-  
-    let incomeError: string | undefined = undefined;
-    let proSolutoError: string | undefined = undefined;
-  
-    if (incomeCommitmentPercentage > 50) {
-      incomeError = "Comprometimento de renda excede 50%.";
-    }
-  
-    if (proSolutoCommitmentPercentage > 100) {
-      proSolutoError = `Parcela do Pró-Soluto (${formatPercentage(proSolutoCommitmentPercentage / 100)}) excede o valor da parcela simula.`;
-    }
-  
-    if(hasProSoluto) {
-      const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
-      let proSolutoLimit;
-      let proSolutoLimitPercent;
-  
-      if (isReservaParque) {
-        proSolutoLimit = 0.18;
-        proSolutoLimitPercent = '18%';
-      } else {
-        proSolutoLimit = values.conditionType === 'especial' ? 0.18 : 0.15;
-        proSolutoLimitPercent = values.conditionType === 'especial' ? '18%' : '15%';
+      incomeCommitmentPercentage = maxCommitmentPercentage;
+
+      if (incomeCommitmentPercentage > 50) {
+        incomeError = `Comprometimento de renda (${incomeCommitmentPercentage.toFixed(2)}%) excede o limite de 50%.`;
       }
-  
-      const proSolutoPercentOfSaleValue = proSolutoValue / values.saleValue;
-      
-      if (proSolutoPercentOfSaleValue >= proSolutoLimit) {
-        proSolutoError = `O Percentual Parcelado (Pró-Soluto) (${formatPercentage(proSolutoPercentOfSaleValue)}) excede o limite de ${proSolutoLimitPercent}.`;
-      }
+    } else {
+      incomeError = 'Renda bruta não informada.';
     }
-  
+
+    if (values.simulationInstallmentValue > 0) {
+      const maxProSolutoPayment = values.simulationInstallmentValue * 0.5;
+      const highestInstallment = steppedInstallments.length > 0 ? Math.max(...steppedInstallments) : monthlyInstallment;
+      proSolutoCommitmentPercentage = (highestInstallment / values.simulationInstallmentValue) * 100;
+
+      if (proSolutoCommitmentPercentage > 50) {
+        proSolutoError = `Comprometimento da parcela simulada (${proSolutoCommitmentPercentage.toFixed(2)}%) excede o limite de 50%.`;
+      }
+    } else {
+      proSolutoError = 'Valor da parcela simulada não informado.';
+    }
+
     const totalEntryCost = values.payments
       .filter(p => ['sinalAto', 'sinal1', 'sinal2', 'sinal3', 'desconto', 'bonusCampanha'].includes(p.type))
       .reduce((sum, p) => sum + p.value, 0);
-  
-    const totalProSolutoCost = proSolutoValue;
-    const totalFinancedCost = values.payments
-      .filter(p => ['financiamento', 'fgts'].includes(p.type))
-      .reduce((sum, p) => sum + p.value, 0);
-  
+
+    const totalProSolutoCost = hasProSoluto ? totalWithInterest : 0;
     const totalNotaryCost = values.notaryFees || 0;
-    const totalInsuranceCost = constructionInsurance.total;
-    const totalCost = totalEntryCost + totalProSolutoCost + totalFinancedCost + totalNotaryCost + totalInsuranceCost;
-  
-    const newResults: ExtendedResults = {
+    const totalInsuranceCost = totalInsurance;
+    const totalCost = totalEntryCost + totalProSolutoCost + totalNotaryCost + totalInsuranceCost;
+
+    const effectiveSaleValue = values.saleValue - (values.payments.find(p => p.type === 'desconto')?.value || 0) - (values.payments.find(p => p.type === 'bonusCampanha')?.value || 0);
+
+    setResults({
       summary: { remaining: 0, okTotal: true },
       financedAmount,
       monthlyInstallment,
+      steppedInstallments,
+      periodLengths,
       totalWithInterest,
-      totalConstructionInsurance: constructionInsurance.total,
-      monthlyInsuranceBreakdown: constructionInsurance.breakdown,
+      totalConstructionInsurance: totalInsurance,
+      monthlyInsuranceBreakdown,
       incomeCommitmentPercentage,
       proSolutoCommitmentPercentage,
-      averageInterestRate,
+      averageInterestRate: 0,
       notaryInstallmentValue,
       incomeError,
       proSolutoError,
-      steppedInstallments: isSteppedCalculator ? (installmentCalculation as SteppedInstallmentResult).installments : undefined,
-      periodLengths: isSteppedCalculator ? (installmentCalculation as SteppedInstallmentResult).periodLengths : undefined,
       paymentValidation: validation,
       totalEntryCost,
       totalProSolutoCost,
-      totalFinancedCost,
       totalNotaryCost,
       totalInsuranceCost,
       totalCost,
-      effectiveSaleValue: values.saleValue,
-      paymentFields: values.payments,
-    };
-  
-    setResults(newResults);
-    resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [clearErrors, selectedProperty, deliveryDateObj, constructionStartDateObj, setError, toast, isSinalCampaignActive, sinalCampaignLimitPercent, validatePaymentSumWithBusinessLogic, calculateSteppedInstallments, calculatePriceInstallment, calculateConstructionInsuranceLocal, calculateRate, calculateNotaryInstallment]);
+      effectiveSaleValue,
+      appraisalValue: values.appraisalValue,
+      saleValue: values.saleValue,
+      grossIncome: values.grossIncome,
+      simulationInstallmentValue: values.simulationInstallmentValue,
+      financingParticipants: values.financingParticipants,
+      conditionType: values.conditionType,
+      installments: values.installments,
+      notaryFees: values.notaryFees,
+      notaryPaymentMethod: values.notaryPaymentMethod,
+      notaryInstallments: values.notaryInstallments,
+    });
+
+    if (resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [
+    clearErrors,
+    selectedProperty,
+    deliveryDateObj,
+    constructionStartDateObj,
+    setError,
+    toast,
+    isSinalCampaignActive,
+    sinalCampaignLimitPercent,
+    validatePaymentSumWithBusinessLogic,
+    calculateSteppedInstallments,
+    calculatePriceInstallment,
+    calculateConstructionInsuranceLocal,
+    calculateNotaryInstallment,
+    calculateIncomeCommitmentWithInterest,
+  ]);
+
+  // ===================================================================
+  // INÍCIO DA ALTERAÇÃO 2: Correção no botão "Aplicar Condição Mínima"
+  // ===================================================================
+  const handleApplyMinimumCondition = useCallback(() => {
+    const values = getValues();
+    
+    if (!selectedProperty || !deliveryDateObj || !constructionStartDateObj) {
+      setError("propertyId", { message: "Selecione um imóvel para continuar." });
+      return;
+    }
+
+    if (!values.installments || values.installments <= 0) {
+      setError("installments", { message: "Defina o número de parcelas para aplicar a condição mínima." });
+      return;
+    }
+
+    const newPayments = applyMinimumCondition(
+      values.payments,
+      values.appraisalValue,
+      values.saleValue,
+      isSinalCampaignActive,
+      sinalCampaignLimitPercent,
+      values.conditionType,
+      selectedProperty.enterpriseName,
+      values.grossIncome,
+      values.simulationInstallmentValue,
+      values.installments,
+      deliveryDateObj,
+      constructionStartDateObj
+    );
+
+    replace(newPayments);
+    
+    toast({
+      title: "✅ Condição Mínima Aplicada",
+      description: "Os valores foram ajustados. Calculando resultados...",
+    });
+
+    // CORREÇÃO: Após aplicar a condição, acionar a validação e o cálculo
+    trigger().then(isValid => {
+        if (isValid) {
+            // Pega os valores mais recentes do formulário e executa a lógica de cálculo
+            onSubmit(getValues());
+        } else {
+            toast({
+                variant: "destructive",
+                title: "Erro de Validação",
+                description: "Por favor, verifique os campos do formulário após aplicar a condição.",
+            });
+        }
+    });
+  }, [
+    getValues,
+    selectedProperty,
+    deliveryDateObj,
+    constructionStartDateObj,
+    setError,
+    applyMinimumCondition,
+    replace,
+    toast,
+    isSinalCampaignActive,
+    sinalCampaignLimitPercent,
+    trigger,
+    onSubmit
+  ]);
+  // ===================================================================
+  // FIM DA ALTERAÇÃO 2
+  // ===================================================================
+
+  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!validateMimeType(file, ['application/pdf'])) {
+      toast({
+        variant: "destructive",
+        title: "Arquivo inválido",
+        description: "Por favor, selecione um arquivo PDF.",
+      });
+      return;
+    }
+
+    if (!validateFileSize(file, 10 * 1024 * 1024)) {
+      toast({
+        variant: "destructive",
+        title: "Arquivo muito grande",
+        description: "O arquivo deve ter no máximo 10MB.",
+      });
+      return;
+    }
+
+    setIsExtracting(true);
+    try {
+      const fileDataUri = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const functions = getFunctions();
+      const extractFinancialData = httpsCallable<ExtractFinancialDataInput, ExtractPricingOutput>(functions, 'extractFinancialData');
+      const result = await extractFinancialData({ fileDataUri });
+
+      if (result.data) {
+        const { appraisalValue, grossIncome, simulationInstallmentValue, financingValue } = result.data;
+        
+        if (appraisalValue) setValue('appraisalValue', appraisalValue, { shouldValidate: true });
+        if (grossIncome) setValue('grossIncome', grossIncome, { shouldValidate: true });
+        if (simulationInstallmentValue) setValue('simulationInstallmentValue', simulationInstallmentValue, { shouldValidate: true });
+        
+        const formValues = form.getValues();
+        const existingFinancing = formValues.payments.find((p: PaymentField) => p.type === 'financiamento');
+        if (existingFinancing) {
+          const updatedPayments = formValues.payments.map((p: PaymentField) => 
+            p.type === 'financiamento' ? { ...p, value: financingValue } : p
+          );
+          replace(updatedPayments);
+        } else {
+          append({
+            type: 'financiamento',
+            value: financingValue,
+            date: new Date(),
+          });
+        }
+
+        toast({
+          title: "✅ Dados Extraídos",
+          description: "Os dados financeiros foram preenchidos automaticamente.",
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao extrair dados do PDF:', error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao Processar PDF",
+        description: "Não foi possível extrair os dados do arquivo. Tente novamente.",
+      });
+    } finally {
+      setIsExtracting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }, [setValue, append, replace, toast, form]);
 
   const handleGeneratePdf = useCallback(async () => {
     if (!results || !selectedProperty) {
       toast({
-        title: "Erro",
-        description: "Não há resultados para gerar o PDF.",
         variant: "destructive",
+        title: "Erro",
+        description: "Calcule a simulação antes de gerar o PDF.",
       });
       return;
     }
-  
+
     setIsGeneratingPdf(true);
     try {
-      const pdfValues: ExtendedPdfFormValues = {
+      const pdfData: PdfFormValues = {
         ...form.getValues(),
-        property: selectedProperty,
-        brokerName,
-        brokerCreci,
+        brokerName: brokerName || '',
+        brokerCreci: brokerCreci || '',
       };
-  
-      const selectedPropertyForPdf = properties.find(p => p.id === form.getValues('propertyId'));
+
+      await generatePdf(pdfData, results, selectedProperty);
       
-      if (!selectedPropertyForPdf) {
-        toast({
-          variant: 'destructive',
-          title: 'Erro',
-          description: 'A propriedade selecionada não foi encontrada. Não é possível gerar o PDF.',
-        });
-        setIsGeneratingPdf(false);
-        return;
-      }
-  
-      await generatePdf(pdfValues, results, selectedPropertyForPdf);
       toast({
-        title: "PDF Gerado",
-        description: "O PDF foi gerado com sucesso.",
+        title: "✅ PDF Gerado",
+        description: "O arquivo foi baixado com sucesso.",
       });
     } catch (error) {
-      console.error("Erro ao gerar PDF:", error);
+      console.error('Erro ao gerar PDF:', error);
       toast({
-        title: "Erro",
-        description: "Ocorreu um erro ao gerar o PDF.",
         variant: "destructive",
+        title: "Erro ao Gerar PDF",
+        description: "Não foi possível gerar o arquivo. Tente novamente.",
       });
     } finally {
       setIsGeneratingPdf(false);
     }
-  }, [results, selectedProperty, toast, form, brokerName, brokerCreci, properties]);
-
-  // Função auxiliar para verificar se a data deve ser bloqueada
-  const isDateLocked = (paymentType: PaymentFieldType): boolean => {
-    return paymentType === 'sinalAto';
-  };
+  }, [results, selectedProperty, form, brokerName, brokerCreci, toast]);
 
   return (
-    <div className="space-y-6">
+    <div className="w-full max-w-7xl mx-auto p-6 space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1504,605 +1674,361 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
             Simulador de Parcelas Escalonadas
           </CardTitle>
           <CardDescription>
-            Preencha os dados abaixo para simular as condições de pagamento com parcelas escalonadas.
+            Preencha os dados abaixo para simular as condições de pagamento do imóvel.
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-4 sm:p-6">
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6" data-testid="property-selection">
-              <FormField
-                control={form.control}
-                name="propertyId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Empreendimento</FormLabel>
-                    <Select onValueChange={handlePropertyChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="property-select">
-                          <SelectValue placeholder="Selecione um empreendimento" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {filteredProperties.map((property) => (
-                          <SelectItem key={property.id} value={property.id}>
-                            {property.enterpriseName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+        <CardContent>
+          <FormProvider {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {/* Seção de Seleção de Imóvel */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="property-select">
+                <FormField
+                  control={form.control}
+                  name="propertyId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Empreendimento</FormLabel>
+                      <Select onValueChange={handlePropertyChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione um empreendimento" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {filteredProperties.map((property) => (
+                            <SelectItem key={property.id} value={property.id}>
+                              {property.enterpriseName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="selectedUnit"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Unidade Selecionada</FormLabel>
-                    <div className="flex gap-2" data-testid="unit-selection">
-                      <FormControl>
-                        <Input
-                          {...field}
-                          placeholder="Selecione uma unidade"
-                          readOnly
-                          className={cn(
-                            "border transition-all duration-200 text-sm",
-                            isSaleValueLocked 
-                              ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100 font-medium" 
-                              : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100"
-                          )}
-                        />
-                      </FormControl>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setIsUnitSelectorOpen(true)}
-                        disabled={!selectedProperty}
-                        data-testid="unit-select-button"
-                      >
-                        <Building className="h-4 w-4" />
-                      </Button>
-                      {isSaleValueLocked && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={handleClearUnitSelection}
-                        >
-                          <XCircle className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6" data-testid="property-values">
-              <CurrencyFormField
-                name="appraisalValue"
-                label="Valor de Avaliação"
-                control={form.control}
-              />
-              <CurrencyFormField
-                name="saleValue"
-                label="Valor de Venda"
-                control={form.control}
-                readOnly={isSaleValueLocked}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6" data-testid="income-values">
-              <CurrencyFormField
-                name="grossIncome"
-                label="Renda Bruta Mensal"
-                control={form.control}
-              />
-              <CurrencyFormField
-                name="simulationInstallmentValue"
-                label="Valor da Parcela Simulação"
-                control={form.control}
-              />
-            </div>
-
-            <div className="space-y-4" data-testid="payments-section">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <h3 className="text-base sm:text-lg font-semibold">Pagamentos</h3>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    const availableField = availablePaymentFields[0];
-                    if (availableField) {
-                      append({
-                        type: availableField.value,
-                        value: 0,
-                        date: new Date(),
-                      });
-                    }
-                  }}
-                  disabled={availablePaymentFields.length === 0}
-                  className="w-full sm:w-auto"
-                >
-                  <PlusCircle className="h-4 w-4 mr-2" />
-                  Adicionar Pagamento
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                {fields.map((field, index) => (
-                  <div key={field.id} className="flex flex-col sm:flex-row gap-2 sm:gap-4">
-                    <FormField
-                      control={form.control}
-                      name={`payments.${index}.type`}
-                      render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormLabel>Tipo</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione o tipo" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {paymentFieldOptions.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name={`payments.${index}.value`}
-                      render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormLabel>Valor</FormLabel>
-                          <FormControl>
-                            <CurrencyInput
-                              value={field.value * 100}
-                              onValueChange={(cents) => field.onChange(cents === null ? 0 : cents / 100)}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name={`payments.${index}.date`}
-                      render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormLabel>Data</FormLabel>
-                          <FormControl>
-                            <DatePicker
-                                value={field.value?.toISOString()}
-                                onChange={field.onChange}
-                                disabled={isDateLocked(watchedPayments[index]?.type)}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
+                <div className="space-y-2">
+                  <Label>Unidade</Label>
+                  <div className="flex gap-2">
                     <Button
                       type="button"
                       variant="outline"
-                      size="icon"
-                      onClick={() => remove(index)}
-                      className="mt-6 sm:mt-0"
+                      onClick={() => setIsUnitSelectorOpen(true)}
+                      disabled={!selectedProperty}
+                      className="flex-1"
+                      data-testid="unit-select-button"
                     >
-                      <XCircle className="h-4 w-4" />
+                      <Grid3X3 className="h-4 w-4 mr-2" />
+                      Selecionar Unidade
                     </Button>
+                    {form.getValues().selectedUnit && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleClearUnitSelection}
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6" data-testid="condition-section">
-              <FormField
-                control={form.control}
-                name="conditionType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Condição</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a condição" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="padrao">Padrão</SelectItem>
-                        <SelectItem value="especial">Especial</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="installments"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Número de Parcelas</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        {...field}
-                        onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="financingParticipants"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Participantes no Financiamento</FormLabel>
-                    <Select onValueChange={(value) => field.onChange(parseInt(value))} defaultValue={field.value.toString()}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o número" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {[1, 2, 3, 4].map((num) => (
-                          <SelectItem key={num} value={num.toString()}>
-                            {num}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6" data-testid="notary-section">
-              <CurrencyFormField
-                name="notaryFees"
-                label="Taxas Cartorárias"
-                control={form.control}
-                readOnly
-              />
-
-              <FormField
-                control={form.control}
-                name="notaryPaymentMethod"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Método de Pagamento Cartório</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o método" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="creditCard">Cartão de Crédito</SelectItem>
-                        <SelectItem value="bankSlip">Boleto</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="notaryInstallments"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Parcelas Cartório</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        {...field}
-                        onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                        placeholder={watchedNotaryPaymentMethod === 'creditCard' ? '1-12' : '36 ou 40'}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4" data-testid="action-buttons">
-              <Button type="submit" className="w-full sm:flex-1">
-                <Calculator className="h-4 w-4 mr-2" />
-                Calcular
-              </Button>
-
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-full sm:flex-1"
-                onClick={() => {
-                  if (!selectedProperty) return;
-                  const currentValues = form.getValues();
-                  const newPayments = applyMinimumCondition(
-                    currentValues.payments,
-                    currentValues.appraisalValue,
-                    currentValues.saleValue,
-                    isSinalCampaignActive,
-                    sinalCampaignLimitPercent,
-                    currentValues.conditionType,
-                    selectedProperty.enterpriseName,
-                    currentValues.grossIncome,
-                    currentValues.simulationInstallmentValue,
-                    currentValues.installments || 0,
-                    deliveryDateObj,
-                    constructionStartDateObj
-                  );
-                  form.setValue('payments', newPayments);
-                  form.handleSubmit(onSubmit)();
-                  
-                  toast({
-                    title: 'Condição Mínima Aplicada',
-                    description: 'Os campos de Sinal e Pró-Soluto foram otimizados.',
-                  });
-                }}
-              >
-                <PiggyBank className="h-4 w-4 mr-2" />
-                Condição Mínima
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isExtracting}
-                className="w-full sm:w-auto"
-              >
-                {isExtracting ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4 mr-2" />
-                )}
-                Upload PDF
-              </Button>
-              
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleResetForm}
-                title="Resetar formulário"
-                className="w-full sm:w-auto"
-              >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Resetar
-              </Button>
-              
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf"
-                className="hidden"
-              />
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      {results && (
-        <Card ref={resultsRef} data-testid="results-section">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              Resultados da Simulação
-            </CardTitle>
-            <CardDescription>
-              Confira abaixo os detalhes da simulação realizada.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 sm:p-6">
-            <div className="space-y-4 sm:space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card>
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex items-center gap-2">
-                      <Wallet className="h-4 w-4 text-blue-600" />
-                      <span className="text-xs sm:text-sm font-medium">Valor Financiado</span>
-                    </div>
-                    <p className="text-lg sm:text-2xl font-bold text-blue-600 break-words">
-                      {centsToBrl((results.financedAmount || 0) * 100)}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex items-center gap-2">
-                      <CreditCard className="h-4 w-4 text-green-600" />
-                      <span className="text-xs sm:text-sm font-medium">Primeira Parcela</span>
-                    </div>
-                    <p className="text-lg sm:text-2xl font-bold text-green-600 break-words">
-                      {centsToBrl((results.monthlyInstallment || 0) * 100)}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-purple-600" />
-                      <span className="text-xs sm:text-sm font-medium">Taxa de Juros</span>
-                    </div>
-                    <p className="text-lg sm:text-2xl font-bold text-purple-600 break-words">
-                      {formatPercentage((results.averageInterestRate || 0) / 100)}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-orange-600" />
-                      <span className="text-xs sm:text-sm font-medium">Seguro Obra</span>
-                    </div>
-                    <p className="text-lg sm:text-2xl font-bold text-orange-600 break-words">
-                      {centsToBrl((results.totalConstructionInsurance || 0) * 100)}
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {results.steppedInstallments && results.periodLengths && (
-                <Card>
-                  <CardHeader className="pb-3 sm:pb-4">
-                    <CardTitle className="text-base sm:text-lg">Parcelas Escalonadas</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3 sm:space-y-4">
-                      {results.steppedInstallments.map((installment, index) => (
-                        <div key={index} className="flex justify-between items-center">
-                          <span className="text-sm">
-                            Período {index + 1} ({results.periodLengths![index]}x)
-                          </span>
-                          <span className="font-medium text-sm sm:text-base">
-                            {centsToBrl(installment * 100)}
-                          </span>
-                        </div>
-                      ))}
-                      <Separator />
-                      <div className="flex justify-between font-bold">
-                        <span>Total</span>
-                        <span>{centsToBrl(results.totalWithInterest * 100)}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader className="pb-3 sm:pb-4">
-                    <CardTitle className="text-base sm:text-lg">Resumo de Custos</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>Entrada</span>
-                        <span className="font-medium">{centsToBrl((results.totalEntryCost || 0) * 100)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span>Pró-Soluto</span>
-                        <span className="font-medium">{centsToBrl((results.totalProSolutoCost || 0) * 100)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span>Financiamento</span>
-                        <span className="font-medium">{centsToBrl((results.totalFinancedCost || 0) * 100)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span>Taxas Cartorárias</span>
-                        <span className="font-medium">{centsToBrl((results.totalNotaryCost || 0) * 100)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span>Seguro Obra</span>
-                        <span className="font-medium">{centsToBrl((results.totalInsuranceCost || 0) * 100)}</span>
-                      </div>
-                      <Separator />
-                      <div className="flex justify-between font-bold">
-                        <span>Total</span>
-                        <span>{centsToBrl((results.totalCost || 0) * 100)}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-3 sm:pb-4">
-                    <CardTitle className="text-base sm:text-lg">Análise de Renda</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex justify-between mb-2">
-                          <span className="text-sm">Comprometimento de Renda</span>
-                          <span className="text-sm font-medium">{results.incomeCommitmentPercentage.toFixed(2)}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${
-                              results.incomeCommitmentPercentage > 50
-                                ? 'bg-red-500'
-                                : results.incomeCommitmentPercentage > 30
-                                ? 'bg-yellow-500'
-                                : 'bg-green-500'
-                            }`}
-                            style={{ width: `${Math.min(results.incomeCommitmentPercentage, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between mb-2">
-                          <span className="text-sm">Percentual Pró-Soluto</span>
-                          <span className="text-sm font-medium">{results.proSolutoCommitmentPercentage.toFixed(2)}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${
-                              results.proSolutoCommitmentPercentage > 100
-                                ? 'bg-red-500'
-                                : results.proSolutoCommitmentPercentage > 50
-                                ? 'bg-yellow-500'
-                                : 'bg-green-500'
-                            }`}
-                            style={{ width: `${Math.min(results.proSolutoCommitmentPercentage, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {results.incomeError && (
-                        <Alert variant="destructive">
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertTitle>Atenção</AlertTitle>
-                          <AlertDescription>{results.incomeError}</AlertDescription>
-                        </Alert>
-                      )}
-
-                      {results.proSolutoError && (
-                        <Alert variant="destructive">
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertTitle>Atenção</AlertTitle>
-                          <AlertDescription>{results.proSolutoError}</AlertDescription>
-                        </Alert>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="text-base sm:text-lg font-semibold">Cronograma de Pagamentos</h3>
-                <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-                  <PaymentTimeline results={results} formValues={form.getValues()} />
+                  {form.getValues().selectedUnit && (
+                    <p className="text-sm text-gray-600">{form.getValues().selectedUnit}</p>
+                  )}
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-4">
+              {/* Seção de Valores do Imóvel */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="property-values">
+                <CurrencyFormField
+                  name="appraisalValue"
+                  label="Valor de Avaliação"
+                  control={form.control}
+                  id="appraisal-value"
+                />
+                <CurrencyFormField
+                  name="saleValue"
+                  label="Valor de Venda"
+                  control={form.control}
+                  readOnly={isSaleValueLocked}
+                  id="sale-value"
+                />
+              </div>
+
+              {/* Seção de Dados Financeiros */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-testid="income-values">
+                <CurrencyFormField
+                  name="grossIncome"
+                  label="Renda Bruta Mensal"
+                  control={form.control}
+                  id="gross-income"
+                />
+                <CurrencyFormField
+                  name="simulationInstallmentValue"
+                  label="Valor da Parcela Simulada"
+                  control={form.control}
+                  id="simulation-installment"
+                />
+                <FormField
+                  control={form.control}
+                  name="financingParticipants"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Participantes no Financiamento</FormLabel>
+                      <Select onValueChange={(value) => field.onChange(parseInt(value))} value={field.value?.toString()}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {[1, 2, 3, 4].map((num) => (
+                            <SelectItem key={num} value={num.toString()}>
+                              {num} {num === 1 ? 'pessoa' : 'pessoas'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Seção de Pagamentos */}
+              <div className="space-y-4" data-testid="payments-section">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Pagamentos</h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => append({ type: availablePaymentFields[0]?.value || 'sinalAto', value: 0, date: new Date() })}
+                    disabled={availablePaymentFields.length === 0}
+                  >
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                    Adicionar Pagamento
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {fields.map((field, index) => (
+                    <div key={field.id} className="flex gap-2 items-end">
+                      <FormField
+                        control={form.control}
+                        name={`payments.${index}.type`}
+                        render={({ field }) => (
+                          <FormItem className="flex-1">
+                            <FormLabel>Tipo</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {paymentFieldOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`payments.${index}.value`}
+                        render={({ field }) => (
+                          <FormItem className="flex-1">
+                            <FormLabel>Valor</FormLabel>
+                            <FormControl>
+                              <CurrencyInput
+                                value={field.value * 100}
+                                onValueChange={(cents) => field.onChange(cents === null ? 0 : cents / 100)}
+                                className="w-full"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`payments.${index}.date`}
+                        render={({ field }) => (
+                          <FormItem className="flex-1">
+                            <FormLabel>Data</FormLabel>
+                            <FormControl>
+                              <DatePicker
+                                value={field.value ? field.value.toISOString() : undefined}
+                                onChange={(date) => field.onChange(date ? new Date(date) : undefined)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => remove(index)}
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Seção de Condições de Pagamento */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-testid="condition-section">
+                <FormField
+                  control={form.control}
+                  name="conditionType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tipo de Condição</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="padrao">Padrão</SelectItem>
+                          <SelectItem value="especial">Especial</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="installments"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Número de Parcelas</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="240"
+                          placeholder="Ex: 60"
+                          {...field}
+                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleApplyMinimumCondition}
+                  disabled={!selectedProperty || !deliveryDateObj || !constructionStartDateObj}
+                >
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                  Aplicar Condição Mínima
+                </Button>
+              </div>
+
+              {/* Seção de Taxas Cartorárias */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-testid="notary-section">
+                <CurrencyFormField
+                  name="notaryFees"
+                  label="Taxas Cartorárias"
+                  control={form.control}
+                  readOnly
+                />
+
+                <FormField
+                  control={form.control}
+                  name="notaryPaymentMethod"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Método de Pagamento</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="creditCard">Cartão de Crédito</SelectItem>
+                          <SelectItem value="bankSlip">Boleto</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="notaryInstallments"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Parcelamento</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="240"
+                          placeholder="Ex: 12"
+                          {...field}
+                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Seção de Ações */}
+              <div className="flex flex-wrap gap-2" data-testid="action-buttons">
+                <Button type="submit" disabled={isExtracting}>
+                  <Calculator className="h-4 w-4 mr-2" />
+                  Calcular
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isExtracting}
+                >
+                  {isExtracting ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Upload PDF
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={handleGeneratePdf}
-                  disabled={isGeneratingPdf}
-                  className="w-full sm:flex-1"
+                  disabled={!results || isGeneratingPdf}
                 >
                   {isGeneratingPdf ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -2111,26 +2037,197 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
                   )}
                   Gerar PDF
                 </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleResetForm}
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Limpar
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsTutorialOpen(true)}
+                >
+                  <Info className="h-4 w-4 mr-2" />
+                  Tutorial
+                </Button>
+              </div>
+
+              {/* Seção de Resultados */}
+              {results && (
+                <div ref={resultsRef} className="space-y-6" data-testid="results-section">
+                  <Separator />
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Resultados da Simulação</h3>
+                    
+                    {/* Cards de Resumo */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-gray-600">Custo Total</p>
+                              <p className="text-2xl font-bold">{centsToBrl((results.totalCost || 0) * 100)}</p>
+                            </div>
+                            <Wallet className="h-8 w-8 text-blue-600" />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-gray-600">Entrada</p>
+                              <p className="text-2xl font-bold">{centsToBrl((results.totalEntryCost || 0) * 100)}</p>
+                            </div>
+                            <PiggyBank className="h-8 w-8 text-green-600" />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-gray-600">Pró-Soluto</p>
+                              <p className="text-2xl font-bold">{centsToBrl((results.totalProSolutoCost || 0) * 100)}</p>
+                            </div>
+                            <CreditCard className="h-8 w-8 text-purple-600" />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-gray-600">Seguro</p>
+                              <p className="text-2xl font-bold">{centsToBrl((results.totalInsuranceCost || 0) * 100)}</p>
+                            </div>
+                            <ShieldCheck className="h-8 w-8 text-orange-600" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Gráfico de Resultados */}
+                    <div className="mb-6">
+                      <ResultChart
+                        data={[
+                          { name: "Entrada", value: results.totalEntryCost || 0, fill: "#8884d8" },
+                          { name: "Pró-Soluto", value: results.totalProSolutoCost || 0, fill: "#82ca9d" },
+                          { name: "Cartório", value: results.totalNotaryCost || 0, fill: "#ffc658" },
+                          { name: "Seguro", value: results.totalInsuranceCost || 0, fill: "#ff7c7c" }
+                        ]}
+                        value={results.totalCost || 0}
+                      />
+                    </div>
+
+                    {/* Linha do Tempo de Pagamentos */}
+                    <div className="mb-6">
+                      <PaymentTimeline 
+                        results={results} 
+                        formValues={form.getValues()} 
+                      />
+                    </div>
+
+                    {/* Tabela de Parcelas Escalonadas */}
+                    {results.steppedInstallments && results.steppedInstallments.length > 0 && (
+                      <div className="mb-6">
+                        <h4 className="text-md font-semibold mb-3">Parcelas Escalonadas</h4>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Período</TableHead>
+                              <TableHead>Quantidade</TableHead>
+                              <TableHead>Valor da Parcela</TableHead>
+                              <TableHead>Total do Período</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {results.steppedInstallments.map((installment, index) => (
+                              <TableRow key={index}>
+                                <TableCell>{index + 1}º Período</TableCell>
+                                <TableCell>{results.periodLengths?.[index] || 0}</TableCell>
+                                <TableCell>{centsToBrl(installment * 100)}</TableCell>
+                                <TableCell>{centsToBrl(installment * (results.periodLengths?.[index] || 0) * 100)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+
+                    {/* Alertas de Validação */}
+                    {results.paymentValidation && !results.paymentValidation.isValid && (
+                      <Alert variant="destructive" className="mb-4">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Valores Inconsistentes</AlertTitle>
+                        <AlertDescription>
+                          {results.paymentValidation.businessLogicViolation || 
+                           `A soma dos pagamentos (${centsToBrl(results.paymentValidation.actual * 100)}) não corresponde ao valor necessário (${centsToBrl(results.paymentValidation.expected * 100)}).`}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Alertas de Comprometimento */}
+                    {(results.incomeError || results.proSolutoError) && (
+                      <Alert variant="destructive" className="mb-4">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Alerta de Comprometimento</AlertTitle>
+                        <AlertDescription>
+                          {results.incomeError && <p>{results.incomeError}</p>}
+                          {results.proSolutoError && <p>{results.proSolutoError}</p>}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Informações do Corretor */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="broker-name">Nome do Corretor</Label>
+                        <Input
+                          id="broker-name"
+                          value={brokerName}
+                          onChange={(e) => setBrokerName(e.target.value)}
+                          placeholder="Nome do corretor responsável"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="broker-creci">CRECI</Label>
+                        <Input
+                          id="broker-creci"
+                          value={brokerCreci}
+                          onChange={(e) => setBrokerCreci(e.target.value)}
+                          placeholder="Número do CRECI"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </form>
+          </FormProvider>
+        </CardContent>
+      </Card>
+
+      {/* Dialog de Seleção de Unidade */}
       <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
-        <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto sm:max-w-full sm:w-[95vw] sm:mx-auto">
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Selecione uma Unidade</DialogTitle>
-            <DialogDescription className="text-sm sm:text-base">
-              Escolha uma unidade disponível no empreendimento selecionado.
+            <DialogTitle>Selecionar Unidade</DialogTitle>
+            <DialogDescription>
+              Escolha uma unidade disponível no empreendimento.
             </DialogDescription>
           </DialogHeader>
           <UnitSelectorDialogContent
             allUnits={allUnits}
             filteredUnits={filteredUnits}
-            isReservaParque={isReservaParque}
-            filterOptions={filterOptions}
-            onUnitSelect={handleUnitSelect}
             filters={{
               status: statusFilter,
               setStatus: setStatusFilter,
@@ -2141,16 +2238,20 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
               sunPosition: sunPositionFilter,
               setSunPosition: setSunPositionFilter,
             }}
+            filterOptions={filterOptions}
+            onUnitSelect={handleUnitSelect}
+            isReservaParque={isReservaParque}
           />
         </DialogContent>
       </Dialog>
 
+      {/* Tutorial Interativo */}
       <InteractiveTutorial
         isOpen={isTutorialOpen}
         onClose={() => setIsTutorialOpen(false)}
+        steps={TUTORIAL_STEPS}
         form={form}
         results={results}
-        steps={TUTORIAL_STEPS}
       />
     </div>
   );

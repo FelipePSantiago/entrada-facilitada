@@ -60,13 +60,13 @@ import {
   Car,
   Tag,
   Calculator,
-  ChevronUp,
-  ChevronDown,
   Info,
   TrendingUp,
   User,
   Calendar,
   RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { addMonths, differenceInMonths, format, lastDayOfMonth, startOfMonth, parseISO, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -276,16 +276,17 @@ const validatePaymentSumWithBusinessLogic = (
 } => {
   void sinalCampaignLimitPercent;
 
-  const calculationTarget = Math.max(appraisalValue, saleValue);
+  const descontoPayment = payments.find(p => p.type === 'desconto');
+  const descontoValue = descontoPayment?.value || 0;
+  const valorFinalImovel = saleValue - descontoValue;
+  
+  // CORREÇÃO: O alvo da validação deve ser o maior entre avaliação e valor final do imóvel
+  const calculationTarget = Math.max(appraisalValue, valorFinalImovel);
   const totalPayments = payments.reduce((sum, payment) => sum + payment.value, 0);
   const difference = Math.abs(totalPayments - calculationTarget);
   const isValid = difference < 0.01;
   
   let businessLogicViolation: string | undefined;
-  
-  const descontoPayment = payments.find(p => p.type === 'desconto');
-  const descontoValue = descontoPayment?.value || 0;
-  const valorFinalImovel = saleValue - descontoValue;
   
   const sinalAto = payments.find(p => p.type === 'sinalAto');
   if (sinalAto) {
@@ -416,12 +417,14 @@ const applyMinimumCondition = (
   installments: number,
   deliveryDate: Date | null
 ): PaymentField[] => {
-  const calculationTarget = Math.max(appraisalValue, saleValue);
   const newPayments = [...payments];
 
   const descontoPayment = newPayments.find(p => p.type === 'desconto');
   const descontoValue = descontoPayment?.value || 0;
   const valorFinalImovel = saleValue - descontoValue;
+
+  // CORREÇÃO: O alvo do cálculo deve ser o maior entre avaliação e valor final do imóvel
+  const calculationTarget = Math.max(appraisalValue, valorFinalImovel);
 
   const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
   const sumOfOtherPayments = newPayments.reduce((acc, payment) => {
@@ -448,7 +451,8 @@ const applyMinimumCondition = (
   const isReservaParque = propertyEnterpriseName.includes('Reserva Parque Clube');
   const proSolutoLimitPercent = isReservaParque ? 0.18 : (conditionType === 'especial' ? 0.18 : 0.15);
   
-  const maxProSolutoByPercent = saleValue * proSolutoLimitPercent;
+  // CORREÇÃO: O limite do pró-soluto deve ser baseado no valor final do imóvel
+  const maxProSolutoByPercent = valorFinalImovel * proSolutoLimitPercent;
   const maxAffordableInstallment = (grossIncome * 0.50) - simulationInstallmentValue;
   const maxProSolutoByIncome = findMaxProSolutoByIncome(
     maxAffordableInstallment,
@@ -490,7 +494,8 @@ const applyMinimumCondition = (
   if (isSinalCampaignActive && sinalCampaignLimitPercent !== undefined) {
     if (sinalAtoValue > sinalMinimo) {
       const excedente = sinalAtoValue - sinalMinimo;
-      const limiteMaximoBonus = saleValue * (sinalCampaignLimitPercent / 100);
+      // CORREÇÃO: O limite do bônus deve ser baseado no valor final do imóvel
+      const limiteMaximoBonus = valorFinalImovel * (sinalCampaignLimitPercent / 100);
       
       if (excedente <= limiteMaximoBonus) {
         campaignBonusValue = excedente;
@@ -611,42 +616,42 @@ const UnitCard = memo(({ unit, isReservaParque, onUnitSelect, style }: UnitCardP
                 )}
                 onClick={handleClick}
             >
-                <CardHeader className="p-4 pb-2 flex-row justify-between items-start bg-gradient-to-r from-gray-50 to-white">
+                <CardHeader className="p-4 pb-2 flex-row justify-between items-start bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-900">
                     <div>
-                        <p className="font-bold text-base text-gray-900">{unitDisplay}</p>
-                        <p className="font-semibold text-sm text-blue-700">Unidade {unit.unitNumber}</p>
-                        <p className="text-xs text-gray-600">{unit.floor}</p>
+                        <p className="font-bold text-base text-gray-900 dark:text-gray-100">{unitDisplay}</p>
+                        <p className="font-semibold text-sm text-blue-700 dark:text-blue-400">Unidade {unit.unitNumber}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">{unit.floor}</p>
                     </div>
                     <div className={cn("text-xs font-bold px-3 py-1 rounded-full transition-all duration-200", getStatusBadgeClass(unit.status).replace(/hover:[a-z-]+/g, ''))}>
                     {unit.status}
                     </div>
                 </CardHeader>
-                <CardContent className="p-4 pt-2 text-xs space-y-2 flex-grow bg-white">
-                    <div className="flex justify-between items-baseline pt-2 border-b border-gray-100">
-                        <span className="font-semibold text-gray-600">Venda:</span>
-                        <span className="font-bold text-lg text-blue-700">{centsToBrl(unit.saleValue)}</span>
+                <CardContent className="p-4 pt-2 text-xs space-y-2 flex-grow bg-white dark:bg-gray-800">
+                    <div className="flex justify-between items-baseline pt-2 border-b border-gray-100 dark:border-gray-700">
+                        <span className="font-semibold text-gray-600 dark:text-gray-400">Venda:</span>
+                        <span className="font-bold text-lg text-blue-700 dark:text-blue-400">{centsToBrl(unit.saleValue)}</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-gray-700">
+                    <div className="grid grid-cols-2 gap-2 text-gray-700 dark:text-gray-300">
                         <div className="flex items-center gap-1">
-                            <Grid3X3 className="h-3 w-3 text-blue-600" />
+                            <Grid3X3 className="h-3 w-3 text-blue-600 dark:text-blue-400" />
                             <span className="text-xs"><strong>Tipologia:</strong> {unit.typology}</span>
                         </div>
                         <div className="flex items-center gap-1">
-                            <Ruler className="h-3 w-3 text-blue-600" />
+                            <Ruler className="h-3 w-3 text-blue-600 dark:text-blue-400" />
                             <span className="text-xs"><strong>Área:</strong> {(unit.privateArea).toFixed(1)}m²</span>
                         </div>
                         <div className="flex items-center gap-1">
-                            <Sun className="h-3 w-3 text-blue-600" />
+                            <Sun className="h-3 w-3 text-blue-600 dark:text-blue-400" />
                             <span className="text-xs"><strong>Sol:</strong> {unit.sunPosition}</span>
                         </div>
                         <div className="flex items-center gap-1">
-                            <Car className="h-3 w-3 text-blue-600" />
+                            <Car className="h-3 w-3 text-blue-600 dark:text-blue-400" />
                             <span className="text-xs"><strong>Vagas:</strong> {unit.parkingSpaces}</span>
                         </div>
                     </div>
-                    <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-                        <span className="text-xs text-gray-600">Avaliação:</span>
-                        <span className="text-xs font-semibold text-gray-800">{centsToBrl(unit.appraisalValue)}</span>
+                    <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-700">
+                        <span className="text-xs text-gray-600 dark:text-gray-400">Avaliação:</span>
+                        <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{centsToBrl(unit.appraisalValue)}</span>
                     </div>
                 </CardContent>
             </Card>
@@ -669,14 +674,14 @@ const CurrencyFormField = memo(({ name, label, control, readOnly = false, placeh
             name={name}
             render={({ field }) => (
                 <FormItem id={id}>
-                    <FormLabel className="text-sm font-semibold text-gray-700">{label}</FormLabel>
+                    <FormLabel className="text-sm font-semibold text-gray-700 dark:text-gray-300">{label}</FormLabel>
                     <FormControl>
                         <div className="relative">
-                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                             <CurrencyInput
                                 value={(field.value as number) * 100}
                                 onValueChange={(cents) => field.onChange(cents === null ? 0 : cents / 100)}
-                                className="pl-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
+                                className="pl-10 border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
                                 readOnly={readOnly}
                                 placeholder={placeholder}
                             />
@@ -690,6 +695,9 @@ const CurrencyFormField = memo(({ name, label, control, readOnly = false, placeh
 });
 CurrencyFormField.displayName = 'CurrencyFormField';
 
+// ===================================================================
+// INÍCIO DA ALTERAÇÃO 1: Lógica do Seguro de Obras
+// ===================================================================
 const calculateConstructionInsuranceLocal = (
   constructionStartDate: Date | null,
   deliveryDate: Date | null,
@@ -699,23 +707,29 @@ const calculateConstructionInsuranceLocal = (
         return { total: 0, breakdown: [] };
     }
 
-    const cacheKey = `${constructionStartDate.getTime()}-${deliveryDate.getTime()}-${caixaInstallmentValue}-${Date.now()}`;
+    // CORREÇÃO: Usar uma chave de cache mais estável, sem o timestamp atual
+    const cacheKey = `${constructionStartDate.getTime()}-${deliveryDate.getTime()}-${caixaInstallmentValue}`;
     const cached = insuranceCache.get(cacheKey);
     
     if (cached && Date.now() - cached.timestamp < CACHE_TTL && cached.breakdown.length > 0) {
       return { total: cached.total, breakdown: cached.breakdown };
     }
     
-    const totalMonths = differenceInMonths(deliveryDate, constructionStartDate);
-    if (totalMonths < 0) return { total: 0, breakdown: [] };
+    // CORREÇÃO: Calcular o número total de meses no período de forma inclusiva
+    const totalMonths = differenceInMonths(deliveryDate, constructionStartDate) + 1;
+    if (totalMonths <= 1) return { total: 0, breakdown: [] };
 
     let totalPayable = 0;
     const breakdown: MonthlyInsurance[] = [];
     const today = new Date();
     
-    for (let i = 0; i <= totalMonths; i++) {
+    // CORREÇÃO: O loop deve executar exatamente 'totalMonths' vezes
+    for (let i = 0; i < totalMonths; i++) {
         const monthDate = addMonths(constructionStartDate, i);
-        const progressRate = totalMonths > 0 ? i / totalMonths : 1;
+        
+        // CORREÇÃO: A fórmula da taxa de progresso deve ser i / (totalMonths - 1)
+        // para que o primeiro mês seja 0 e o último seja 1.
+        const progressRate = i / (totalMonths - 1);
         const insuranceValue = progressRate * caixaInstallmentValue;
 
         if (monthDate >= today) {
@@ -735,6 +749,9 @@ const calculateConstructionInsuranceLocal = (
     insuranceCache.set(cacheKey, result);
     return result;
 };
+// ===================================================================
+// FIM DA ALTERAÇÃO 1
+// ===================================================================
 
 type ExtractedDataType = Partial<ExtractPricingOutput> & {
   grossIncome?: number;
@@ -801,6 +818,87 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   const { setValue, trigger, getValues, setError, clearErrors } = form;
   
   const hasSinal1 = watchedPayments.some(p => p.type === 'sinal1');
+
+  // NOVA FUNÇÃO: Calcular pró-soluto corrigido
+  const calculateCorrectedProSoluto = useCallback((
+    proSolutoValue: number,
+    deliveryDate: Date | null,
+    payments: PaymentField[]
+  ): number => {
+    if (proSolutoValue <= 0 || !deliveryDate) return proSolutoValue;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let currentGracePeriodMonths = 1;
+    const hasSinal1 = payments.some(p => p.type === 'sinal1');
+    const hasSinal2 = payments.some(p => p.type === 'sinal2');
+    const hasSinal3 = payments.some(p => p.type === 'sinal3');
+    if (hasSinal1) currentGracePeriodMonths++;
+    if (hasSinal2) currentGracePeriodMonths++;
+    if (hasSinal3) currentGracePeriodMonths++;
+
+    if (deliveryDate < today) {
+      currentGracePeriodMonths += differenceInMonths(today, deliveryDate);
+    }
+
+    let proSolutoCorrigido = proSolutoValue;
+    for (let i = 0; i < currentGracePeriodMonths; i++) {
+      const installmentDate = addMonths(today, i);
+      const installmentMonth = startOfMonth(installmentDate);
+      const deliveryMonth = startOfMonth(deliveryDate);
+      const interestRate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
+      proSolutoCorrigido *= (1 + interestRate);
+    }
+
+    return proSolutoCorrigido;
+  }, []);
+
+  // ===================================================================
+  // INÍCIO DA CORREÇÃO: Função calculateRate movida para cá
+  // ===================================================================
+  const calculateRate = useCallback((nper: number, pmt: number, pv: number): number => {
+    if (nper <= 0 || pmt <= 0 || pv <= 0) return 0;
+
+    const maxIterations = 200; 
+    const precision = 1e-10; 
+    let initialRate = 0.01; 
+
+    for (let i = 0; i < maxIterations; i++) {
+      try {
+        const g = Math.pow(1 + initialRate, nper);
+        const g_deriv = nper * Math.pow(1 + initialRate, nper - 1);
+
+        if (!isFinite(g) || !isFinite(g_deriv)) {
+          initialRate /= 2;
+          continue;
+        }
+
+        const f = pv * g - pmt * (g - 1) / initialRate;
+        const f_deriv = pv * g_deriv - pmt * (g_deriv * initialRate - (g - 1)) / (initialRate * initialRate);
+        
+        if (Math.abs(f_deriv) < 1e-12) { 
+          break;
+        }
+
+        const newRate = initialRate - f / f_deriv;
+
+        if (Math.abs(newRate - initialRate) < precision) {
+          return newRate;
+        }
+        initialRate = newRate;
+
+      } catch {
+        break;
+      }
+    }
+    
+    return initialRate; 
+  }, []);
+  // ===================================================================
+  // FIM DA CORREÇÃO
+  // ===================================================================
+
   const hasSinal2 = watchedPayments.some(p => p.type === 'sinal2');
   
   const availablePaymentFields = useMemo(() => {
@@ -1021,7 +1119,159 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     });
   }, [setValue, toast]);
 
-  // Função para aplicar a condição mínima
+  // ===================================================================
+  // INÍCIO DA ALTERAÇÃO 2: Correção no botão "Aplicar Condição Mínima"
+  // ===================================================================
+  const onSubmit = useCallback((values: FormValues) => {
+    clearErrors();
+
+    if (!selectedProperty || !deliveryDateObj || !constructionStartDateObj) {
+      setError("propertyId", { message: "Selecione um imóvel para continuar." });
+      return;
+    }
+    
+    const validation = validatePaymentSumWithBusinessLogic(
+      values.payments,
+      values.appraisalValue,
+      values.saleValue,
+      isSinalCampaignActive,
+      sinalCampaignLimitPercent
+    );
+
+    if (!validation.isValid) {
+      toast({
+        variant: "destructive",
+        title: "Valores Inconsistentes",
+        description: `A soma dos pagamentos (${centsToBrl(validation.actual * 100)}) não corresponde ao valor necessário (${centsToBrl(validation.expected * 100)}).`,
+      });
+      return;
+    }
+
+    if (validation.businessLogicViolation) {
+      toast({
+        variant: "destructive",
+        title: "Regra de Negócio Violada",
+        description: validation.businessLogicViolation,
+      });
+      return;
+    }
+    
+    const bonusAdimplenciaValue = values.appraisalValue > values.saleValue ? values.appraisalValue - values.saleValue : 0;
+
+    const proSolutoPayment = values.payments.find(p => p.type === 'proSoluto');
+    const hasProSoluto = !!proSolutoPayment;
+
+    if (hasProSoluto && values.installments !== undefined && values.installments > 0) {
+      const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
+      let maxInstallments;
+      if (isReservaParque) {
+        maxInstallments = values.conditionType === 'especial' ? 66 : 60;
+      } else {
+        maxInstallments = values.conditionType === 'especial' ? 66 : 52;
+      }
+      if (values.installments > maxInstallments) {
+        setError("installments", { message: `Número de parcelas excede o limite de ${maxInstallments} para a condição selecionada.` });
+        return;
+      }
+    }
+
+    const sumOfOtherPayments = values.payments.reduce((acc, payment) => {
+      if (!['proSoluto', 'bonusAdimplencia', 'bonusCampanha'].includes(payment.type)) {
+        return acc + (payment.value || 0);
+      }
+      return acc;
+    }, 0);
+
+    let proSolutoValue = 0;
+    if (hasProSoluto) {
+      proSolutoValue = proSolutoPayment.value;
+    }
+
+    const { installment: priceInstallmentValue } = calculatePriceInstallment(
+      proSolutoValue,
+      values.installments || 0,
+      deliveryDateObj,
+      values.payments
+    );
+
+    const notaryInstallmentValue = calculateNotaryInstallment(
+      values.notaryFees || 0,
+      values.notaryInstallments || 1,
+      values.notaryPaymentMethod as 'creditCard' | 'bankSlip'
+    );
+
+    const { total: insuranceTotal, breakdown: insuranceBreakdown } = calculateConstructionInsuranceLocal(
+      constructionStartDateObj,
+      deliveryDateObj,
+      priceInstallmentValue
+    );
+
+    const totalEntryCost = values.payments
+      .filter(p => ['sinalAto', 'sinal1', 'sinal2', 'sinal3', 'desconto', 'bonusCampanha'].includes(p.type))
+      .reduce((sum, p) => sum + p.value, 0);
+
+    const totalProSolutoCost = proSolutoValue;
+    const totalFinancedCost = values.payments
+      .filter(p => ['financiamento', 'fgts'].includes(p.type))
+      .reduce((sum, p) => sum + p.value, 0);
+
+    const totalNotaryCost = values.notaryFees || 0;
+    const totalInsuranceCost = insuranceTotal;
+    const totalCost = totalEntryCost + totalProSolutoCost + totalFinancedCost + totalNotaryCost + totalInsuranceCost;
+
+    const incomeCommitmentPercentage = values.grossIncome > 0 
+      ? ((priceInstallmentValue + (insuranceBreakdown[0]?.value || 0)) / values.grossIncome) * 100 
+      : 0;
+
+    // CÁLCULO CORRIGIDO DO PRÓ-SOLUTO
+    const proSolutoCorrigido = calculateCorrectedProSoluto(
+      proSolutoValue,
+      deliveryDateObj,
+      values.payments
+    );
+
+    const proSolutoCommitmentPercentage = values.saleValue > 0
+      ? (proSolutoCorrigido / values.saleValue) * 100
+      : 0;
+
+    const averageInterestRate = calculateRate (
+      values.installments || 0,
+      priceInstallmentValue,
+      proSolutoValue
+    ) * 100;
+
+    const newResults: ExtendedResults = {
+      ...results,
+      summary: {
+        remaining: 0,
+        okTotal: true,
+      },
+      financedAmount: proSolutoValue,
+      monthlyInstallment: priceInstallmentValue,
+      totalWithInterest: priceInstallmentValue * (values.installments || 0),
+      totalConstructionInsurance: insuranceTotal,
+      monthlyInsuranceBreakdown: insuranceBreakdown,
+      incomeCommitmentPercentage,
+      proSolutoCommitmentPercentage,
+      averageInterestRate,
+      notaryInstallmentValue,
+      incomeError: incomeCommitmentPercentage > 50 ? "Comprometimento de renda excede 50%." : undefined,
+      proSolutoError: proSolutoCommitmentPercentage > 100 ? "Parcela do Pró-Soluto excede o valor da parcela simula." : undefined,
+      paymentValidation: validation,
+      totalEntryCost,
+      totalProSolutoCost,
+      totalFinancedCost,
+      totalNotaryCost,
+      totalInsuranceCost,
+      totalCost,
+      effectiveSaleValue: values.saleValue,
+      paymentFields: values.payments,
+    };
+    
+    setResults(newResults);
+    resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [clearErrors, selectedProperty, deliveryDateObj, constructionStartDateObj, setError, toast, isSinalCampaignActive, sinalCampaignLimitPercent, validatePaymentSumWithBusinessLogic, calculatePriceInstallment, calculateNotaryInstallment, calculateConstructionInsuranceLocal, calculateCorrectedProSoluto, calculateRate, results]);
+
   const handleApplyMinimumCondition = useCallback(() => {
     const values = form.getValues();
     
@@ -1061,9 +1311,26 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     
     toast({
       title: "Condição Mínima Aplicada",
-      description: "Os pagamentos foram ajustados conforme a condição mínima.",
+      description: "Os pagamentos foram ajustados. Calculando resultados...",
     });
-  }, [form, selectedProperty, deliveryDateObj, toast, replace, isSinalCampaignActive, sinalCampaignLimitPercent]);
+
+    // CORREÇÃO: Após aplicar a condição, acionar a validação e o cálculo
+    trigger().then(isValid => {
+        if (isValid) {
+            // Pega os valores mais recentes do formulário e executa a lógica de cálculo
+            onSubmit(getValues());
+        } else {
+            toast({
+                variant: "destructive",
+                title: "Erro de Validação",
+                description: "Por favor, verifique os campos do formulário após aplicar a condição.",
+            });
+        }
+    });
+  }, [form, selectedProperty, deliveryDateObj, toast, replace, isSinalCampaignActive, sinalCampaignLimitPercent, trigger, getValues, onSubmit]);
+  // ===================================================================
+  // FIM DA ALTERAÇÃO 2
+  // ===================================================================
 
   // Função para limpar todos os campos
   const handleClearAll = useCallback(() => {
@@ -1261,188 +1528,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     }
   }, [selectedProperty, toast, handleFileChange]);
 
-  const calculateRate = useCallback((nper: number, pmt: number, pv: number): number => {
-    if (nper <= 0 || pmt <= 0 || pv <= 0) return 0;
-
-    const maxIterations = 200; 
-    const precision = 1e-10; 
-    let initialRate = 0.01; 
-
-    for (let i = 0; i < maxIterations; i++) {
-      try {
-        const g = Math.pow(1 + initialRate, nper);
-        const g_deriv = nper * Math.pow(1 + initialRate, nper - 1);
-
-        if (!isFinite(g) || !isFinite(g_deriv)) {
-          initialRate /= 2;
-          continue;
-        }
-
-        const f = pv * g - pmt * (g - 1) / initialRate;
-        const f_deriv = pv * g_deriv - pmt * (g_deriv * initialRate - (g - 1)) / (initialRate * initialRate);
-        
-        if (Math.abs(f_deriv) < 1e-12) { 
-          break;
-        }
-
-        const newRate = initialRate - f / f_deriv;
-
-        if (Math.abs(newRate - initialRate) < precision) {
-          return newRate;
-        }
-        initialRate = newRate;
-
-      } catch {
-        break;
-      }
-    }
-    
-    return initialRate; 
-  }, []);
-
-  const onSubmit = useCallback((values: FormValues) => {
-    clearErrors();
-
-    if (!selectedProperty || !deliveryDateObj || !constructionStartDateObj) {
-      setError("propertyId", { message: "Selecione um imóvel para continuar." });
-      return;
-    }
-    
-    const validation = validatePaymentSumWithBusinessLogic(
-      values.payments,
-      values.appraisalValue,
-      values.saleValue,
-      isSinalCampaignActive,
-      sinalCampaignLimitPercent
-    );
-
-    if (!validation.isValid) {
-      toast({
-        variant: "destructive",
-        title: "Valores Inconsistentes",
-        description: `A soma dos pagamentos (${centsToBrl(validation.actual * 100)}) não corresponde ao valor necessário (${centsToBrl(validation.expected * 100)}).`,
-      });
-      return;
-    }
-
-    if (validation.businessLogicViolation) {
-      toast({
-        variant: "destructive",
-        title: "Regra de Negócio Violada",
-        description: validation.businessLogicViolation,
-      });
-      return;
-    }
-    
-    const bonusAdimplenciaValue = values.appraisalValue > values.saleValue ? values.appraisalValue - values.saleValue : 0;
-
-    const proSolutoPayment = values.payments.find(p => p.type === 'proSoluto');
-    const hasProSoluto = !!proSolutoPayment;
-
-    if (hasProSoluto && values.installments !== undefined && values.installments > 0) {
-      const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
-      let maxInstallments;
-      if (isReservaParque) {
-        maxInstallments = values.conditionType === 'especial' ? 66 : 60;
-      } else {
-        maxInstallments = values.conditionType === 'especial' ? 66 : 52;
-      }
-      if (values.installments > maxInstallments) {
-        setError("installments", { message: `Número de parcelas excede o limite de ${maxInstallments} para a condição selecionada.` });
-        return;
-      }
-    }
-
-    const sumOfOtherPayments = values.payments.reduce((acc, payment) => {
-      if (!['proSoluto', 'bonusAdimplencia', 'bonusCampanha'].includes(payment.type)) {
-        return acc + (payment.value || 0);
-      }
-      return acc;
-    }, 0);
-
-    let proSolutoValue = 0;
-    if (hasProSoluto) {
-      proSolutoValue = proSolutoPayment.value;
-    }
-
-    const { installment: priceInstallmentValue } = calculatePriceInstallment(
-      proSolutoValue,
-      values.installments || 0,
-      deliveryDateObj,
-      values.payments
-    );
-
-    const notaryInstallmentValue = calculateNotaryInstallment(
-      values.notaryFees || 0,
-      values.notaryInstallments || 1,
-      values.notaryPaymentMethod as 'creditCard' | 'bankSlip'
-    );
-
-    const { total: insuranceTotal, breakdown: insuranceBreakdown } = calculateConstructionInsuranceLocal(
-      constructionStartDateObj,
-      deliveryDateObj,
-      priceInstallmentValue
-    );
-
-    const totalEntryCost = values.payments
-      .filter(p => ['sinalAto', 'sinal1', 'sinal2', 'sinal3', 'desconto', 'bonusCampanha'].includes(p.type))
-      .reduce((sum, p) => sum + p.value, 0);
-
-    const totalProSolutoCost = proSolutoValue;
-    const totalFinancedCost = values.payments
-      .filter(p => ['financiamento', 'fgts'].includes(p.type))
-      .reduce((sum, p) => sum + p.value, 0);
-
-    const totalNotaryCost = values.notaryFees || 0;
-    const totalInsuranceCost = insuranceTotal;
-    const totalCost = totalEntryCost + totalProSolutoCost + totalFinancedCost + totalNotaryCost + totalInsuranceCost;
-
-    const incomeCommitmentPercentage = values.grossIncome > 0 
-      ? ((priceInstallmentValue + (insuranceBreakdown[0]?.value || 0)) / values.grossIncome) * 100 
-      : 0;
-
-    const proSolutoCommitmentPercentage = values.saleValue > 0
-      ? (proSolutoValue / values.saleValue) * 100
-      : 0;
-
-    const averageInterestRate = calculateRate(
-      values.installments || 0,
-      priceInstallmentValue,
-      proSolutoValue
-    ) * 100;
-
-    const newResults: ExtendedResults = {
-      ...results,
-      summary: {
-        remaining: 0,
-        okTotal: true,
-      },
-      financedAmount: proSolutoValue,
-      monthlyInstallment: priceInstallmentValue,
-      totalWithInterest: priceInstallmentValue * (values.installments || 0),
-      totalConstructionInsurance: insuranceTotal,
-      monthlyInsuranceBreakdown: insuranceBreakdown,
-      incomeCommitmentPercentage,
-      proSolutoCommitmentPercentage,
-      averageInterestRate,
-      notaryInstallmentValue,
-      incomeError: incomeCommitmentPercentage > 50 ? "Comprometimento de renda excede 50%." : undefined,
-      proSolutoError: proSolutoCommitmentPercentage > 100 ? "Parcela do Pró-Soluto excede o valor da parcela simula." : undefined,
-      paymentValidation: validation,
-      totalEntryCost,
-      totalProSolutoCost,
-      totalFinancedCost,
-      totalNotaryCost,
-      totalInsuranceCost,
-      totalCost,
-      effectiveSaleValue: values.saleValue,
-      paymentFields: values.payments,
-    };
-
-    setResults(newResults);
-    resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [clearErrors, selectedProperty, deliveryDateObj, constructionStartDateObj, setError, toast, isSinalCampaignActive, sinalCampaignLimitPercent, validatePaymentSumWithBusinessLogic, calculatePriceInstallment, calculateNotaryInstallment, calculateConstructionInsuranceLocal, calculateRate, results]);
-
   const handleGeneratePdf = useCallback(async () => {
     if (!results || !selectedProperty) {
       toast({
@@ -1543,7 +1628,12 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                             {...field}
                             placeholder="Selecione uma unidade"
                             readOnly
-                            className="bg-gray-50"
+                            className={cn(
+                              "border transition-all duration-200 text-sm",
+                              isSaleValueLocked 
+                                ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100 font-medium" 
+                                : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100"
+                            )}
                           />
                         </FormControl>
                         <Button
@@ -1868,177 +1958,177 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       </Card>
 
       {results && (
-      <Card ref={resultsRef}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
-            Resultados da Simulação
-          </CardTitle>
-          <CardDescription>
-            Confira abaixo os detalhes da simulação realizada.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-4 sm:p-6">
-          <div className="space-y-4 sm:space-y-6">
-            {/* Cards de Resumo Rápido */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-3 sm:p-4">
-                  <div className="flex items-center gap-2">
-                    <Wallet className="h-4 w-4 text-blue-600" />
-                    <span className="text-xs sm:text-sm font-medium">Valor Financiado</span>
-                  </div>
-                  <p className="text-lg sm:text-2xl font-bold text-blue-600 break-words">
-                    {centsToBrl((results.financedAmount || 0) * 100)}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-3 sm:p-4">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-green-600" />
-                    <span className="text-xs sm:text-sm font-medium">Parcela Mensal</span>
-                  </div>
-                  <p className="text-lg sm:text-2xl font-bold text-green-600 break-words">
-                    {centsToBrl((results.monthlyInstallment || 0) * 100)}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-3 sm:p-4">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-purple-600" />
-                    <span className="text-xs sm:text-sm font-medium">Taxa de Juros</span>
-                  </div>
-                  <p className="text-lg sm:text-2xl font-bold text-purple-600 break-words">
-                    {formatPercentage((results.averageInterestRate || 0) / 100)}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-3 sm:p-4">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-orange-600" />
-                    <span className="text-xs sm:text-sm font-medium">Seguro Obra</span>
-                  </div>
-                  <p className="text-lg sm:text-2xl font-bold text-orange-600 break-words">
-                    {centsToBrl((results.totalConstructionInsurance || 0) * 100)}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Resumo de Custos e Análise de Renda */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader className="pb-3 sm:pb-4">
-                  <CardTitle className="text-base sm:text-lg">Resumo de Custos</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex justify-between"><span>Entrada</span><span className="font-medium">{centsToBrl((results.totalEntryCost || 0) * 100)}</span></div>
-                    <div className="flex justify-between"><span>Pró-Soluto</span><span className="font-medium">{centsToBrl((results.totalProSolutoCost || 0) * 100)}</span></div>
-                    <div className="flex justify-between"><span>Financiamento</span><span className="font-medium">{centsToBrl((results.totalFinancedCost || 0) * 100)}</span></div>
-                    <div className="flex justify-between"><span>Taxas Cartorárias</span><span className="font-medium">{centsToBrl((results.totalNotaryCost || 0) * 100)}</span></div>
-                    <div className="flex justify-between"><span>Seguro Obra</span><span className="font-medium">{centsToBrl((results.totalInsuranceCost || 0) * 100)}</span></div>
-                    <Separator />
-                    <div className="flex justify-between font-bold"><span>Total</span><span>{centsToBrl((results.totalCost || 0) * 100)}</span></div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-3 sm:pb-4">
-                  <CardTitle className="text-base sm:text-lg">Análise de Renda</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex justify-between mb-2"><span className="text-sm">Comprometimento de Renda</span><span className="text-sm font-medium">{(results.incomeCommitmentPercentage || 0).toFixed(2)}%</span></div>
-                      <div className="w-full bg-gray-200 rounded-full h-2"><div className={`h-2 rounded-full ${results.incomeCommitmentPercentage > 50 ? 'bg-red-500' : results.incomeCommitmentPercentage > 30 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.incomeCommitmentPercentage || 0, 100)}%` }} /></div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between mb-2"><span className="text-sm">Percentual Pró-Soluto</span><span className="text-sm font-medium">{(results.proSolutoCommitmentPercentage || 0).toFixed(2)}%</span></div>
-                      <div className="w-full bg-gray-200 rounded-full h-2"><div className={`h-2 rounded-full ${results.proSolutoCommitmentPercentage > 100 ? 'bg-red-500' : results.proSolutoCommitmentPercentage > 50 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.proSolutoCommitmentPercentage || 0, 100)}%` }} /></div>
-                    </div>
-                    {results.incomeError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.incomeError}</AlertDescription></Alert>}
-                    {results.proSolutoError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.proSolutoError}</AlertDescription></Alert>}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Cronograma de Pagamentos */}
-            <div className="space-y-4">
-              <h3 className="text-base sm:text-lg font-semibold">Cronograma de Pagamentos</h3>
-              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-                <PaymentTimeline results={results} formValues={form.getValues()} />
-              </div>
-            </div>
-            
-            {/* Detalhamento do Seguro de Obras */}
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <h3 className="text-base sm:text-lg font-semibold">Detalhamento do Seguro de Obras</h3>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowInsuranceDetails(!showInsuranceDetails)}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2"
-                >
-                  {showInsuranceDetails ? (
-                    <>
-                      <ChevronUp className="h-4 w-4" />
-                      Ocultar Detalhes
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDown className="h-4 w-4" />
-                      Exibir Detalhes
-                    </>
-                  )}
-                </Button>
-              </div>
-              
-              {showInsuranceDetails && (
+        <Card ref={resultsRef}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Resultados da Simulação
+            </CardTitle>
+            <CardDescription>
+              Confira abaixo os detalhes da simulação realizada.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 sm:p-6">
+            <div className="space-y-4 sm:space-y-6">
+              {/* Cards de Resumo Rápido */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card>
                   <CardContent className="p-3 sm:p-4">
-                    <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="text-xs sm:text-sm">Mês</TableHead>
-                            <TableHead className="text-xs sm:text-sm">Valor</TableHead>
-                            <TableHead className="text-xs sm:text-sm">Progresso</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredInsuranceBreakdown.map((item, index) => (
-                            <TableRow key={index}>
-                              <TableCell className="text-xs sm:text-sm">{item.month}</TableCell>
-                              <TableCell className="text-xs sm:text-sm">{centsToBrl(item.value * 100)}</TableCell>
-                              <TableCell className="text-xs sm:text-sm">{(item.progressRate * 100).toFixed(1)}%</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-blue-600" />
+                      <span className="text-xs sm:text-sm font-medium">Valor Financiado</span>
+                    </div>
+                    <p className="text-lg sm:text-2xl font-bold text-blue-600 break-words">
+                      {centsToBrl((results.financedAmount || 0) * 100)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-green-600" />
+                      <span className="text-xs sm:text-sm font-medium">Parcela Mensal</span>
+                    </div>
+                    <p className="text-lg sm:text-2xl font-bold text-green-600 break-words">
+                      {centsToBrl((results.monthlyInstallment || 0) * 100)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-purple-600" />
+                      <span className="text-xs sm:text-sm font-medium">Taxa de Juros</span>
+                    </div>
+                    <p className="text-lg sm:text-2xl font-bold text-purple-600 break-words">
+                      {formatPercentage((results.averageInterestRate || 0) / 100)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-orange-600" />
+                      <span className="text-xs sm:text-sm font-medium">Seguro Obra</span>
+                    </div>
+                    <p className="text-lg sm:text-2xl font-bold text-orange-600 break-words">
+                      {centsToBrl((results.totalConstructionInsurance || 0) * 100)}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Resumo de Custos e Análise de Renda */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader className="pb-3 sm:pb-4">
+                    <CardTitle className="text-base sm:text-lg">Resumo de Custos</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className="flex justify-between"><span>Entrada</span><span className="font-medium">{centsToBrl((results.totalEntryCost || 0) * 100)}</span></div>
+                      <div className="flex justify-between"><span>Pró-Soluto</span><span className="font-medium">{centsToBrl((results.totalProSolutoCost || 0) * 100)}</span></div>
+                      <div className="flex justify-between"><span>Financiamento</span><span className="font-medium">{centsToBrl((results.totalFinancedCost || 0) * 100)}</span></div>
+                      <div className="flex justify-between"><span>Taxas Cartorárias</span><span className="font-medium">{centsToBrl((results.totalNotaryCost || 0) * 100)}</span></div>
+                      <div className="flex justify-between"><span>Seguro Obra</span><span className="font-medium">{centsToBrl((results.totalInsuranceCost || 0) * 100)}</span></div>
+                      <Separator />
+                      <div className="flex justify-between font-bold"><span>Total</span><span>{centsToBrl((results.totalCost || 0) * 100)}</span></div>
                     </div>
                   </CardContent>
                 </Card>
-              )}
+                <Card>
+                  <CardHeader className="pb-3 sm:pb-4">
+                    <CardTitle className="text-base sm:text-lg">Análise de Renda</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex justify-between mb-2"><span className="text-sm">Comprometimento de Renda</span><span className="text-sm font-medium">{(results.incomeCommitmentPercentage || 0).toFixed(2)}%</span></div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2"><div className={`h-2 rounded-full ${results.incomeCommitmentPercentage > 50 ? 'bg-red-500' : results.incomeCommitmentPercentage > 30 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.incomeCommitmentPercentage || 0, 100)}%` }} /></div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between mb-2"><span className="text-sm">Percentual Pró-Soluto</span><span className="text-sm font-medium">{(results.proSolutoCommitmentPercentage || 0).toFixed(2)}%</span></div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2"><div className={`h-2 rounded-full ${results.proSolutoCommitmentPercentage > 100 ? 'bg-red-500' : results.proSolutoCommitmentPercentage > 50 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.proSolutoCommitmentPercentage || 0, 100)}%` }} /></div>
+                      </div>
+                      {results.incomeError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.incomeError}</AlertDescription></Alert>}
+                      {results.proSolutoError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.proSolutoError}</AlertDescription></Alert>}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Cronograma de Pagamentos */}
+              <div className="space-y-4">
+                <h3 className="text-base sm:text-lg font-semibold">Cronograma de Pagamentos</h3>
+                <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                  <PaymentTimeline results={results} formValues={form.getValues()} />
+                </div>
+              </div>
+              
+              {/* Detalhamento do Seguro de Obras */}
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <h3 className="text-base sm:text-lg font-semibold">Detalhamento do Seguro de Obras</h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowInsuranceDetails(!showInsuranceDetails)}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2"
+                  >
+                    {showInsuranceDetails ? (
+                      <>
+                        <ChevronUp className="h-4 w-4" />
+                        Ocultar Detalhes
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4" />
+                        Exibir Detalhes
+                      </>
+                    )}
+                  </Button>
+                </div>
+                
+                {showInsuranceDetails && (
+                  <Card>
+                    <CardContent className="p-3 sm:p-4">
+                      <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-xs sm:text-sm">Mês</TableHead>
+                              <TableHead className="text-xs sm:text-sm">Valor</TableHead>
+                              <TableHead className="text-xs sm:text-sm">Progresso</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredInsuranceBreakdown.map((item, index) => (
+                              <TableRow key={index}>
+                                <TableCell className="text-xs sm:text-sm">{item.month}</TableCell>
+                                <TableCell className="text-xs sm:text-sm">{centsToBrl(item.value * 100)}</TableCell>
+                                <TableCell className="text-xs sm:text-sm">{(item.progressRate * 100).toFixed(1)}%</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+              
+              {/* Botão de Gerar PDF */}
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Button onClick={handleGeneratePdf} disabled={isGeneratingPdf} className="w-full sm:flex-1">
+                  {isGeneratingPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                  Gerar PDF
+                </Button>
+              </div>
             </div>
-            
-            {/* Botão de Gerar PDF */}
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Button onClick={handleGeneratePdf} disabled={isGeneratingPdf} className="w-full sm:flex-1">
-                {isGeneratingPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                Gerar PDF
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    )}
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
         <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
