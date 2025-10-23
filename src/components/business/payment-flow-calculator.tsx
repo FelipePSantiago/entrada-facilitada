@@ -82,7 +82,7 @@ import { centsToBrl } from "@/lib/utils";
 
 // Importação corrigida para formatPercentage
 const formatPercentage = (value: number) => {
-  return `${(value * 100).toFixed(2)}%`;
+  return `${( value * 100).toFixed(2)}%`;
 };
 
 // Importação simulada para generatePdf - substitua com a importação real quando disponível
@@ -383,6 +383,49 @@ const findMaxProSolutoByIncome = (
   return result;
 };
 
+// ===================================================================
+// INÍCIO DA CORREÇÃO: Função calculateCorrectedProSoluto
+// ===================================================================
+const calculateCorrectedProSoluto = (
+  proSolutoValue: number,
+  deliveryDate: Date | null,
+  payments: PaymentField[]
+): number => {
+  if (proSolutoValue <= 0 || !deliveryDate) return proSolutoValue;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let currentGracePeriodMonths = 1;
+  const hasSinal1 = payments.some(p => p.type === 'sinal1');
+  const hasSinal2 = payments.some(p => p.type === 'sinal2');
+  const hasSinal3 = payments.some(p => p.type === 'sinal3');
+  if (hasSinal1) currentGracePeriodMonths++;
+  if (hasSinal2) currentGracePeriodMonths++;
+  if (hasSinal3) currentGracePeriodMonths++;
+
+  if (deliveryDate < today) {
+    currentGracePeriodMonths += differenceInMonths(today, deliveryDate);
+  }
+
+  let proSolutoCorrigido = proSolutoValue;
+  for (let i = 0; i < currentGracePeriodMonths; i++) {
+    const installmentDate = addMonths(today, i);
+    const installmentMonth = startOfMonth(installmentDate);
+    const deliveryMonth = startOfMonth(deliveryDate);
+    const interestRate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
+    proSolutoCorrigido *= (1 + interestRate);
+  }
+
+  return proSolutoCorrigido;
+};
+// ===================================================================
+// FIM DA CORREÇÃO
+// ===================================================================
+
+// ===================================================================
+// INÍCIO DA CORREÇÃO: Função applyMinimumCondition com limites corretos do pró-soluto
+// ===================================================================
 const applyMinimumCondition = (
   payments: PaymentField[], 
   appraisalValue: number, 
@@ -428,10 +471,11 @@ const applyMinimumCondition = (
   }
 
   const isReservaParque = propertyEnterpriseName.includes('Reserva Parque Clube');
-  const proSolutoLimitPercent = isReservaParque ? 0.18 : (conditionType === 'especial' ? 0.18 : 0.15);
+  // CORREÇÃO: Usar os percentuais corretos para os limites do pró-soluto (14,99% e 17,99%)
+  const proSolutoLimitPercent = isReservaParque ? 0.1799 : (conditionType === 'especial' ? 0.1799 : 0.1499);
   
-  // CORREÇÃO: O limite do pró-soluto deve ser baseado no valor final do imóvel
-  const maxProSolutoByPercent = valorFinalImovel * proSolutoLimitPercent;
+  // CORREÇÃO 1: O limite do pró-soluto deve ser baseado no valor de venda original (sem desconto)
+  const maxProSolutoCorrectedByPercent = saleValue * proSolutoLimitPercent;
   const maxAffordableInstallment = (grossIncome * 0.50) - simulationInstallmentValue;
   const maxProSolutoByIncome = findMaxProSolutoByIncome(
     maxAffordableInstallment,
@@ -441,8 +485,49 @@ const applyMinimumCondition = (
     calculatePriceInstallment
   );
 
+  // CORREÇÃO 2: Função para encontrar o valor bruto do pró-soluto que resulta no limite correto após correção
+  const findMaxProSolutoBaseValue = (
+    maxCorrectedValue: number,
+    deliveryDate: Date | null,
+    payments: PaymentField[]
+  ): number => {
+    if (maxCorrectedValue <= 0 || !deliveryDate) return 0;
+
+    let low = 0;
+    let high = remainingAmount; // Valor máximo possível baseado no valor restante
+    let result = 0;
+
+    const precision = 0.01;
+    const maxIterations = 30;
+
+    for (let i = 0; i < maxIterations; i++) {
+      const mid = (low + high) / 2;
+      const correctedValue = calculateCorrectedProSoluto(mid, deliveryDate, payments);
+
+      if (correctedValue <= maxCorrectedValue) {
+        result = mid;
+        low = mid;
+      } else {
+        high = mid;
+      }
+
+      if (high - low < precision) {
+        break;
+      }
+    }
+
+    return result;
+  };
+
+  // CORREÇÃO 3: Calcular o valor bruto máximo do pró-soluto que respeita o limite percentual após correção
+  const maxProSolutoBaseValue = findMaxProSolutoBaseValue(
+    maxProSolutoCorrectedByPercent,
+    deliveryDate || new Date(),
+    newPayments
+  );
+
   let proSolutoValue = Math.min(
-    maxProSolutoByPercent,
+    maxProSolutoBaseValue,
     maxProSolutoByIncome,
     remainingAmount
   );
@@ -462,10 +547,17 @@ const applyMinimumCondition = (
     }
   }
   
-  if (proSolutoValue > maxProSolutoByPercent) {
-    const excess = proSolutoValue - maxProSolutoByPercent;
-    proSolutoValue = maxProSolutoByPercent;
-    sinalAtoValue += excess;
+  // CORREÇÃO 4: Verificar se o valor corrigido do pró-soluto excede o limite percentual
+  const proSolutoCorrigido = calculateCorrectedProSoluto(proSolutoValue, deliveryDate, newPayments);
+  if (proSolutoCorrigido > maxProSolutoCorrectedByPercent) {
+    const excess = proSolutoCorrigido - maxProSolutoCorrectedByPercent;
+    // Ajustar o valor bruto do pró-soluto para que o valor corrigido não exceda o limite
+    proSolutoValue = findMaxProSolutoBaseValue(
+      maxProSolutoCorrectedByPercent,
+      deliveryDate || new Date(),
+      newPayments
+    );
+    sinalAtoValue = remainingAmount - proSolutoValue;
   }
   
   let campaignBonusValue = 0;
@@ -485,9 +577,15 @@ const applyMinimumCondition = (
         const excedenteDoBonus = excedente - limiteMaximoBonus;
         const newProSolutoValue = proSolutoValue + excedenteDoBonus;
         
-        if (newProSolutoValue > maxProSolutoByPercent) {
-          proSolutoValue = maxProSolutoByPercent;
-          const overflow = newProSolutoValue - maxProSolutoByPercent;
+        // CORREÇÃO 5: Verificar se o novo valor corrigido do pró-soluto excede o limite percentual
+        const newProSolutoCorrigido = calculateCorrectedProSoluto(newProSolutoValue, deliveryDate, newPayments);
+        if (newProSolutoCorrigido > maxProSolutoCorrectedByPercent) {
+          proSolutoValue = findMaxProSolutoBaseValue(
+            maxProSolutoCorrectedByPercent,
+            deliveryDate || new Date(),
+            newPayments
+          );
+          const overflow = newProSolutoValue - proSolutoValue;
           sinalAtoValue += overflow;
         } else {
           proSolutoValue = newProSolutoValue;
@@ -506,12 +604,18 @@ const applyMinimumCondition = (
   if (Math.abs(difference) > 0.01) {
     if (proSolutoValue > 0) {
       const adjustedProSoluto = proSolutoValue + difference;
-      if (adjustedProSoluto <= maxProSolutoByPercent) {
+      // CORREÇÃO 6: Verificar se o valor ajustado corrigido excede o limite percentual
+      const adjustedProSolutoCorrigido = calculateCorrectedProSoluto(adjustedProSoluto, deliveryDate, newPayments);
+      if (adjustedProSolutoCorrigido <= maxProSolutoCorrectedByPercent) {
         proSolutoValue = adjustedProSoluto;
       } else {
-        const excess = adjustedProSoluto - maxProSolutoByPercent;
-        proSolutoValue = maxProSolutoByPercent;
-        sinalAtoValue += excess;
+        const excess = adjustedProSolutoCorrigido - maxProSolutoCorrectedByPercent;
+        proSolutoValue = findMaxProSolutoBaseValue(
+          maxProSolutoCorrectedByPercent - excess,
+          deliveryDate || new Date(),
+          newPayments
+        );
+        sinalAtoValue += difference - (proSolutoValue - adjustedProSoluto);
       }
     } else if (sinalAtoValue > sinalMinimo) {
       sinalAtoValue += difference;
@@ -561,6 +665,9 @@ const applyMinimumCondition = (
 
   return finalPayments;
 };
+// ===================================================================
+// FIM DA CORREÇÃO
+// ===================================================================
 
 const isDateLocked = (type: PaymentFieldType) => {
   return ["bonusAdimplencia", "financiamento", "bonusCampanha"].includes(type);
@@ -595,20 +702,20 @@ const UnitCard = memo(({ unit, isReservaParque, onUnitSelect, style }: UnitCardP
                 )}
                 onClick={handleClick}
             >
-                <CardHeader className="p-4 pb-2 flex-row justify-between items-start bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-900">
+                <CardHeader className="p-3 sm:p-4 pb-2 flex-row justify-between items-start bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-900">
                     <div>
-                        <p className="font-bold text-base text-gray-900 dark:text-gray-100">{unitDisplay}</p>
-                        <p className="font-semibold text-sm text-blue-700 dark:text-blue-400">Unidade {unit.unitNumber}</p>
+                        <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100">{unitDisplay}</p>
+                        <p className="font-semibold text-xs sm:text-sm text-blue-700 dark:text-blue-400">Unidade {unit.unitNumber}</p>
                         <p className="text-xs text-gray-600 dark:text-gray-400">{unit.floor}</p>
                     </div>
-                    <div className={cn("text-xs font-bold px-3 py-1 rounded-full transition-all duration-200", getStatusBadgeClass(unit.status).replace(/hover:[a-z-]+/g, ''))}>
+                    <div className={cn("text-xs font-bold px-2 sm:px-3 py-1 rounded-full transition-all duration-200", getStatusBadgeClass(unit.status).replace(/hover:[a-z-]+/g, ''))}>
                     {unit.status}
                     </div>
                 </CardHeader>
-                <CardContent className="p-4 pt-2 text-xs space-y-2 flex-grow bg-white dark:bg-gray-800">
+                <CardContent className="p-3 sm:p-4 pt-2 text-xs space-y-2 flex-grow bg-white dark:bg-gray-800">
                     <div className="flex justify-between items-baseline pt-2 border-b border-gray-100 dark:border-gray-700">
-                        <span className="font-semibold text-gray-600 dark:text-gray-400">Venda:</span>
-                        <span className="font-bold text-lg text-blue-700 dark:text-blue-400">{centsToBrl(unit.saleValue)}</span>
+                        <span className="font-semibold text-xs sm:text-sm text-gray-600 dark:text-gray-400">Venda:</span>
+                        <span className="font-bold text-sm sm:text-lg text-blue-700 dark:text-blue-400 break-words">{centsToBrl(unit.saleValue)}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-gray-700 dark:text-gray-300">
                         <div className="flex items-center gap-1">
@@ -658,7 +765,7 @@ const CurrencyFormField = memo(({ name, label, control, readOnly = false, placeh
                             <CurrencyInput
                                 value={(field.value as number) * 100}
                                 onValueChange={(cents) => field.onChange(cents === null ? 0 : cents / 100)}
-                                className="pl-10 border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200"
+                                className="pl-10 h-10 sm:h-11 border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500 transition-all duration-200 text-sm"
                                 readOnly={readOnly}
                                 placeholder={placeholder}
                             />
@@ -794,41 +901,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   const { setValue, trigger, getValues, setError, clearErrors } = form;
   
   const hasSinal1 = watchedPayments.some(p => p.type === 'sinal1');
-
-  // NOVA FUNÇÃO: Calcular pró-soluto corrigido
-  const calculateCorrectedProSoluto = useCallback((
-    proSolutoValue: number,
-    deliveryDate: Date | null,
-    payments: PaymentField[]
-  ): number => {
-    if (proSolutoValue <= 0 || !deliveryDate) return proSolutoValue;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    let currentGracePeriodMonths = 1;
-    const hasSinal1 = payments.some(p => p.type === 'sinal1');
-    const hasSinal2 = payments.some(p => p.type === 'sinal2');
-    const hasSinal3 = payments.some(p => p.type === 'sinal3');
-    if (hasSinal1) currentGracePeriodMonths++;
-    if (hasSinal2) currentGracePeriodMonths++;
-    if (hasSinal3) currentGracePeriodMonths++;
-
-    if (deliveryDate < today) {
-      currentGracePeriodMonths += differenceInMonths(today, deliveryDate);
-    }
-
-    let proSolutoCorrigido = proSolutoValue;
-    for (let i = 0; i < currentGracePeriodMonths; i++) {
-      const installmentDate = addMonths(today, i);
-      const installmentMonth = startOfMonth(installmentDate);
-      const deliveryMonth = startOfMonth(deliveryDate);
-      const interestRate = installmentMonth < deliveryMonth ? 0.005 : 0.015;
-      proSolutoCorrigido *= (1 + interestRate);
-    }
-
-    return proSolutoCorrigido;
-  }, []);
 
   // ===================================================================
   // INÍCIO DA CORREÇÃO: Função calculateRate movida para cá
@@ -1195,9 +1267,28 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     const totalInsuranceCost = insuranceTotal;
     const totalCost = totalEntryCost + totalProSolutoCost + totalFinancedCost + totalNotaryCost + totalInsuranceCost;
 
-    const incomeCommitmentPercentage = values.grossIncome > 0 
-      ? ((priceInstallmentValue + (insuranceBreakdown[0]?.value || 0)) / values.grossIncome) * 100 
-      : 0;
+    // ===================================================================
+    // INÍCIO DA CORREÇÃO: Cálculo do comprometimento de renda máximo
+    // ===================================================================
+    let maxIncomeCommitmentPercentage = 0;
+
+    if (values.grossIncome > 0 && insuranceBreakdown.length > 0) {
+      // Itera sobre cada mês com seguro de obras
+      insuranceBreakdown.forEach(month => {
+        if (month.isPayable) { // Considera apenas meses futuros
+          const monthlyCommitment = ((month.value + priceInstallmentValue) / values.grossIncome) * 100;
+          maxIncomeCommitmentPercentage = Math.max(maxIncomeCommitmentPercentage, monthlyCommitment);
+        }
+      });
+    } else if (values.grossIncome > 0) {
+      // Se não houver seguro de obras, usa apenas a parcela do pró-soluto
+      maxIncomeCommitmentPercentage = (priceInstallmentValue / values.grossIncome) * 100;
+    }
+
+    const incomeCommitmentPercentage = maxIncomeCommitmentPercentage;
+    // ===================================================================
+    // FIM DA CORREÇÃO
+    // ===================================================================
 
     // CÁLCULO CORRIGIDO DO PRÓ-SOLUTO
     const proSolutoCorrigido = calculateCorrectedProSoluto(
@@ -1206,6 +1297,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       values.payments
     );
 
+    // CORREÇÃO: O comprometimento do pró-soluto deve ser calculado com base no valor de venda original
     const proSolutoCommitmentPercentage = values.saleValue > 0
       ? (proSolutoCorrigido / values.saleValue) * 100
       : 0;
@@ -1248,6 +1340,162 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [clearErrors, selectedProperty, deliveryDateObj, constructionStartDateObj, setError, toast, isSinalCampaignActive, sinalCampaignLimitPercent, validatePaymentSumWithBusinessLogic, calculatePriceInstallment, calculateNotaryInstallment, calculateConstructionInsuranceLocal, calculateCorrectedProSoluto, calculateRate, results]);
 
+  // ===================================================================
+  // INÍCIO DA ALTERAÇÃO 3: Validação completa de regras de negócio
+  // ===================================================================
+  const validateBusinessRulesAfterMinimumCondition = useCallback((
+    payments: PaymentField[],
+    appraisalValue: number,
+    saleValue: number,
+    grossIncome: number,
+    simulationInstallmentValue: number,
+    installments: number,
+    deliveryDate: Date | null,
+    constructionStartDate: Date | null,
+    propertyEnterpriseName: string,
+    conditionType: 'padrao' | 'especial'
+  ): { isValid: boolean; violation?: string } => {
+    // Verificar se o pró-soluto existe nos pagamentos
+    const proSolutoPayment = payments.find(p => p.type === 'proSoluto');
+    let proSolutoValue = 0;
+    if (proSolutoPayment) {
+      proSolutoValue = proSolutoPayment.value;
+    }
+
+    // Calcular a parcela do pró-soluto
+    const { installment: priceInstallmentValue } = calculatePriceInstallment(
+      proSolutoValue,
+      installments,
+      deliveryDate,
+      payments
+    );
+
+    // Calcular o seguro de obras
+    const { breakdown: insuranceBreakdown } = calculateConstructionInsuranceLocal(
+      constructionStartDate,
+      deliveryDate,
+      simulationInstallmentValue
+    );
+
+    // Calcular o comprometimento de renda máximo
+    let maxIncomeCommitmentPercentage = 0;
+
+    if (grossIncome > 0 && insuranceBreakdown.length > 0) {
+      insuranceBreakdown.forEach(month => {
+        if (month.isPayable) {
+          const monthlyCommitment = ((month.value + priceInstallmentValue) / grossIncome) * 100;
+          maxIncomeCommitmentPercentage = Math.max(maxIncomeCommitmentPercentage, monthlyCommitment);
+        }
+      });
+    } else if (grossIncome > 0) {
+      maxIncomeCommitmentPercentage = (priceInstallmentValue / grossIncome) * 100;
+    }
+
+    // Verificar se o comprometimento de renda excede 50%
+    if (maxIncomeCommitmentPercentage > 50) {
+      return {
+        isValid: false,
+        violation: `O comprometimento de renda (${maxIncomeCommitmentPercentage.toFixed(2)}%) excede o limite de 50%.`
+      };
+    }
+
+    // Calcular o pró-soluto corrigido
+    const proSolutoCorrigido = calculateCorrectedProSoluto(
+      proSolutoValue,
+      deliveryDate,
+      payments
+    );
+
+    // CORREÇÃO: O comprometimento do pró-soluto deve ser calculado com base no valor de venda original
+    const proSolutoCommitmentPercentage = saleValue > 0
+      ? (proSolutoCorrigido / saleValue) * 100
+      : 0;
+
+    // Verificar se o comprometimento do pró-soluto excede 100%
+    if (proSolutoCommitmentPercentage > 100) {
+      return {
+        isValid: false,
+        violation: `O comprometimento do pró-soluto (${proSolutoCommitmentPercentage.toFixed(2)}%) excede 100% do valor de venda.`
+      };
+    }
+
+    // Verificar se o sinal ato é menor que o mínimo
+    const sinalAto = payments.find(p => p.type === 'sinalAto');
+    if (sinalAto) {
+      const descontoPayment = payments.find(p => p.type === 'desconto');
+      const descontoValue = descontoPayment?.value || 0;
+      const valorFinalImovel = saleValue - descontoValue;
+      const sinalMinimo = 0.055 * valorFinalImovel;
+      
+      if (sinalAto.value < sinalMinimo) {
+        return {
+          isValid: false,
+          violation: `O Sinal Ato (${centsToBrl(sinalAto.value * 100)}) é menor que o mínimo de 5,5% do valor final da unidade (${centsToBrl(sinalMinimo * 100)}).`
+        };
+      }
+    }
+
+    // Verificar se o pró-soluto excede o limite permitido
+    const isReservaParque = propertyEnterpriseName.includes('Reserva Parque Clube');
+    // CORREÇÃO: Usar os percentuais corretos para os limites do pró-soluto (14,99% e 17,99%)
+    const expectedLimitPercent = isReservaParque ? 0.1799 : (conditionType === 'especial' ? 0.1799 : 0.1499);
+    
+    // CORREÇÃO: Verificar se o valor corrigido do pró-soluto excede o limite percentual
+    if (proSolutoCorrigido > saleValue * expectedLimitPercent) {
+      return {
+        isValid: false,
+        violation: `O valor do pró-soluto corrigido (${centsToBrl(proSolutoCorrigido * 100)}) excede o limite de ${(expectedLimitPercent * 100).toFixed(2)}% do valor de venda do imóvel.`
+      };
+    }
+
+    // Verificar se o número de parcelas excede o limite
+    if (installments > 0) {
+      let maxInstallments;
+      if (isReservaParque) {
+        maxInstallments = conditionType === 'especial' ? 66 : 60;
+      } else {
+        maxInstallments = conditionType === 'especial' ? 66 : 52;
+      }
+      
+      if (installments > maxInstallments) {
+        return {
+          isValid: false,
+          violation: `O número de parcelas (${installments}) excede o limite de ${maxInstallments} para a condição selecionada.`
+        };
+      }
+    }
+
+    // Verificar validação de soma de pagamentos
+    const validation = validatePaymentSumWithBusinessLogic(
+      payments,
+      appraisalValue,
+      saleValue,
+      false, // Não verificar campanha aqui
+      undefined
+    );
+
+    if (!validation.isValid) {
+      return {
+        isValid: false,
+        violation: validation.businessLogicViolation || `A soma dos pagamentos (${centsToBrl(validation.actual * 100)}) não corresponde ao valor necessário (${centsToBrl(validation.expected * 100)}).`
+      };
+    }
+
+    // CORREÇÃO: Verificar se o limite do pró-soluto está correto para a condição selecionada
+    const actualLimitPercent = isReservaParque ? 0.18 : (conditionType === 'especial' ? 0.18 : 0.15);
+    if (Math.abs(actualLimitPercent - expectedLimitPercent) > 0.0001) {
+      return {
+        isValid: false,
+        violation: `O limite do pró-soluto configurado (${(actualLimitPercent * 100).toFixed(2)}%) não corresponde ao esperado para esta condição (${(expectedLimitPercent * 100).toFixed(2)}%).`
+      };
+    }
+
+    return { isValid: true };
+  }, [calculatePriceInstallment, calculateConstructionInsuranceLocal, calculateCorrectedProSoluto]);
+  // ===================================================================
+  // FIM DA ALTERAÇÃO 3
+  // ===================================================================
+
   const handleApplyMinimumCondition = useCallback(() => {
     const values = form.getValues();
 
@@ -1283,6 +1531,35 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       deliveryDateObj
     );
 
+    // ===================================================================
+    // INÍCIO DA ALTERAÇÃO 4: Validação de regras de negócio após aplicar condição mínima
+    // ===================================================================
+    // Validar todas as regras de negócio após aplicar a condição mínima
+    const businessRulesValidation = validateBusinessRulesAfterMinimumCondition(
+      newPayments,
+      values.appraisalValue,
+      values.saleValue,
+      values.grossIncome,
+      values.simulationInstallmentValue,
+      values.installments || 0,
+      deliveryDateObj,
+      constructionStartDateObj,
+      selectedProperty.enterpriseName,
+      values.conditionType
+    );
+
+    if (!businessRulesValidation.isValid) {
+      toast({
+        variant: "destructive",
+        title: "Regra de Negócio Violada",
+        description: businessRulesValidation.violation,
+      });
+      return;
+    }
+    // ===================================================================
+    // FIM DA ALTERAÇÃO 4
+    // ===================================================================
+
     replace(newPayments);
     
     toast({
@@ -1303,7 +1580,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             });
         }
     });
-  }, [form, selectedProperty, deliveryDateObj, toast, replace, isSinalCampaignActive, sinalCampaignLimitPercent, trigger, getValues, onSubmit]);
+  }, [form, selectedProperty, deliveryDateObj, toast, replace, isSinalCampaignActive, sinalCampaignLimitPercent, trigger, getValues, onSubmit, validateBusinessRulesAfterMinimumCondition]);
   // ===================================================================
   // FIM DA ALTERAÇÃO 2
   // ===================================================================
@@ -1473,7 +1750,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       toast({ variant: 'destructive', title: '❌ Erro ao ler arquivo' });
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
-        }
+      }
     };
   }, [getValues, toast, processExtractedData]);
   
@@ -1546,27 +1823,27 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   }, [results, selectedProperty, toast, form, brokerData, properties, form.formState.isValid]);
 
   return (
-    <div className="space-y-6" onPaste={handlePaste}>
+    <div className="space-y-4 sm:space-y-6 px-2 sm:px-0" onPaste={handlePaste}>
       <Card className="relative">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calculator className="h-5 w-5" />
+        <CardHeader className="pb-3 sm:pb-6">
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+            <Calculator className="h-5 w-5 sm:h-6 sm:w-6" />
             Simulador de Fluxo de Pagamento
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-sm">
             Preencha os dados abaixo para simular as condições de pagamento do imóvel.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-3 sm:p-6">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <FormField
               control={form.control}
               name="propertyId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Empreendimento</FormLabel>
+                  <FormLabel className="text-sm font-medium">Empreendimento</FormLabel>
                   <Select 
                     value={field.value || ""} // Garante que valor vazio seja tratado corretamente
                     onValueChange={(value) => {
@@ -1575,7 +1852,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                     }}
                   >
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="h-10 sm:h-11">
                         <SelectValue placeholder="Selecione um empreendimento" />
                       </SelectTrigger>
                     </FormControl>
@@ -1597,7 +1874,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   name="selectedUnit"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Unidade Selecionada</FormLabel>
+                      <FormLabel className="text-sm font-medium">Unidade Selecionada</FormLabel>
                       <div className="flex gap-2">
                         <FormControl>
                           <Input
@@ -1605,7 +1882,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                             placeholder="Selecione uma unidade"
                             readOnly
                             className={cn(
-                              "border transition-all duration-200 text-sm",
+                              "h-10 sm:h-11 border transition-all duration-200 text-sm",
                               isSaleValueLocked 
                                 ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100 font-medium" 
                                 : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100"
@@ -1615,8 +1892,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                         <Button
                           type="button"
                           variant="outline"
+                          size="sm"
                           onClick={() => setIsUnitSelectorOpen(true)}
                           disabled={!selectedProperty}
+                          className="h-10 sm:h-11 px-2 sm:px-3"
                         >
                           <Building className="h-4 w-4" />
                         </Button>
@@ -1624,7 +1903,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                           <Button
                             type="button"
                             variant="outline"
+                            size="sm"
                             onClick={handleClearUnitSelection}
+                            className="h-10 sm:h-11 px-2 sm:px-3"
                           >
                             <XCircle className="h-4 w-4" />
                           </Button>
@@ -1636,7 +1917,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <CurrencyFormField
                   name="appraisalValue"
                   label="Valor de Avaliação"
@@ -1652,7 +1933,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <CurrencyFormField
                   name="grossIncome"
                   label="Renda Bruta Mensal"
@@ -1666,11 +1947,12 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               </div>
 
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Pagamentos</h3>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+                  <h3 className="text-base sm:text-lg font-semibold">Pagamentos</h3>
                   <Button
                     type="button"
                     variant="outline"
+                    size="sm"
                     onClick={() => {
                       const availableField = availablePaymentFields[0];
                       if (availableField) {
@@ -1682,24 +1964,25 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                       }
                     }}
                     disabled={availablePaymentFields.length === 0}
+                    className="w-full sm:w-auto"
                   >
                     <PlusCircle className="h-4 w-4 mr-2" />
                     Adicionar Pagamento
                   </Button>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   {fields.map((field, index) => (
-                    <div key={field.id} className="flex gap-4 items-end">
+                    <div key={field.id} className="flex flex-col sm:flex-row gap-2 sm:gap-4 items-start sm:items-end">
                       <FormField
                         control={form.control}
                         name={`payments.${index}.type`}
                         render={({ field }) => (
-                          <FormItem className="flex-1">
-                            <FormLabel>Tipo</FormLabel>
+                          <FormItem className="flex-1 w-full">
+                            <FormLabel className="text-sm">Tipo</FormLabel>
                             <Select onValueChange={field.onChange} defaultValue={field.value}>
                               <FormControl>
-                                <SelectTrigger>
+                                <SelectTrigger className="h-10 sm:h-11">
                                   <SelectValue placeholder="Selecione o tipo" />
                                 </SelectTrigger>
                               </FormControl>
@@ -1720,12 +2003,13 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                         control={form.control}
                         name={`payments.${index}.value`}
                         render={({ field }) => (
-                          <FormItem className="flex-1">
-                            <FormLabel>Valor</FormLabel>
+                          <FormItem className="flex-1 w-full">
+                            <FormLabel className="text-sm">Valor</FormLabel>
                             <FormControl>
                               <CurrencyInput
-                                value={field.value * 100}
-                                onValueChange={(cents) => field.onChange(cents === null ? 0 : cents / 100)}
+                                  value={field.value * 100}
+                                  onValueChange={(cents) => field.onChange(cents === null ? 0 : cents / 100)}
+                                  className="h-10 sm:h-11"
                               />
                             </FormControl>
                             <FormMessage />
@@ -1737,13 +2021,13 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                         control={form.control}
                         name={`payments.${index}.date`}
                         render={({ field }) => (
-                          <FormItem className="flex-1">
-                            <FormLabel>Data</FormLabel>
+                          <FormItem className="flex-1 w-full">
+                            <FormLabel className="text-sm">Data</FormLabel>
                             <FormControl>
                               <DatePicker
-                                value={field.value?.toISOString()}
-                                onChange={field.onChange}
-                                disabled={isDateLocked(watchedPayments[index]?.type)}
+                                  value={field.value?.toISOString()}
+                                  onChange={field.onChange}
+                                  disabled={isDateLocked(watchedPayments[index]?.type)}
                               />
                             </FormControl>
                             <FormMessage />
@@ -1754,8 +2038,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                       <Button
                         type="button"
                         variant="outline"
-                        size="icon"
+                        size="sm"
                         onClick={() => remove(index)}
+                        className="h-10 sm:h-11 px-2 sm:px-3 mt-6 sm:mt-0"
                       >
                         <XCircle className="h-4 w-4" />
                       </Button>
@@ -1764,22 +2049,22 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 <FormField
                   control={form.control}
                   name="conditionType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Condição</FormLabel>
+                      <FormLabel className="text-sm font-medium">Condição</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger className="h-10 sm:h-11">
                             <SelectValue placeholder="Selecione a condição" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="padrao">Padrão</SelectItem>
-                          <SelectItem value="especial">Especial</SelectItem>
+                          <SelectItem value="padrao">Padrão (Limite Pró-Soluto: 14,99%)</SelectItem>
+                          <SelectItem value="especial">Especial (Limite Pró-Soluto: 17,99%)</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -1792,12 +2077,13 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   name="installments"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Número de Parcelas</FormLabel>
+                      <FormLabel className="text-sm font-medium">Número de Parcelas</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
                           {...field}
                           onChange={(e) => field.onChange(e.target.valueAsNumber)}
+                          className="h-10 sm:h-11"
                         />
                       </FormControl>
                       <FormMessage />
@@ -1810,10 +2096,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   name="financingParticipants"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Participantes no Financiamento</FormLabel>
+                      <FormLabel className="text-sm font-medium">Participantes no Financiamento</FormLabel>
                       <Select onValueChange={(value) => field.onChange(parseInt(value))} defaultValue={field.value.toString()}>
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger className="h-10 sm:h-11">
                             <SelectValue placeholder="Selecione o número" />
                           </SelectTrigger>
                         </FormControl>
@@ -1831,7 +2117,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 <CurrencyFormField
                   name="notaryFees"
                   label="Taxas Cartorárias"
@@ -1844,10 +2130,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   name="notaryPaymentMethod"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Método de Pagamento Cartório</FormLabel>
+                      <FormLabel className="text-sm font-medium">Método de Pagamento Cartório</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger className="h-10 sm:h-11">
                             <SelectValue placeholder="Selecione o método" />
                           </SelectTrigger>
                         </FormControl>
@@ -1866,13 +2152,14 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   name="notaryInstallments"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Parcelas Cartório</FormLabel>
+                      <FormLabel className="text-sm font-medium">Parcelas Cartório</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
                           {...field}
                           onChange={(e) => field.onChange(e.target.valueAsNumber)}
                           placeholder={watchedNotaryPaymentMethod === 'creditCard' ? '1-12' : '36 ou 40'}
+                          className="h-10 sm:h-11"
                         />
                       </FormControl>
                       <FormMessage />
@@ -1881,8 +2168,8 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 />
               </div>
 
-              <div className="flex gap-4">
-                <Button type="submit" className="flex-1">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+                <Button type="submit" className="w-full sm:flex-1 h-10 sm:h-11">
                   <Calculator className="h-4 w-4 mr-2" />
                   Calcular
                 </Button>
@@ -1892,9 +2179,11 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   variant="outline"
                   onClick={handleApplyMinimumCondition}
                   disabled={!selectedProperty || !deliveryDateObj || !form.getValues('saleValue')}
+                  className="w-full sm:w-auto h-10 sm:h-11"
                 >
                   <ShieldCheck className="h-4 w-4 mr-2" />
-                  Condição Mínima
+                  <span className="hidden sm:inline">Condição Mínima</span>
+                  <span className="sm:hidden">Mínima</span>
                 </Button>
                 
                 <Button
@@ -1902,22 +2191,26 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   variant="outline"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isExtracting}
+                  className="w-full sm:w-auto h-10 sm:h-11"
                 >
                   {isExtracting ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
                     <Upload className="h-4 w-4 mr-2" />
                   )}
-                  Upload PDF
+                  <span className="hidden sm:inline">Upload PDF</span>
+                  <span className="sm:hidden">Upload</span>
                 </Button>
                 
                 <Button
                   type="button"
                   variant="destructive"
                   onClick={handleClearAll}
+                  className="w-full sm:w-auto h-10 sm:h-11"
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  Limpar
+                  <span className="hidden sm:inline">Limpar</span>
+                  <span className="sm:hidden">Limpar</span>
                 </Button>
                 
                 <input
@@ -1934,20 +2227,20 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       </Card>
 
       {results && (
-        <Card ref={resultsRef}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
+        <Card ref={resultsRef} className="w-full">
+          <CardHeader className="pb-3 sm:pb-6">
+            <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+              <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6" />
               Resultados da Simulação
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-sm">
               Confira abaixo os detalhes da simulação realizada.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-4 sm:p-6">
+          <CardContent className="p-3 sm:p-6">
             <div className="space-y-4 sm:space-y-6">
               {/* Cards de Resumo Rápido */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 xs:gap-4">
                 <Card>
                   <CardContent className="p-3 sm:p-4">
                     <div className="flex items-center gap-2">
@@ -1995,20 +2288,20 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               </div>
 
               {/* Resumo de Custos e Análise de Renda */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 <Card>
                   <CardHeader className="pb-3 sm:pb-4">
                     <CardTitle className="text-base sm:text-lg">Resumo de Custos</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <div className="flex justify-between"><span>Entrada</span><span className="font-medium">{centsToBrl((results.totalEntryCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between"><span>Pró-Soluto</span><span className="font-medium">{centsToBrl((results.totalProSolutoCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between"><span>Financiamento</span><span className="font-medium">{centsToBrl((results.totalFinancedCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between"><span>Taxas Cartorárias</span><span className="font-medium">{centsToBrl((results.totalNotaryCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between"><span>Seguro Obra</span><span className="font-medium">{centsToBrl((results.totalInsuranceCost || 0) * 100)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Entrada</span><span className="font-medium">{centsToBrl((results.totalEntryCost || 0) * 100)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Pró-Soluto</span><span className="font-medium">{centsToBrl((results.totalProSolutoCost || 0) * 100)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Financiamento</span><span className="font-medium">{centsToBrl((results.totalFinancedCost || 0) * 100)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Taxas Cartorárias</span><span className="font-medium">{centsToBrl((results.totalNotaryCost || 0) * 100)}</span></div>
+                      <div className="flex justify-between text-sm"><span>Seguro Obra</span><span className="font-medium">{centsToBrl((results.totalInsuranceCost || 0) * 100)}</span></div>
                       <Separator />
-                      <div className="flex justify-between font-bold"><span>Total</span><span>{centsToBrl((results.totalCost || 0) * 100)}</span></div>
+                      <div className="flex justify-between font-bold text-sm"><span>Total</span><span>{centsToBrl((results.totalCost || 0) * 100)}</span></div>
                     </div>
                   </CardContent>
                 </Card>
@@ -2019,11 +2312,11 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   <CardContent>
                     <div className="space-y-4">
                       <div>
-                        <div className="flex justify-between mb-2"><span className="text-sm">Comprometimento de Renda</span><span className="text-sm font-medium">{(results.incomeCommitmentPercentage || 0).toFixed(2)}%</span></div>
+                        <div className="flex justify-between mb-2 text-sm"><span className="text-sm">Comprometimento de Renda</span><span className="text-sm font-medium">{(results.incomeCommitmentPercentage || 0).toFixed(2)}%</span></div>
                         <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2"><div className={`h-2 rounded-full ${results.incomeCommitmentPercentage > 50 ? 'bg-red-500' : results.incomeCommitmentPercentage > 30 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.incomeCommitmentPercentage || 0, 100)}%` }} /></div>
                       </div>
                       <div>
-                        <div className="flex justify-between mb-2"><span className="text-sm">Percentual Pró-Soluto</span><span className="text-sm font-medium">{(results.proSolutoCommitmentPercentage || 0).toFixed(2)}%</span></div>
+                        <div className="flex justify-between mb-2 text-sm"><span className="text-sm">Percentual Pró-Soluto</span><span className="text-sm font-medium">{(results.proSolutoCommitmentPercentage || 0).toFixed(2)}%</span></div>
                         <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2"><div className={`h-2 rounded-full ${results.proSolutoCommitmentPercentage > 100 ? 'bg-red-500' : results.proSolutoCommitmentPercentage > 50 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.proSolutoCommitmentPercentage || 0, 100)}%` }} /></div>
                       </div>
                       {results.incomeError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.incomeError}</AlertDescription></Alert>}
@@ -2036,8 +2329,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               {/* Cronograma de Pagamentos */}
               <div className="space-y-4">
                 <h3 className="text-base sm:text-lg font-semibold">Cronograma de Pagamentos</h3>
-                <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-                  <PaymentTimeline results={results} formValues={form.getValues()} />
+                <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0 scrollbar-thin scrollbar-thumb-gray-300">
+                  <div className="min-w-full">
+                    <PaymentTimeline results={results} formValues={form.getValues()} />
+                  </div>
                 </div>
               </div>
               
@@ -2050,17 +2345,19 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                     variant="outline"
                     size="sm"
                     onClick={() => setShowInsuranceDetails(!showInsuranceDetails)}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 h-10 sm:h-11"
                   >
                     {showInsuranceDetails ? (
                       <>
                         <ChevronUp className="h-4 w-4" />
-                        Ocultar Detalhes
+                        <span className="hidden sm:inline">Ocultar Detalhes</span>
+                        <span className="sm:hidden">Ocultar</span>
                       </>
                     ) : (
                       <>
                         <ChevronDown className="h-4 w-4" />
-                        Exibir Detalhes
+                        <span className="hidden sm:inline">Exibir Detalhes</span>
+                        <span className="sm:hidden">Exibir</span>
                       </>
                     )}
                   </Button>
@@ -2069,7 +2366,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 {showInsuranceDetails && (
                   <Card>
                     <CardContent className="p-3 sm:p-4">
-                      <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0">
+                      <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0 scrollbar-thin scrollbar-thumb-gray-300">
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -2095,8 +2392,8 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               </div>
               
               {/* Botão de Gerar PDF */}
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Button onClick={handleGeneratePdf} disabled={isGeneratingPdf} className="w-full sm:flex-1">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+                <Button onClick={handleGeneratePdf} disabled={isGeneratingPdf} className="w-full sm:flex-1 h-10 sm:h-11">
                   {isGeneratingPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
                   Gerar PDF
                 </Button>
@@ -2107,19 +2404,21 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       )}
 
       <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
-        <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] md:max-w-4xl lg:max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Selecione uma Unidade do Empreendimento {selectedProperty?.enterpriseName || ''}</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-lg md:text-xl">
+              Selecione uma Unidade do Empreendimento {selectedProperty?.enterpriseName || ''}
+            </DialogTitle>
+            <DialogDescription className="text-sm md:text-base">
               Escolha uma unidade disponível no empreendimento selecionado.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
               <div>
-                <Label>Status</Label>
+                <Label className="text-sm">Status</Label>
                 <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-10 sm:h-11">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -2133,9 +2432,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               </div>
 
               <div>
-                <Label>Andar</Label>
+                <Label className="text-sm">Andar</Label>
                 <Select value={floorFilter} onValueChange={setFloorFilter}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-10 sm:h-11">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -2150,9 +2449,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               </div>
 
               <div>
-                <Label>Tipologia</Label>
+                <Label className="text-sm">Tipologia</Label>
                 <Select value={typologyFilter} onValueChange={setTypologyFilter}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-10 sm:h-11">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -2167,24 +2466,24 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               </div>
 
               <div>
-                <Label>Posição Solar</Label>
-                <Select value={sunPositionFilter} onValueChange={setSunPositionFilter}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todos</SelectItem>
-                    {filterOptions.sunPositions.map((position) => (
-                      <SelectItem key={position} value={position}>
-                        {position}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Label className="text-sm">Posição Solar</Label>
+              <Select value={sunPositionFilter} onValueChange={setSunPositionFilter}>
+                <SelectTrigger className="h-10 sm:h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Todos">Todos</SelectItem>
+                  {filterOptions.sunPositions.map((position) => (
+                    <SelectItem key={position} value={position}>
+                      {position}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {filteredUnits.map((unit) => (
                 <UnitCard
                   key={unit.unitId}
