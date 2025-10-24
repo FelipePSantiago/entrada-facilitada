@@ -51,6 +51,48 @@ const formatarCentavosParaReal = (centavos: string): string => {
   }).format(numero);
 };
 
+// Função para corrigir formato de valores vindo do backend (inverte ponto por vírgula)
+const corrigirFormatoValor = (valor: string): string => {
+  if (!valor) return valor;
+  
+  // Se for uma taxa de juros (contém %)
+  if (valor.includes('%')) {
+    // Formato esperado: "10.7601%" → "10,7601%"
+    return valor.replace('.', ',');
+  }
+  
+  // Se for um valor monetário (contém R$)
+  if (valor.includes('R$')) {
+    // Formato esperado: "R$ 378,078.31" → "R$ 378.078,31"
+    // Primeiro remove o "R$ " para processar apenas o número
+    const valorNumerico = valor.replace('R$ ', '');
+    
+    // Divide em parte inteira e decimal
+    const partes = valorNumerico.split('.');
+    
+    if (partes.length === 2) {
+      // Se tem duas partes, assume que a primeira é a parte inteira com milhares
+      // e a segunda é a parte decimal
+      const parteInteira = partes[0].replace(',', '.'); // Converte vírgula de milhar para ponto
+      const parteDecimal = partes[1];
+      
+      return `R$ ${parteInteira},${parteDecimal}`;
+    } else if (partes.length === 1) {
+      // Se só tem uma parte, pode ser que não tenha milhares ou não tenha decimais
+      if (valorNumerico.includes(',')) {
+        // Se tem vírgula, assume que é separador de milhares
+        return `R$ ${valorNumerico.replace(',', '.')}`;
+      } else {
+        // Se não tem nem ponto nem vírgula, só retorna o valor
+        return `R$ ${valorNumerico}`;
+      }
+    }
+  }
+  
+  // Para outros casos, apenas retorna o valor original
+  return valor;
+};
+
 // Função para remover formatação e obter apenas números
 const removerFormatacao = (valorFormatado: string): string => {
   return valorFormatado.replace(/\D/g, '');
@@ -398,29 +440,21 @@ const CaixaSimulationForm = () => {
                 <div className="border rounded-lg p-4">
                   <p className="font-semibold text-sm text-muted-foreground">Valor Total Financiado:</p>
                   <p className="text-lg font-bold text-green-600">
-                    {result.Valor_Total_Financiado || 'N/A'}
+                    {corrigirFormatoValor(result.Valor_Total_Financiado || 'N/A')}
                   </p>
                 </div>
                 <div className="border rounded-lg p-4">
                   <p className="font-semibold text-sm text-muted-foreground">Primeira Prestação:</p>
                   <p className="text-lg font-bold text-blue-600">
-                    {result.Primeira_Prestacao || 'N/A'}
+                    {corrigirFormatoValor(result.Primeira_Prestacao || 'N/A')}
                   </p>
                 </div>
                 <div className="border rounded-lg p-4">
                   <p className="font-semibold text-sm text-muted-foreground">Juros Efetivos:</p>
                   <p className="text-lg font-bold text-purple-600">
-                    {result.Juros_Efetivos || 'N/A'}
+                    {corrigirFormatoValor(result.Juros_Efetivos || 'N/A')}
                   </p>
                 </div>
-              </div>
-              
-              {/* DEBUG: Mostrar valores brutos para verificação */}
-              <div className="mt-4 p-3 bg-gray-100 rounded-lg">
-                <p className="text-sm font-semibold mb-2">Valores brutos (DEBUG):</p>
-                <pre className="text-xs">
-                  {JSON.stringify(result, null, 2)}
-                </pre>
               </div>
             </CardContent>
           </Card>
