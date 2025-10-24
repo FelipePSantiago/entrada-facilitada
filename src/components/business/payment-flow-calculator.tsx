@@ -5,6 +5,7 @@ import { useForm, useFieldArray, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { httpsCallable, getFunctions } from "firebase/functions";
 import { getAuth } from "firebase/auth";
+import { app } from "@/firebase/config";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -79,6 +80,8 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { PaymentTimeline } from "./payment-timeline";
 import { centsToBrl } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
+import { FaSpinner } from "react-icons/fa";
 
 // Importação corrigida para formatPercentage
 const formatPercentage = (value: number) => {
@@ -86,7 +89,7 @@ const formatPercentage = (value: number) => {
 };
 
 // Importação simulada para generatePdf - substitua com a importação real quando disponível
-const generatePdf = async (pdfValues: any, results: any, selectedProperty: any) => {
+const generatePdf = async (pdfValues: unknown, results: unknown, selectedProperty: unknown) => {
   console.log("Generating PDF with values:", pdfValues, results, selectedProperty);
   // Implementação real da função generatePdf
   return Promise.resolve();
@@ -94,6 +97,18 @@ const generatePdf = async (pdfValues: any, results: any, selectedProperty: any) 
 
 import type { Property, Unit, CombinedUnit, UnitStatus, PaymentField, Results, MonthlyInsurance, FormValues, PdfFormValues, PaymentFieldType, Tower, ExtractPricingOutput } from "@/types";
 import React from 'react';
+
+// Interface para os resultados da simulação da Caixa
+interface CaixaSimulationResult {
+  sucesso: boolean;
+  dados?: {
+    Prazo: string;
+    Valor_Total_Financiado: string;
+    Primeira_Prestacao: string;
+    Juros_Efetivos: string;
+  };
+  message?: string;
+}
 
 // Cache para cálculos de seguro
 const insuranceCache = new Map<string, { total: number; breakdown: MonthlyInsurance[]; timestamp: number }>();
@@ -550,7 +565,6 @@ const applyMinimumCondition = (
   // CORREÇÃO 4: Verificar se o valor corrigido do pró-soluto excede o limite percentual
   const proSolutoCorrigido = calculateCorrectedProSoluto(proSolutoValue, deliveryDate, newPayments);
   if (proSolutoCorrigido > maxProSolutoCorrectedByPercent) {
-    const excess = proSolutoCorrigido - maxProSolutoCorrectedByPercent;
     // Ajustar o valor bruto do pró-soluto para que o valor corrigido não exceda o limite
     proSolutoValue = findMaxProSolutoBaseValue(
       maxProSolutoCorrectedByPercent,
@@ -609,9 +623,8 @@ const applyMinimumCondition = (
       if (adjustedProSolutoCorrigido <= maxProSolutoCorrectedByPercent) {
         proSolutoValue = adjustedProSoluto;
       } else {
-        const excess = adjustedProSolutoCorrigido - maxProSolutoCorrectedByPercent;
         proSolutoValue = findMaxProSolutoBaseValue(
-          maxProSolutoCorrectedByPercent - excess,
+          maxProSolutoCorrectedByPercent,
           deliveryDate || new Date(),
           newPayments
         );
@@ -846,9 +859,120 @@ interface PaymentFlowCalculatorProps {
     properties: Property[];
     isSinalCampaignActive: boolean;
     sinalCampaignLimitPercent?: number;
+    // TODO: Implementar funcionalidade de tutorial
     isTutorialOpen: boolean;
     setIsTutorialOpen: (isOpen: boolean) => void;
 }
+
+// Função para formatar valor em centavos para exibição
+const formatarCentavosParaReal = (centavos: string): string => {
+  if (!centavos || centavos === '0') return 'R$ 0,00';
+  
+  const numero = parseFloat(centavos) / 100;
+  
+  if (isNaN(numero)) return 'R$ 0,00';
+  
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(numero);
+};
+
+// Função para remover formatação e obter apenas números
+const removerFormatacao = (valorFormatado: string): string => {
+  return valorFormatado.replace(/\D/g, '');
+};
+
+// Função para formatar durante a digitação
+const formatarDuranteDigitacao = (valor: string): string => {
+  const apenasNumeros = removerFormatacao(valor);
+  
+  if (apenasNumeros === '') return '';
+  
+  return formatarCentavosParaReal(apenasNumeros);
+};
+
+// Função para formatar data de YYYY-MM-DD para DD/MM/YYYY
+const formatarDataParaBackend = (data: string): string => {
+  if (!data) return '';
+  
+  if (data.includes('/')) return data;
+  
+  const partes = data.split('-');
+  if (partes.length === 3) {
+    return `${partes[2]}/${partes[1]}/${partes[0]}`;
+  }
+  
+  return data;
+};
+
+// Função para corrigir formato de valores vindo do backend
+const corrigirFormatoValor = (valor: string): string => {
+  if (!valor) return valor;
+  
+  // Se for uma taxa de juros (contém %)
+  if (valor.includes('%')) {
+    return valor.replace('.', ',');
+  }
+  
+  // Se for um valor monetário (contém R$)
+  if (valor.includes('R$')) {
+    const valorNumerico = valor.replace('R$ ', '');
+    const partes = valorNumerico.split('.');
+    
+    if (partes.length === 2) {
+      const parteInteira = partes[0].replace(',', '.');
+      const parteDecimal = partes[1];
+      
+      return `R$ ${parteInteira},${parteDecimal}`;
+    } else if (partes.length === 1) {
+      if (valorNumerico.includes(',')) {
+        return `R$ ${valorNumerico.replace(',', '.')}`;
+      } else {
+        return `R$ ${valorNumerico}`;
+      }
+    }
+  }
+  
+  return valor;
+};
+
+// ===================================================================
+// INÍCIO DA CORREÇÃO: Função para converter valores monetários do formato brasileiro para número
+// ===================================================================
+// Função para converter valores monetários do formato brasileiro para número
+const converterValorMonetarioParaNumero = (valorFormatado: string): number => {
+  if (!valorFormatado) return 0;
+  
+  // Remove o símbolo da moeda e espaços
+  let valorLimpo = valorFormatado.replace('R$', '').trim();
+  
+  // CORREÇÃO: Detectar o formato do valor antes de converter
+  // Se o valor contém ambos ponto e vírgula, assume formato brasileiro (ex: 3.499,99)
+  if (valorLimpo.includes('.') && valorLimpo.includes(',')) {
+    // Remove o separador de milhar (ponto)
+    valorLimpo = valorLimpo.replace(/\./g, '');
+    // Substitui o separador decimal (vírgula) por ponto
+    valorLimpo = valorLimpo.replace(',', '.');
+  } 
+  // Se o valor contém apenas vírgula, assume formato brasileiro (ex: 3499,99)
+  else if (valorLimpo.includes(',')) {
+    // Substitui o separador decimal (vírgula) por ponto
+    valorLimpo = valorLimpo.replace(',', '.');
+  }
+  // Se o valor contém apenas ponto, assume formato internacional (ex: 3499.99)
+  // Neste caso, não precisa fazer nada
+  
+  // Converte para número
+  const valorNumerico = parseFloat(valorLimpo);
+  
+  return isNaN(valorNumerico) ? 0 : valorNumerico;
+};
+// ===================================================================
+// FIM DA CORREÇÃO
+// ===================================================================
 
 export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinalCampaignLimitPercent, isTutorialOpen, setIsTutorialOpen }: PaymentFlowCalculatorProps) {
   const { toast } = useToast();
@@ -857,6 +981,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  // TODO: Implementar funcionalidade de dados do corretor
   const [brokerData, setBrokerData] = useState({ name: '', creci: '' });
   const [showInsuranceDetails, setShowInsuranceDetails] = useState(false);
   const [allUnits, setAllUnits] = useState<CombinedUnit[]>([]);
@@ -866,6 +991,19 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   const [sunPositionFilter, setSunPositionFilter] = useState<string>("Todos");
   const [isSaleValueLocked, setIsSaleValueLocked] = useState(false);
   const [isUnitSelectorOpen, setIsUnitSelectorOpen] = useState(false);
+
+  // Novos estados para a simulação automatizada
+  const [isAutomatedSimulationEnabled, setIsAutomatedSimulationEnabled] = useState(false);
+  const [isSimulatingCaixa, setIsSimulatingCaixa] = useState(false);
+  const [customerData, setCustomerData] = useState({
+    renda: "",
+    dataNascimento: "",
+    sistemaAmortizacao: "PRICE TR",
+  });
+  const [valoresFormatados, setValoresFormatados] = useState({
+    renda: ""
+  });
+  const [caixaSimulationResult, setCaixaSimulationResult] = useState<CaixaSimulationResult['dados'] | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -1023,6 +1161,179 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     return 0;
   }, [watchedPayments, watchedAppraisalValue, watchedSaleValue]);
 
+  // Manipula mudanças nos campos monetários da simulação Caixa
+  const handleCaixaMonetaryChange = (name: 'renda', value: string) => {
+    if (value === '') {
+      setValoresFormatados(prev => ({ ...prev, [name]: '' }));
+      setCustomerData(prev => ({ ...prev, [name]: '' }));
+      return;
+    }
+    
+    const apenasNumeros = removerFormatacao(value);
+    
+    if (apenasNumeros === '') {
+      setValoresFormatados(prev => ({ ...prev, [name]: '' }));
+      setCustomerData(prev => ({ ...prev, [name]: '' }));
+      return;
+    }
+    
+    const valorFormatado = formatarDuranteDigitacao(apenasNumeros);
+    
+    setValoresFormatados(prev => ({ ...prev, [name]: valorFormatado }));
+    setCustomerData(prev => ({ ...prev, [name]: apenasNumeros }));
+  };
+
+  // Manipula mudanças em outros campos da simulação Caixa
+  const handleCaixaDataChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    
+    if (name === 'renda') {
+      handleCaixaMonetaryChange(name, value);
+    } else {
+      setCustomerData(prev => ({ ...prev, [name]: value }));
+    }
+  };
+
+  // Função para lidar com foco nos campos monetários da simulação Caixa
+  const handleCaixaMonetaryFocus = (name: 'renda') => {
+    if (!valoresFormatados[name] || valoresFormatados[name] === 'R$ 0,00') {
+      setValoresFormatados(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  // Função para lidar com perda de foco nos campos monetários da simulação Caixa
+  const handleCaixaMonetaryBlur = (name: 'renda') => {
+    if (!valoresFormatados[name] || valoresFormatados[name] === '') {
+      setValoresFormatados(prev => ({ ...prev, [name]: 'R$ 0,00' }));
+      setCustomerData(prev => ({ ...prev, [name]: '0' }));
+    }
+  };
+
+  // ===================================================================
+  // INÍCIO DA CORREÇÃO: Função para simular financiamento na Caixa
+  // ===================================================================
+  // Função para simular financiamento na Caixa
+  const handleSimulateCaixaFinancing = async () => {
+    if (!selectedProperty || !watchedAppraisalValue) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Selecione um imóvel antes de simular o financiamento.",
+      });
+      return;
+    }
+
+    if (!customerData.renda || customerData.renda === '0' || !customerData.dataNascimento) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Preencha todos os dados do cliente antes de simular.",
+      });
+      return;
+    }
+
+    setIsSimulatingCaixa(true);
+    setCaixaSimulationResult(null);
+
+    try {
+      const functions = getFunctions(app);
+      const simularFinanciamento = httpsCallable<Record<string, string>, CaixaSimulationResult>(
+        functions, 
+        'simularFinanciamentoCaixa'
+      );
+      
+      const dadosParaBackend = {
+        valorImovel: (watchedAppraisalValue * 100).toString(), // Convertendo para centavos
+        renda: customerData.renda,
+        dataNascimento: formatarDataParaBackend(customerData.dataNascimento),
+        sistemaAmortizacao: customerData.sistemaAmortizacao,
+      };
+      
+      const response = await simularFinanciamento(dadosParaBackend);
+      const data = response.data;
+
+      if (data.sucesso && data.dados) {
+        setCaixaSimulationResult(data.dados);
+        
+        // Preencher automaticamente os campos do formulário principal
+        setValue('grossIncome', parseFloat(customerData.renda) / 100, { shouldValidate: true });
+        
+        // CORREÇÃO: Converter o valor da parcela corretamente
+        // Primeiro, aplicar a função de correção de formato
+        const parcelaFormatada = corrigirFormatoValor(data.dados.Primeira_Prestacao || '0');
+        // Depois, converter para número usando a função corrigida
+        const parcelaSimulada = converterValorMonetarioParaNumero(parcelaFormatada);
+        setValue('simulationInstallmentValue', parcelaSimulada, { shouldValidate: true });
+        
+        // CORREÇÃO: Converter o valor do financiamento corretamente
+        // Primeiro, aplicar a função de correção de formato
+        const financiamentoFormatado = corrigirFormatoValor(data.dados.Valor_Total_Financiado || '0');
+        // Depois, converter para número usando a função corrigida
+        const valorFinanciado = converterValorMonetarioParaNumero(financiamentoFormatado);
+        
+        const financingPayment: PaymentField = {
+          type: "financiamento",
+          value: valorFinanciado,
+          date: deliveryDateObj || new Date(),
+        };
+        
+        const financingIndex = watchedPayments.findIndex(p => p.type === 'financiamento');
+        if (financingIndex > -1) {
+          const newPayments = [...watchedPayments];
+          newPayments[financingIndex] = financingPayment;
+          replace(newPayments);
+        } else {
+          append(financingPayment);
+        }
+        
+        toast({ 
+          title: "Simulação Realizada com Sucesso!", 
+          description: "Os dados foram preenchidos automaticamente." 
+        });
+      } else if (data.message) {
+        throw new Error(data.message);
+      } else {
+        throw new Error("Falha na simulação.");
+      }
+    } catch (err: unknown) {
+      console.error('Erro na simulação:', err);
+      
+      let errorMessage = "Ocorreu um erro desconhecido.";
+      
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === 'object' && err !== null && 'code' in err) {
+        const errorWithCode = err as { code?: string };
+        if (typeof errorWithCode.code === 'string') {
+          switch (errorWithCode.code) {
+            case 'internal':
+              errorMessage = "Erro interno no servidor. Tente novamente.";
+              break;
+            case 'invalid-argument':
+              errorMessage = "Dados inválidos fornecidos. Verifique os campos.";
+              break;
+            case 'unauthenticated':
+              errorMessage = "Você precisa estar logado para realizar a simulação.";
+              break;
+            default:
+              errorMessage = `Erro: ${errorWithCode.code}`;
+          }
+        }
+      }
+      
+      toast({ 
+        variant: "destructive", 
+        title: "Erro na Simulação", 
+        description: errorMessage 
+      });
+    } finally {
+      setIsSimulatingCaixa(false);
+    }
+  };
+  // ===================================================================
+  // FIM DA CORREÇÃO
+  // ===================================================================
+
   useEffect(() => {
     if (!selectedProperty || !deliveryDateObj) return;
     
@@ -1072,7 +1383,15 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     setValue('notaryInstallments', undefined, { shouldValidate: true });
   }, [watchedNotaryPaymentMethod, setValue]);
 
-  const handlePropertyChange = useCallback((id: string, properties: Property[], form: any, setResults: any, setIsSaleValueLocked: any, setAllUnits: any, toast: any) => {
+  const handlePropertyChange = useCallback((
+    id: string, 
+    properties: Property[], 
+    form: ReturnType<typeof useForm<FormValues>>, 
+    setResults: React.Dispatch<React.SetStateAction<ExtendedResults | null>>,
+    setIsSaleValueLocked: React.Dispatch<React.SetStateAction<boolean>>,
+    setAllUnits: React.Dispatch<React.SetStateAction<CombinedUnit[]>>,
+    toast: ReturnType<typeof useToast>['toast']
+  ) => {
     if (!id) return;
     
     form.reset({ 
@@ -1137,7 +1456,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         description: "Nenhum dado de espelho de vendas encontrado para este empreendimento. Prossiga com a inserção manual.",
       });
     }
-  }, [properties, form]);
+  }, [properties]);
   
   const handleUnitSelect = useCallback((unit: CombinedUnit) => {
     if (!selectedProperty) return;
@@ -1204,8 +1523,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       return;
     }
     
-    const bonusAdimplenciaValue = values.appraisalValue > values.saleValue ? values.appraisalValue - values.saleValue : 0;
-
     const proSolutoPayment = values.payments.find(p => p.type === 'proSoluto');
     const hasProSoluto = !!proSolutoPayment;
 
@@ -1222,13 +1539,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         return;
       }
     }
-
-    const sumOfOtherPayments = values.payments.reduce((acc, payment) => {
-      if (!['proSoluto', 'bonusAdimplencia', 'bonusCampanha'].includes(payment.type)) {
-        return acc + (payment.value || 0);
-      }
-      return acc;
-    }, 0);
 
     let proSolutoValue = 0;
     if (hasProSoluto) {
@@ -1580,7 +1890,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             });
         }
     });
-  }, [form, selectedProperty, deliveryDateObj, toast, replace, isSinalCampaignActive, sinalCampaignLimitPercent, trigger, getValues, onSubmit, validateBusinessRulesAfterMinimumCondition]);
+  }, [form, selectedProperty, deliveryDateObj, toast, replace, isSinalCampaignActive, sinalCampaignLimitPercent, trigger, getValues, onSubmit, validateBusinessRulesAfterMinimumCondition, constructionStartDateObj]);
   // ===================================================================
   // FIM DA ALTERAÇÃO 2
   // ===================================================================
@@ -1610,6 +1920,17 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     setFloorFilter("Todos");
     setTypologyFilter("Todos");
     setSunPositionFilter("Todos");
+    
+    // Limpar dados da simulação Caixa
+    setCustomerData({
+      renda: "",
+      dataNascimento: "",
+      sistemaAmortizacao: "PRICE TR",
+    });
+    setValoresFormatados({
+      renda: ""
+    });
+    setCaixaSimulationResult(null);
     
     toast({
       title: "Formulário Limpo",
@@ -1670,10 +1991,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             description: "Para fazer upload do PDF, primeiro informe o Valor de Venda manualmente."
         });
         
-        const saleValueInput = document.getElementById('sale-value-input');
+        const saleValueInput = document.getElementById('sale-value-input') as HTMLInputElement | null;
         if (saleValueInput) {
             saleValueInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            (saleValueInput as HTMLElement).focus();
+            saleValueInput.focus();
         }
         
         if (fileInputRef.current) {
@@ -1782,7 +2103,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   }, [selectedProperty, toast, handleFileChange]);
 
   const handleGeneratePdf = useCallback(async () => {
-    if (!results || !selectedProperty || !form.formState.isValid) {
+    if (!results || !selectedProperty) {
       toast({
         title: "Erro",
         description: "Não há resultados para gerar o PDF.",
@@ -1820,23 +2141,148 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     } finally {
       setIsGeneratingPdf(false);
     }
-  }, [results, selectedProperty, toast, form, brokerData, properties, form.formState.isValid]);
+  }, [results, selectedProperty, toast, form, brokerData, properties]);
 
   return (
     <div className="space-y-4 sm:space-y-6 px-2 sm:px-0" onPaste={handlePaste}>
       <Card className="relative">
         <CardHeader className="pb-3 sm:pb-6">
-          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-            <Calculator className="h-5 w-5 sm:h-6 sm:w-6" />
-            Simulador de Fluxo de Pagamento
-          </CardTitle>
-          <CardDescription className="text-sm">
-            Preencha os dados abaixo para simular as condições de pagamento do imóvel.
-          </CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+                <Calculator className="h-5 w-5 sm:h-6 sm:w-6" />
+                Simulador de Fluxo de Pagamento
+              </CardTitle>
+              <CardDescription className="text-sm">
+                Preencha os dados abaixo para simular as condições de pagamento do imóvel.
+              </CardDescription>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="automated-simulation"
+                checked={isAutomatedSimulationEnabled}
+                onCheckedChange={setIsAutomatedSimulationEnabled}
+              />
+              <Label htmlFor="automated-simulation" className="text-sm font-medium">
+                Simulação Automatizada
+              </Label>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-3 sm:p-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
+              {/* Seção de Dados do Cliente (aparece quando a simulação automatizada está ativada) */}
+              {isAutomatedSimulationEnabled && (
+                <Card className="border-blue-200 dark:border-blue-800">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                      <ShieldCheck className="h-5 w-5 text-blue-600" />
+                      Dados do Cliente
+                    </CardTitle>
+                    <CardDescription className="text-sm">
+                      Preencha os dados para simular o financiamento com a Caixa.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="caixa-renda">Renda Bruta Mensal</Label>
+                        <div className="relative">
+                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
+                          <Input 
+                            id="caixa-renda" 
+                            name="renda" 
+                            type="text"
+                            value={valoresFormatados.renda}
+                            onChange={handleCaixaDataChange}
+                            onFocus={() => handleCaixaMonetaryFocus('renda')}
+                            onBlur={() => handleCaixaMonetaryBlur('renda')}
+                            placeholder="R$ 0,00"
+                            className="pl-10 h-10 sm:h-11"
+                            required 
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="caixa-data-nascimento">Data de Nascimento</Label>
+                        <Input 
+                          id="caixa-data-nascimento" 
+                          name="dataNascimento" 
+                          type="date" 
+                          value={customerData.dataNascimento} 
+                          onChange={handleCaixaDataChange} 
+                          className="h-10 sm:h-11"
+                          required 
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="caixa-sistema-amortizacao">Sistema de Amortização</Label>
+                      <Select 
+                        value={customerData.sistemaAmortizacao} 
+                        onValueChange={(value) => setCustomerData(prev => ({ ...prev, sistemaAmortizacao: value }))}
+                      >
+                        <SelectTrigger className="h-10 sm:h-11">
+                          <SelectValue placeholder="Selecione o sistema" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="PRICE TR">PRICE</SelectItem>
+                          <SelectItem value="SAC TR">SAC</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <Button 
+                      type="button" 
+                      onClick={handleSimulateCaixaFinancing}
+                      disabled={isSimulatingCaixa || !selectedProperty || !watchedAppraisalValue}
+                      className="w-full h-10 sm:h-11"
+                    >
+                      {isSimulatingCaixa && <FaSpinner className="mr-2 h-4 w-4 animate-spin" />}
+                      {isSimulatingCaixa ? "Simulando..." : "Simular Financiamento"}
+                    </Button>
+                    
+                    {caixaSimulationResult && (
+                      <Card className="mt-4">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base">Resultados da Simulação Caixa</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="border rounded-lg p-3">
+                              <p className="font-semibold text-sm text-muted-foreground">Prazo:</p>
+                              <p className="text-lg font-bold">{caixaSimulationResult.Prazo || 'N/A'}</p>
+                            </div>
+                            <div className="border rounded-lg p-3">
+                              <p className="font-semibold text-sm text-muted-foreground">Valor Total Financiado:</p>
+                              <p className="text-lg font-bold text-green-600">
+                                {corrigirFormatoValor(caixaSimulationResult.Valor_Total_Financiado || 'N/A')}
+                              </p>
+                            </div>
+                            <div className="border rounded-lg p-3">
+                              <p className="font-semibold text-sm text-muted-foreground">Primeira Prestação:</p>
+                              <p className="text-lg font-bold text-blue-600">
+                                {corrigirFormatoValor(caixaSimulationResult.Primeira_Prestacao || 'N/A')}
+                              </p>
+                            </div>
+                            <div className="border rounded-lg p-3">
+                              <p className="font-semibold text-sm text-muted-foreground">Juros Efetivos:</p>
+                              <p className="text-lg font-bold text-purple-600">
+                                {corrigirFormatoValor(caixaSimulationResult.Juros_Efetivos || 'N/A')}
+                              </p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <FormField
               control={form.control}
@@ -1938,11 +2384,13 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   name="grossIncome"
                   label="Renda Bruta Mensal"
                   control={form.control}
+                  readOnly={isAutomatedSimulationEnabled && caixaSimulationResult !== null}
                 />
                 <CurrencyFormField
                   name="simulationInstallmentValue"
                   label="Valor da Parcela Simulação"
                   control={form.control}
+                  readOnly={isAutomatedSimulationEnabled && caixaSimulationResult !== null}
                 />
               </div>
 
@@ -2010,6 +2458,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                                   value={field.value * 100}
                                   onValueChange={(cents) => field.onChange(cents === null ? 0 : cents / 100)}
                                   className="h-10 sm:h-11"
+                                  readOnly={isAutomatedSimulationEnabled && watchedPayments[index]?.type === 'financiamento' && caixaSimulationResult !== null}
                               />
                             </FormControl>
                             <FormMessage />
@@ -2041,6 +2490,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                         size="sm"
                         onClick={() => remove(index)}
                         className="h-10 sm:h-11 px-2 sm:px-3 mt-6 sm:mt-0"
+                        disabled={isAutomatedSimulationEnabled && watchedPayments[index]?.type === 'financiamento' && caixaSimulationResult !== null}
                       >
                         <XCircle className="h-4 w-4" />
                       </Button>
@@ -2417,7 +2867,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
               <div>
                 <Label className="text-sm">Status</Label>
-                <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
+                <Select value={statusFilter} onValueChange={(value: UnitStatus | "Todos") => setStatusFilter(value)}>
                   <SelectTrigger className="h-10 sm:h-11">
                     <SelectValue />
                   </SelectTrigger>

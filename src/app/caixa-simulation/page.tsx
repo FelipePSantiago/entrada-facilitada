@@ -315,9 +315,9 @@ const CaixaSimulationForm = () => {
   return (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
-        <CardTitle>Simulador de Financiamento Caixa</CardTitle>
+        <CardTitle>Origem de recurso: SBPE</CardTitle>
         <CardDescription>
-          Preencha os dados para simular o financiamento no portal da Caixa.
+          Preencha os dados para simular o financiamento.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -332,23 +332,9 @@ const CaixaSimulationForm = () => {
               onChange={handleChange}
               onFocus={() => handleMonetaryFocus('valorImovel')}
               onBlur={() => handleMonetaryBlur('valorImovel')}
-              placeholder="Digite o valor em centavos"
+              placeholder="R$ 0,00"
               required 
             />
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">
-                💡 <strong>Como preencher (digite em centavos):</strong>
-              </p>
-              <p className="text-xs text-muted-foreground">
-                • Para <strong>R$ 598.000,00</strong> digite: <strong>59800000</strong>
-              </p>
-              <p className="text-xs text-muted-foreground">
-                • Para <strong>R$ 250.000,00</strong> digite: <strong>25000000</strong>
-              </p>
-              <p className="text-xs text-blue-600 font-semibold mt-1">
-                O valor será formatado automaticamente em reais
-              </p>
-            </div>
           </div>
           
           <div className="space-y-2">
@@ -361,23 +347,9 @@ const CaixaSimulationForm = () => {
               onChange={handleChange}
               onFocus={() => handleMonetaryFocus('renda')}
               onBlur={() => handleMonetaryBlur('renda')}
-              placeholder="Digite o valor em centavos"
+              placeholder="R$ 0,00"
               required 
             />
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">
-                💡 <strong>Como preencher (digite em centavos):</strong>
-              </p>
-              <p className="text-xs text-muted-foreground">
-                • Para <strong>R$ 14.000,00</strong> digite: <strong>1400000</strong>
-              </p>
-              <p className="text-xs text-muted-foreground">
-                • Para <strong>R$ 8.500,00</strong> digite: <strong>850000</strong>
-              </p>
-              <p className="text-xs text-blue-600 font-semibold mt-1">
-                O valor será formatado automaticamente em reais
-              </p>
-            </div>
           </div>
           
           <div className="space-y-2">
@@ -390,9 +362,6 @@ const CaixaSimulationForm = () => {
               onChange={handleChange} 
               required 
             />
-            <p className="text-xs text-muted-foreground">
-              Será convertida para o formato DD/MM/YYYY automaticamente
-            </p>
           </div>
           
           <div className="space-y-2">
