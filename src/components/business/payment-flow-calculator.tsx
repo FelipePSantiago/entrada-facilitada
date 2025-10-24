@@ -205,19 +205,19 @@ interface ExtendedPdfFormValues extends PdfFormValues {
   property?: Property;
 }
 
-// Função auxiliar para status badge
+// Função auxiliar para status badge com suporte completo ao modo escuro
 const getStatusBadgeClass = (status: UnitStatus) => {
   switch (status) {
     case 'Disponível':
-      return 'border-blue-600/20 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-all duration-200';
+      return 'border-blue-600/20 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-400/30 dark:bg-blue-950/50 dark:text-blue-300 dark:hover:bg-blue-900/70 transition-all duration-200';
     case 'Vendido':
-      return 'border-gray-400/20 bg-gray-50 text-gray-600 opacity-60 cursor-not-allowed';
+      return 'border-gray-400/20 bg-gray-50 text-gray-600 opacity-60 cursor-not-allowed dark:border-gray-600/30 dark:bg-gray-800/50 dark:text-gray-400';
     case 'Reservado':
-      return 'border-amber-600/20 bg-amber-50 text-amber-700 opacity-80 cursor-not-allowed';
+      return 'border-amber-600/20 bg-amber-50 text-amber-700 opacity-80 cursor-not-allowed dark:border-amber-400/30 dark:bg-amber-950/50 dark:text-amber-300';
     case 'Indisponível':
-      return 'border-gray-400/20 bg-gray-50 text-gray-600 opacity-60 cursor-not-allowed';
+      return 'border-gray-400/20 bg-gray-50 text-gray-600 opacity-60 cursor-not-allowed dark:border-gray-600/30 dark:bg-gray-800/50 dark:text-gray-400';
     default:
-      return 'border-gray-400/20 bg-gray-50 text-gray-600';
+      return 'border-gray-400/20 bg-gray-50 text-gray-600 dark:border-gray-600/30 dark:bg-gray-800/50 dark:text-gray-400';
   }
 };
 
@@ -681,68 +681,68 @@ interface UnitCardProps {
 }
 
 const UnitCard = memo(({ unit, isReservaParque, onUnitSelect, style }: UnitCardProps) => {
-    const unitDisplay = useMemo(() => 
-      isReservaParque ? `Torre ${unit.block}` : `Bloco ${unit.block}`,
-      [isReservaParque, unit.block]
-    );
-    
-    const handleClick = useCallback(() => {
-        if (unit.status === 'Disponível') {
-            onUnitSelect(unit);
-        }
-    }, [unit, onUnitSelect]);
-    
-    return (
-        <div style={style} className="transform transition-all duration-300 hover:scale-105">
-            <Card 
-                className={cn(
-                    "cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl border-2 rounded-xl overflow-hidden group h-full flex flex-col",
-                    getStatusBadgeClass(unit.status),
-                    unit.status === 'Disponível' && 'hover:border-blue-400 hover:shadow-blue-100'
-                )}
-                onClick={handleClick}
-            >
-                <CardHeader className="p-3 sm:p-4 pb-2 flex-row justify-between items-start bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-900">
-                    <div>
-                        <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100">{unitDisplay}</p>
-                        <p className="font-semibold text-xs sm:text-sm text-blue-700 dark:text-blue-400">Unidade {unit.unitNumber}</p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">{unit.floor}</p>
-                    </div>
-                    <div className={cn("text-xs font-bold px-2 sm:px-3 py-1 rounded-full transition-all duration-200", getStatusBadgeClass(unit.status).replace(/hover:[a-z-]+/g, ''))}>
-                    {unit.status}
-                    </div>
-                </CardHeader>
-                <CardContent className="p-3 sm:p-4 pt-2 text-xs space-y-2 flex-grow bg-white dark:bg-gray-800">
-                    <div className="flex justify-between items-baseline pt-2 border-b border-gray-100 dark:border-gray-700">
-                        <span className="font-semibold text-xs sm:text-sm text-gray-600 dark:text-gray-400">Venda:</span>
-                        <span className="font-bold text-sm sm:text-lg text-blue-700 dark:text-blue-400 break-words">{centsToBrl(unit.saleValue)}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-gray-700 dark:text-gray-300">
-                        <div className="flex items-center gap-1">
-                            <Grid3X3 className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                            <span className="text-xs"><strong>Tipologia:</strong> {unit.typology}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <Ruler className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                            <span className="text-xs"><strong>Área:</strong> {(unit.privateArea).toFixed(1)}m²</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <Sun className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                            <span className="text-xs"><strong>Sol:</strong> {unit.sunPosition}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <Car className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                            <span className="text-xs"><strong>Vagas:</strong> {unit.parkingSpaces}</span>
-                        </div>
-                    </div>
-                    <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-700">
-                        <span className="text-xs text-gray-600 dark:text-gray-400">Avaliação:</span>
-                        <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{centsToBrl(unit.appraisalValue)}</span>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
-    );
+  const unitDisplay = useMemo(() => 
+    isReservaParque ? `Torre ${unit.block}` : `Bloco ${unit.block}`,
+    [isReservaParque, unit.block]
+  );
+  
+  const handleClick = useCallback(() => {
+      if (unit.status === 'Disponível') {
+          onUnitSelect(unit);
+      }
+  }, [unit, onUnitSelect]);
+  
+  return (
+      <div style={style} className="transform transition-all duration-300 hover:scale-105">
+          <Card 
+              className={cn(
+                  "cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl border-2 rounded-xl overflow-hidden group h-full flex flex-col",
+                  getStatusBadgeClass(unit.status),
+                  unit.status === 'Disponível' && 'hover:border-blue-400 hover:shadow-blue-100 dark:hover:border-blue-500 dark:hover:shadow-blue-900/20'
+              )}
+              onClick={handleClick}
+          >
+              <CardHeader className="p-3 sm:p-4 pb-2 flex-row justify-between items-start bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-900">
+                  <div>
+                      <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100">{unitDisplay}</p>
+                      <p className="font-semibold text-xs sm:text-sm text-blue-700 dark:text-blue-400">Unidade {unit.unitNumber}</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">{unit.floor}</p>
+                  </div>
+                  <div className={cn("text-xs font-bold px-2 sm:px-3 py-1 rounded-full transition-all duration-200", getStatusBadgeClass(unit.status).replace(/hover:[a-z-]+/g, ''))}>
+                  {unit.status}
+                  </div>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4 pt-2 text-xs space-y-2 flex-grow bg-white dark:bg-gray-800">
+                  <div className="flex justify-between items-baseline pt-2 border-b border-gray-100 dark:border-gray-700">
+                      <span className="font-semibold text-xs sm:text-sm text-gray-600 dark:text-gray-400">Venda:</span>
+                      <span className="font-bold text-sm sm:text-lg text-blue-700 dark:text-blue-400 break-words">{centsToBrl(unit.saleValue)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-gray-700 dark:text-gray-300">
+                      <div className="flex items-center gap-1">
+                          <Grid3X3 className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                          <span className="text-xs"><strong>Tipologia:</strong> {unit.typology}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                          <Ruler className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                          <span className="text-xs"><strong>Área:</strong> {(unit.privateArea).toFixed(1)}m²</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                          <Sun className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                          <span className="text-xs"><strong>Sol:</strong> {unit.sunPosition}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                          <Car className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                          <span className="text-xs"><strong>Vagas:</strong> {unit.parkingSpaces}</span>
+                      </div>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-700">
+                      <span className="text-xs text-gray-600 dark:text-gray-400">Avaliação:</span>
+                      <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{centsToBrl(unit.appraisalValue)}</span>
+                  </div>
+              </CardContent>
+          </Card>
+      </div>
+  );
 });
 UnitCard.displayName = 'UnitCard';
 
