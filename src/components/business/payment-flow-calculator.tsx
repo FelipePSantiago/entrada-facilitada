@@ -1180,6 +1180,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   
   const availablePaymentFields = useMemo(() => {
     return paymentFieldOptions.filter(opt => {
+      // Bônus Campanha e Bônus Adimplência NÃO devem estar disponíveis para seleção manual
       if (["bonusAdimplencia", "bonusCampanha"].includes(opt.value)) return false;
 
       const isAlreadyAdded = watchedPayments.some(p => p.type === opt.value);
@@ -1500,17 +1501,23 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     }
   };
 
+  // CORREÇÃO: Remover a adição automática de FGTS, Desconto e Bônus Campanha
+  // Apenas Financiamento e Bônus Adimplência podem ser adicionados automaticamente quando necessário
   useEffect(() => {
     if (!selectedProperty || !deliveryDateObj) return;
     
     const hasFinancing = watchedPayments.some(p => p.type === 'financiamento');
     
+    // APENAS estes campos podem ser adicionados automaticamente
     const fieldsToAdd = [
-      { type: 'financiamento' as PaymentFieldType, condition: hasFinancing && !watchedPayments.some(p => p.type === 'financiamento') },
-      { type: 'bonusAdimplencia' as PaymentFieldType, condition: hasFinancing && bonusAdimplenciaValue > 0 && !watchedPayments.some(p => p.type === 'bonusAdimplencia') },
-      { type: 'desconto' as PaymentFieldType, condition: !watchedPayments.some(p => p.type === 'desconto') },
-      { type: 'bonusCampanha' as PaymentFieldType, condition: !watchedPayments.some(p => p.type === 'bonusCampanha') },
-      { type: 'fgts' as PaymentFieldType, condition: !watchedPayments.some(p => p.type === 'fgts') }
+      { 
+        type: 'financiamento' as PaymentFieldType, 
+        condition: hasFinancing && !watchedPayments.some(p => p.type === 'financiamento') 
+      },
+      { 
+        type: 'bonusAdimplencia' as PaymentFieldType, 
+        condition: hasFinancing && bonusAdimplenciaValue > 0 && !watchedPayments.some(p => p.type === 'bonusAdimplencia') 
+      }
     ];
 
     fieldsToAdd.forEach(({ type, condition }) => {
@@ -1525,13 +1532,14 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       }
     });
 
+    // Remover bônus adimplência se não for mais necessário
     if (!hasFinancing || bonusAdimplenciaValue <= 0) {
       const bonusIndex = watchedPayments.findIndex((p: PaymentField) => p.type === 'bonusAdimplencia');
       if (bonusIndex > -1) {
         remove(bonusIndex);
       }
     }
-  }, [bonusAdimplenciaValue, watchedPayments, selectedProperty, deliveryDateObj, append, remove, replace]);
+  }, [bonusAdimplenciaValue, watchedPayments, selectedProperty, deliveryDateObj, append, remove]);
   
   useEffect(() => {
     if (!selectedProperty) return;
@@ -2082,7 +2090,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       title: "Formulário Limpo",
       description: "Todos os campos foram limpos. Você pode começar uma nova simulação.",
     });
-  }, [form, toast]);
+  }, [form, toast]); // Remova 'trigger' da lista de dependências
 
   const processExtractedData = useCallback(async (extractedData: ExtractedDataType) => {
     try {
@@ -2573,18 +2581,24 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                         render={({ field }) => (
                           <FormItem className="flex-1 w-full">
                             <FormLabel className="text-sm">Tipo</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                               <FormControl>
                                 <SelectTrigger className="h-10 sm:h-11">
                                   <SelectValue placeholder="Selecione o tipo" />
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                {paymentFieldOptions.map((option) => (
-                                  <SelectItem key={option.value} value={option.value}>
-                                    {option.label}
-                                  </SelectItem>
-                                ))}
+                                {paymentFieldOptions.map((option) => {
+                                  // Se a opção for "Bônus de Campanha" ou "Bônus Adimplência" e não for o tipo atual, não a mostre.
+                                  if (["bonusAdimplencia", "bonusCampanha"].includes(option.value) && option.value !== field.value) {
+                                    return null;
+                                  }
+                                  return (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  );
+                                })}
                               </SelectContent>
                             </Select>
                             <FormMessage />
@@ -2676,8 +2690,12 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                       <FormControl>
                         <Input
                           type="number"
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.valueAsNumber)}
+                          value={field.value || ''} // Garante que o input mostre vazio se o valor for undefined
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Se o input estiver vazio, define como undefined. Caso contrário, converte para número.
+                            field.onChange(value === '' ? undefined : Number(value));
+                          }}
                           className="h-10 sm:h-11"
                           placeholder={installmentsPlaceholder}
                         />
@@ -2752,8 +2770,12 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                       <FormControl>
                         <Input
                           type="number"
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.valueAsNumber)}
+                          value={field.value || ''} // Garante que o input mostre vazio se o valor for undefined
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Se o input estiver vazio, define como undefined. Caso contrário, converte para número.
+                            field.onChange(value === '' ? undefined : Number(value));
+                          }}
                           className="h-10 sm:h-11"
                           placeholder={watchedNotaryPaymentMethod === 'creditCard' ? '1-12' : '36 ou 40'}
                         />
@@ -2762,6 +2784,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                     </FormItem>
                   )}
                 />
+
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
