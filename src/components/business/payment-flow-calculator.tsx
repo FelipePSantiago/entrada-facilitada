@@ -83,22 +83,165 @@ import { centsToBrl } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { FaSpinner } from "react-icons/fa";
 
-// Importação corrigida para formatPercentage
 const formatPercentage = (value: number) => {
-  return `${( value * 100).toFixed(2)}%`;
+  return `${(value * 100).toFixed(2)}%`;
 };
 
-// Importação simulada para generatePdf - substitua com a importação real quando disponível
-const generatePdf = async (pdfValues: unknown, results: unknown, selectedProperty: unknown) => {
-  console.log("Generating PDF with values:", pdfValues, results, selectedProperty);
-  // Implementação real da função generatePdf
-  return Promise.resolve();
+const formatDate = (date: Date): string => {
+  return format(date, "dd/MM/yyyy", { locale: ptBR });
+};
+
+const generatePdf = async (pdfValues: ExtendedPdfFormValues, results: ExtendedResults, selectedProperty: Property) => {
+  try {
+    const { jsPDF } = await import('jspdf');
+    
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+    
+    pdf.setFont('helvetica');
+    pdf.setFontSize(16);
+    
+    pdf.setFontSize(16);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Simulador de Fluxo de Pagamento', pdf.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
+    
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Data: ${formatDate(new Date())}`, pdf.internal.pageSize.getWidth() / 2, 30, { align: 'center' });
+    
+    pdf.setFontSize(12);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Empreendimento:', 20, 50);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(selectedProperty.enterpriseName || '', 20, 60);
+    
+    pdf.text('Unidade:', 20, 70);
+    pdf.text(pdfValues.selectedUnit || '', 20, 80);
+    
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Valores:', 20, 100);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Valor de Avaliação: ${centsToBrl((pdfValues.appraisalValue || 0) * 100)}`, 20, 110);
+    pdf.text(`Valor de Venda: ${centsToBrl((pdfValues.saleValue || 0) * 100)}`, 20, 120);
+    pdf.text(`Renda Bruta Mensal: ${centsToBrl((pdfValues.grossIncome || 0) * 100)}`, 20, 130);
+    
+    pdf.addPage();
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Resumo de Pagamentos', pdf.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
+    
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    
+    let yPosition = 40;
+    
+    pdf.text('Tipo', 20, yPosition);
+    pdf.text('Valor', 80, yPosition);
+    pdf.text('Data', 140, yPosition);
+    yPosition += 10;
+    
+    pdf.line(20, yPosition, pdf.internal.pageSize.getWidth() - 20, yPosition);
+    yPosition += 5;
+    
+    if (pdfValues.payments && pdfValues.payments.length > 0) {
+      pdfValues.payments.forEach((payment: PaymentField) => {
+        if (yPosition > pdf.internal.pageSize.getHeight() - 30) {
+          pdf.addPage();
+          yPosition = 20;
+          
+          pdf.setFontSize(10);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text('Tipo', 20, yPosition);
+          pdf.text('Valor', 80, yPosition);
+          pdf.text('Data', 140, yPosition);
+          yPosition += 10;
+          
+          pdf.line(20, yPosition, pdf.internal.pageSize.getWidth() - 20, yPosition);
+          yPosition += 5;
+        }
+        
+        pdf.setFont('helvetica', 'normal');
+        const paymentType = payment.type === 'sinalAto' ? 'Sinal Ato' :
+                           payment.type === 'sinal1' ? 'Sinal 1' :
+                           payment.type === 'sinal2' ? 'Sinal 2' :
+                           payment.type === 'sinal3' ? 'Sinal 3' :
+                           payment.type === 'proSoluto' ? 'Pró-Soluto' :
+                           payment.type === 'bonusAdimplencia' ? 'Bônus Adimplência' :
+                           payment.type === 'desconto' ? 'Desconto' :
+                           payment.type === 'bonusCampanha' ? 'Bônus de Campanha' :
+                           payment.type === 'fgts' ? 'FGTS' :
+                           payment.type === 'financiamento' ? 'Financiamento' : payment.type;
+        
+        pdf.text(paymentType, 20, yPosition);
+        pdf.text(centsToBrl(payment.value * 100), 80, yPosition);
+        pdf.text(formatDate(payment.date), 140, yPosition);
+        yPosition += 8;
+      });
+    }
+    
+    pdf.addPage();
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Resumo de Custos', pdf.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
+    
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    yPosition = 40;
+    
+    pdf.text(`Entrada: ${centsToBrl((results?.totalEntryCost || 0) * 100)}`, 20, yPosition);
+    yPosition += 10;
+    pdf.text(`Pró-Soluto: ${centsToBrl((results?.totalProSolutoCost || 0) * 100)}`, 20, yPosition);
+    yPosition += 10;
+    pdf.text(`Financiamento: ${centsToBrl((results?.totalFinancedCost || 0) * 100)}`, 20, yPosition);
+    yPosition += 10;
+    pdf.text(`Taxas Cartorárias: ${centsToBrl((results?.totalNotaryCost || 0) * 100)}`, 20, yPosition);
+    yPosition += 10;
+    pdf.text(`Seguro Obra: ${centsToBrl((results?.totalInsuranceCost || 0) * 100)}`, 20, yPosition);
+    yPosition += 10;
+    pdf.text(`Total: ${centsToBrl((results?.totalCost || 0) * 100)}`, 20, yPosition);
+    
+    pdf.addPage();
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Análise de Renda', pdf.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
+    
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    yPosition = 40;
+    
+    pdf.text(`Comprometimento de Renda: ${(results?.incomeCommitmentPercentage || 0).toFixed(2)}%`, 20, yPosition);
+    yPosition += 10;
+    pdf.text(`Percentual Pró-Soluto: ${(results?.proSolutoCommitmentPercentage || 0).toFixed(2)}%`, 20, yPosition);
+    yPosition += 10;
+    pdf.text(`Taxa de Juros: ${(results?.averageInterestRate || 0).toFixed(2)}%`, 20, yPosition);
+    
+    const pageCount = pdf.getNumberOfPages();
+    
+    for (let i = 1; i <= pageCount; i++) {
+      pdf.setPage(i);
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Página ${i} de ${pageCount}`, pdf.internal.pageSize.getWidth() - 20, pdf.internal.pageSize.getHeight() - 10, {
+        align: 'right'
+      });
+    }
+    
+    const fileName = `simulacao-${selectedProperty.enterpriseName.replace(/\s+/g, '-')}-${formatDate(new Date())}.pdf`;
+    pdf.save(fileName);
+    
+    return Promise.resolve();
+  } catch (error) {
+    console.error('Erro ao gerar PDF:', error);
+    throw error;
+  }
 };
 
 import type { Property, Unit, CombinedUnit, UnitStatus, PaymentField, Results, MonthlyInsurance, FormValues, PdfFormValues, PaymentFieldType, Tower, ExtractPricingOutput } from "@/types";
 import React from 'react';
 
-// Interface para os resultados da simulação da Caixa
 interface CaixaSimulationResult {
   sucesso: boolean;
   dados?: {
@@ -110,9 +253,8 @@ interface CaixaSimulationResult {
   message?: string;
 }
 
-// Cache para cálculos de seguro
 const insuranceCache = new Map<string, { total: number; breakdown: MonthlyInsurance[]; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+const CACHE_TTL = 5 * 60 * 1000;
 
 const paymentFieldSchema = z.object({
   type: z.enum([
@@ -180,7 +322,6 @@ const paymentFieldOptions: { value: PaymentFieldType; label: string }[] = [
   { value: "financiamento", label: "Financiamento" },
 ] as const;
 
-// Interface estendida para Results com paymentValidation
 interface ExtendedResults extends Results {
   paymentValidation?: {
     isValid: boolean;
@@ -215,46 +356,10 @@ interface ExtendedResults extends Results {
   notaryInstallments?: number;
 }
 
-// Interface estendida para PdfFormValues
 interface ExtendedPdfFormValues extends PdfFormValues {
   property?: Property;
 }
 
-// Função auxiliar para status badge com suporte completo ao modo escuro
-const getStatusBadgeClass = (status: UnitStatus) => {
-  switch (status) {
-    case 'Disponível':
-      return 'border-blue-600/20 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-400/30 dark:bg-blue-950/50 dark:text-blue-300 dark:hover:bg-blue-900/70 transition-all duration-200';
-    case 'Vendido':
-      return 'border-gray-400/20 bg-gray-50 text-gray-600 opacity-60 cursor-not-allowed dark:border-gray-600/30 dark:bg-gray-800/50 dark:text-gray-400';
-    case 'Reservado':
-      return 'border-amber-600/20 bg-amber-50 text-amber-700 opacity-80 cursor-not-allowed dark:border-amber-400/30 dark:bg-amber-950/50 dark:text-amber-300';
-    case 'Indisponível':
-      return 'border-gray-400/20 bg-gray-50 text-gray-600 opacity-60 cursor-not-allowed dark:border-gray-600/30 dark:bg-gray-800/50 dark:text-gray-400';
-    default:
-      return 'border-gray-400/20 bg-gray-50 text-gray-600 dark:border-gray-600/30 dark:bg-gray-800/50 dark:text-gray-400';
-  }
-};
-
-// Função de cálculo de parcelas de cartório
-const calculateNotaryInstallment = (
-  total: number,
-  installments: number,
-  method: 'creditCard' | 'bankSlip'
-): number => {
-  if (!total || !installments) return 0;
-
-  if (method === 'creditCard') {
-    return total / installments;
-  } else { 
-    const monthlyRate = 0.015;
-    if (monthlyRate <= 0) return total / installments;
-    const installmentValue = (total * monthlyRate * Math.pow(1 + monthlyRate, installments)) / (Math.pow(1 + monthlyRate, installments) - 1);
-    return installmentValue;
-  }
-};
-
-// Função de validação
 const validatePaymentSumWithBusinessLogic = (
   payments: PaymentField[], 
   appraisalValue: number, 
@@ -270,13 +375,27 @@ const validatePaymentSumWithBusinessLogic = (
 } => {
   void sinalCampaignLimitPercent;
 
+  const totalPayments = payments.reduce((sum, payment) => {
+    if (payment.type !== 'desconto') {
+      return sum + payment.value;
+    }
+    return sum;
+  }, 0);
+
   const descontoPayment = payments.find(p => p.type === 'desconto');
   const descontoValue = descontoPayment?.value || 0;
   const valorFinalImovel = saleValue - descontoValue;
   
-  // CORREÇÃO: O alvo da validação deve ser o maior entre avaliação e valor final do imóvel
-  const calculationTarget = Math.max(appraisalValue, valorFinalImovel);
-  const totalPayments = payments.reduce((sum, payment) => sum + payment.value, 0);
+  let calculationTarget: number;
+  
+  if (descontoValue > 0) {
+    calculationTarget = valorFinalImovel;
+  } else if (saleValue > appraisalValue) {
+    calculationTarget = saleValue;
+  } else {
+    calculationTarget = Math.max(appraisalValue, valorFinalImovel);
+  }
+  
   const difference = Math.abs(totalPayments - calculationTarget);
   const isValid = difference < 0.01;
   
@@ -308,7 +427,6 @@ const validatePaymentSumWithBusinessLogic = (
   };
 };
 
-// Função para calcular parcela de preço
 const calculatePriceInstallment = (
   principal: number,
   installments: number,
@@ -398,9 +516,6 @@ const findMaxProSolutoByIncome = (
   return result;
 };
 
-// ===================================================================
-// INÍCIO DA CORREÇÃO: Função calculateCorrectedProSoluto
-// ===================================================================
 const calculateCorrectedProSoluto = (
   proSolutoValue: number,
   deliveryDate: Date | null,
@@ -434,13 +549,7 @@ const calculateCorrectedProSoluto = (
 
   return proSolutoCorrigido;
 };
-// ===================================================================
-// FIM DA CORREÇÃO
-// ===================================================================
 
-// ===================================================================
-// INÍCIO DA CORREÇÃO: Função applyMinimumCondition com limites corretos do pró-soluto
-// ===================================================================
 const applyMinimumCondition = (
   payments: PaymentField[], 
   appraisalValue: number, 
@@ -460,10 +569,18 @@ const applyMinimumCondition = (
   const descontoValue = descontoPayment?.value || 0;
   const valorFinalImovel = saleValue - descontoValue;
 
-  // CORREÇÃO: O alvo do cálculo deve ser o maior entre avaliação e valor final do imóvel
-  const calculationTarget = Math.max(appraisalValue, valorFinalImovel);
+  let calculationTarget: number;
+  
+  if (descontoValue > 0) {
+    calculationTarget = valorFinalImovel;
+  } else if (saleValue > appraisalValue) {
+    calculationTarget = saleValue;
+  } else {
+    calculationTarget = Math.max(appraisalValue, valorFinalImovel);
+  }
 
   const bonusAdimplenciaValue = appraisalValue > saleValue ? appraisalValue - saleValue : 0;
+  
   const sumOfOtherPayments = newPayments.reduce((acc, payment) => {
     if (!["sinalAto", "proSoluto", "bonusCampanha", "desconto", "bonusAdimplencia"].includes(payment.type)) {
       return acc + payment.value;
@@ -486,10 +603,8 @@ const applyMinimumCondition = (
   }
 
   const isReservaParque = propertyEnterpriseName.includes('Reserva Parque Clube');
-  // CORREÇÃO: Usar os percentuais corretos para os limites do pró-soluto (14,99% e 17,99%)
   const proSolutoLimitPercent = isReservaParque ? 0.1799 : (conditionType === 'especial' ? 0.1799 : 0.1499);
   
-  // CORREÇÃO 1: O limite do pró-soluto deve ser baseado no valor de venda original (sem desconto)
   const maxProSolutoCorrectedByPercent = saleValue * proSolutoLimitPercent;
   const maxAffordableInstallment = (grossIncome * 0.50) - simulationInstallmentValue;
   const maxProSolutoByIncome = findMaxProSolutoByIncome(
@@ -500,7 +615,6 @@ const applyMinimumCondition = (
     calculatePriceInstallment
   );
 
-  // CORREÇÃO 2: Função para encontrar o valor bruto do pró-soluto que resulta no limite correto após correção
   const findMaxProSolutoBaseValue = (
     maxCorrectedValue: number,
     deliveryDate: Date | null,
@@ -509,7 +623,7 @@ const applyMinimumCondition = (
     if (maxCorrectedValue <= 0 || !deliveryDate) return 0;
 
     let low = 0;
-    let high = remainingAmount; // Valor máximo possível baseado no valor restante
+    let high = remainingAmount;
     let result = 0;
 
     const precision = 0.01;
@@ -534,7 +648,6 @@ const applyMinimumCondition = (
     return result;
   };
 
-  // CORREÇÃO 3: Calcular o valor bruto máximo do pró-soluto que respeita o limite percentual após correção
   const maxProSolutoBaseValue = findMaxProSolutoBaseValue(
     maxProSolutoCorrectedByPercent,
     deliveryDate || new Date(),
@@ -562,10 +675,8 @@ const applyMinimumCondition = (
     }
   }
   
-  // CORREÇÃO 4: Verificar se o valor corrigido do pró-soluto excede o limite percentual
   const proSolutoCorrigido = calculateCorrectedProSoluto(proSolutoValue, deliveryDate, newPayments);
   if (proSolutoCorrigido > maxProSolutoCorrectedByPercent) {
-    // Ajustar o valor bruto do pró-soluto para que o valor corrigido não exceda o limite
     proSolutoValue = findMaxProSolutoBaseValue(
       maxProSolutoCorrectedByPercent,
       deliveryDate || new Date(),
@@ -579,7 +690,6 @@ const applyMinimumCondition = (
   if (isSinalCampaignActive && sinalCampaignLimitPercent !== undefined) {
     if (sinalAtoValue > sinalMinimo) {
       const excedente = sinalAtoValue - sinalMinimo;
-      // CORREÇÃO: O limite do bônus deve ser baseado no valor final do imóvel
       const limiteMaximoBonus = valorFinalImovel * (sinalCampaignLimitPercent / 100);
       
       if (excedente <= limiteMaximoBonus) {
@@ -591,7 +701,6 @@ const applyMinimumCondition = (
         const excedenteDoBonus = excedente - limiteMaximoBonus;
         const newProSolutoValue = proSolutoValue + excedenteDoBonus;
         
-        // CORREÇÃO 5: Verificar se o novo valor corrigido do pró-soluto excede o limite percentual
         const newProSolutoCorrigido = calculateCorrectedProSoluto(newProSolutoValue, deliveryDate, newPayments);
         if (newProSolutoCorrigido > maxProSolutoCorrectedByPercent) {
           proSolutoValue = findMaxProSolutoBaseValue(
@@ -618,7 +727,6 @@ const applyMinimumCondition = (
   if (Math.abs(difference) > 0.01) {
     if (proSolutoValue > 0) {
       const adjustedProSoluto = proSolutoValue + difference;
-      // CORREÇÃO 6: Verificar se o valor ajustado corrigido excede o limite percentual
       const adjustedProSolutoCorrigido = calculateCorrectedProSoluto(adjustedProSoluto, deliveryDate, newPayments);
       if (adjustedProSolutoCorrigido <= maxProSolutoCorrectedByPercent) {
         proSolutoValue = adjustedProSoluto;
@@ -678,12 +786,173 @@ const applyMinimumCondition = (
 
   return finalPayments;
 };
-// ===================================================================
-// FIM DA CORREÇÃO
-// ===================================================================
+
+const calculateConstructionInsuranceLocal = (
+  constructionStartDate: Date | null,
+  deliveryDate: Date | null,
+  caixaInstallmentValue: number
+): { total: number; breakdown: MonthlyInsurance[] } => {
+    if (!constructionStartDate || !deliveryDate || !isValid(constructionStartDate) || !isValid(deliveryDate) || constructionStartDate > deliveryDate || caixaInstallmentValue <= 0) {
+        return { total: 0, breakdown: [] };
+    }
+
+    const cacheKey = `${constructionStartDate.getTime()}-${deliveryDate.getTime()}-${caixaInstallmentValue}`;
+    const cached = insuranceCache.get(cacheKey);
+    
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL && cached.breakdown.length > 0) {
+      return { total: cached.total, breakdown: cached.breakdown };
+    }
+    
+    const totalMonths = differenceInMonths(deliveryDate, constructionStartDate) + 1;
+    if (totalMonths <= 1) return { total: 0, breakdown: [] };
+
+    let totalPayable = 0;
+    const breakdown: MonthlyInsurance[] = [];
+    const today = new Date();
+    
+    for (let i = 0; i < totalMonths; i++) {
+        const monthDate = addMonths(constructionStartDate, i);
+        
+        const progressRate = i / (totalMonths - 1);
+        const insuranceValue = progressRate * caixaInstallmentValue;
+
+        if (monthDate >= today) {
+            totalPayable += insuranceValue;
+        }
+
+        breakdown.push({
+            month: format(monthDate, "MMMM/yyyy", { locale: ptBR }),
+            value: insuranceValue,
+            date: monthDate,
+            isPayable: monthDate >= today,
+            progressRate,
+        });
+    }
+
+    const result = { total: totalPayable, breakdown, timestamp: Date.now() };
+    insuranceCache.set(cacheKey, result);
+    return result;
+};
+
+const calculateNotaryInstallment = (
+  total: number,
+  installments: number,
+  method: 'creditCard' | 'bankSlip'
+): number => {
+  if (!total || !installments) return 0;
+
+  if (method === 'creditCard') {
+    return total / installments;
+  } else { 
+    const monthlyRate = 0.015;
+    if (monthlyRate <= 0) return total / installments;
+    const installmentValue = (total * monthlyRate * Math.pow(1 + monthlyRate, installments)) / (Math.pow(1 + monthlyRate, installments) - 1);
+    return installmentValue;
+  }
+};
 
 const isDateLocked = (type: PaymentFieldType) => {
-  return ["bonusAdimplencia", "financiamento", "bonusCampanha"].includes(type);
+  return ["bonusAdimplencia", "financiamento", "bonusCampanha", "fgts", "desconto"].includes(type);
+};
+
+const getStatusBadgeClass = (status: UnitStatus) => {
+  switch (status) {
+    case 'Disponível':
+      return 'border-blue-600/20 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-400/30 dark:bg-blue-950/50 dark:text-blue-300 dark:hover:bg-blue-900/70 transition-all duration-200';
+    case 'Vendido':
+      return 'border-gray-400/20 bg-gray-50 text-gray-600 opacity-60 cursor-not-allowed dark:border-gray-600/30 dark:bg-gray-800/50 dark:text-gray-400';
+    case 'Reservado':
+      return 'border-amber-600/20 bg-amber-50 text-amber-700 opacity-80 cursor-not-allowed dark:border-amber-400/30 dark:bg-amber-950/50 dark:text-amber-300';
+    case 'Indisponível':
+      return 'border-gray-400/20 bg-gray-50 text-gray-600 opacity-60 cursor-not-allowed dark:border-gray-600/30 dark:bg-gray-800/50 dark:text-gray-400';
+    default:
+      return 'border-gray-400/20 bg-gray-50 text-gray-600 dark:border-gray-600/30 dark:bg-gray-800/50 dark:text-gray-400';
+  }
+};
+
+const formatarCentavosParaReal = (centavos: string): string => {
+  if (!centavos || centavos === '0') return 'R$ 0,00';
+  
+  const numero = parseFloat(centavos) / 100;
+  
+  if (isNaN(numero)) return 'R$ 0,00';
+  
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(numero);
+};
+
+const removerFormatacao = (valorFormatado: string): string => {
+  return valorFormatado.replace(/\D/g, '');
+};
+
+const formatarDuranteDigitacao = (valor: string): string => {
+  const apenasNumeros = removerFormatacao(valor);
+  
+  if (apenasNumeros === '') return '';
+  
+  return formatarCentavosParaReal(apenasNumeros);
+};
+
+const formatarDataParaBackend = (data: string): string => {
+  if (!data) return '';
+  
+  if (data.includes('/')) return data;
+  
+  const partes = data.split('-');
+  if (partes.length === 3) {
+    return `${partes[2]}/${partes[1]}/${partes[0]}`;
+  }
+  
+  return data;
+};
+
+const corrigirFormatoValor = (valor: string): string => {
+  if (!valor) return valor;
+  
+  if (valor.includes('%')) {
+    return valor.replace('.', ',');
+  }
+  
+  if (valor.includes('R$')) {
+    const valorNumerico = valor.replace('R$ ', '');
+    const partes = valorNumerico.split('.');
+    
+    if (partes.length === 2) {
+      const parteInteira = partes[0].replace(',', '.');
+      const parteDecimal = partes[1];
+      
+      return `R$ ${parteInteira},${parteDecimal}`;
+    } else if (partes.length === 1) {
+      if (valorNumerico.includes(',')) {
+        return `R$ ${valorNumerico.replace(',', '.')}`;
+      } else {
+        return `R$ ${valorNumerico}`;
+      }
+    }
+  }
+  
+  return valor;
+};
+
+const converterValorMonetarioParaNumero = (valorFormatado: string): number => {
+  if (!valorFormatado) return 0;
+  
+  let valorLimpo = valorFormatado.replace('R$', '').trim();
+  
+  if (valorLimpo.includes('.') && valorLimpo.includes(',')) {
+    valorLimpo = valorLimpo.replace(/\./g, '');
+    valorLimpo = valorLimpo.replace(',', '.');
+  } else if (valorLimpo.includes(',')) {
+    valorLimpo = valorLimpo.replace(',', '.');
+  }
+  
+  const valorNumerico = parseFloat(valorLimpo);
+  
+  return isNaN(valorNumerico) ? 0 : valorNumerico;
 };
 
 interface UnitCardProps {
@@ -792,187 +1061,18 @@ const CurrencyFormField = memo(({ name, label, control, readOnly = false, placeh
 });
 CurrencyFormField.displayName = 'CurrencyFormField';
 
-// ===================================================================
-// INÍCIO DA ALTERAÇÃO 1: Lógica do Seguro de Obras
-// ===================================================================
-const calculateConstructionInsuranceLocal = (
-  constructionStartDate: Date | null,
-  deliveryDate: Date | null,
-  caixaInstallmentValue: number
-): { total: number; breakdown: MonthlyInsurance[] } => {
-    if (!constructionStartDate || !deliveryDate || !isValid(constructionStartDate) || !isValid(deliveryDate) || constructionStartDate > deliveryDate || caixaInstallmentValue <= 0) {
-        return { total: 0, breakdown: [] };
-    }
-
-    // CORREÇÃO: Usar uma chave de cache mais estável, sem o timestamp atual
-    const cacheKey = `${constructionStartDate.getTime()}-${deliveryDate.getTime()}-${caixaInstallmentValue}`;
-    const cached = insuranceCache.get(cacheKey);
-    
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL && cached.breakdown.length > 0) {
-      return { total: cached.total, breakdown: cached.breakdown };
-    }
-    
-    // CORREÇÃO: Calcular o número total de meses no período de forma inclusiva
-    const totalMonths = differenceInMonths(deliveryDate, constructionStartDate) + 1;
-    if (totalMonths <= 1) return { total: 0, breakdown: [] };
-
-    let totalPayable = 0;
-    const breakdown: MonthlyInsurance[] = [];
-    const today = new Date();
-    
-    // CORREÇÃO: O loop deve executar exatamente 'totalMonths' vezes
-    for (let i = 0; i < totalMonths; i++) {
-        const monthDate = addMonths(constructionStartDate, i);
-        
-        // CORREÇÃO: A fórmula da taxa de progresso deve ser i / (totalMonths - 1)
-        // para que o primeiro mês seja 0 e o último seja 1.
-        const progressRate = i / (totalMonths - 1);
-        const insuranceValue = progressRate * caixaInstallmentValue;
-
-        if (monthDate >= today) {
-            totalPayable += insuranceValue;
-        }
-
-        breakdown.push({
-            month: format(monthDate, "MMMM/yyyy", { locale: ptBR }),
-            value: insuranceValue,
-            date: monthDate,
-            isPayable: monthDate >= today,
-            progressRate,
-        });
-    }
-
-    const result = { total: totalPayable, breakdown, timestamp: Date.now() };
-    insuranceCache.set(cacheKey, result);
-    return result;
-};
-// ===================================================================
-// FIM DA ALTERAÇÃO 1
-// ===================================================================
-
-type ExtractedDataType = Partial<ExtractPricingOutput> & {
+interface ExtractedDataType extends Partial<ExtractPricingOutput> {
   grossIncome?: number;
   simulationInstallmentValue?: number;
-};
+}
 
 interface PaymentFlowCalculatorProps {
     properties: Property[];
     isSinalCampaignActive: boolean;
     sinalCampaignLimitPercent?: number;
-    // TODO: Implementar funcionalidade de tutorial
     isTutorialOpen: boolean;
     setIsTutorialOpen: (isOpen: boolean) => void;
 }
-
-// Função para formatar valor em centavos para exibição
-const formatarCentavosParaReal = (centavos: string): string => {
-  if (!centavos || centavos === '0') return 'R$ 0,00';
-  
-  const numero = parseFloat(centavos) / 100;
-  
-  if (isNaN(numero)) return 'R$ 0,00';
-  
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(numero);
-};
-
-// Função para remover formatação e obter apenas números
-const removerFormatacao = (valorFormatado: string): string => {
-  return valorFormatado.replace(/\D/g, '');
-};
-
-// Função para formatar durante a digitação
-const formatarDuranteDigitacao = (valor: string): string => {
-  const apenasNumeros = removerFormatacao(valor);
-  
-  if (apenasNumeros === '') return '';
-  
-  return formatarCentavosParaReal(apenasNumeros);
-};
-
-// Função para formatar data de YYYY-MM-DD para DD/MM/YYYY
-const formatarDataParaBackend = (data: string): string => {
-  if (!data) return '';
-  
-  if (data.includes('/')) return data;
-  
-  const partes = data.split('-');
-  if (partes.length === 3) {
-    return `${partes[2]}/${partes[1]}/${partes[0]}`;
-  }
-  
-  return data;
-};
-
-// Função para corrigir formato de valores vindo do backend
-const corrigirFormatoValor = (valor: string): string => {
-  if (!valor) return valor;
-  
-  // Se for uma taxa de juros (contém %)
-  if (valor.includes('%')) {
-    return valor.replace('.', ',');
-  }
-  
-  // Se for um valor monetário (contém R$)
-  if (valor.includes('R$')) {
-    const valorNumerico = valor.replace('R$ ', '');
-    const partes = valorNumerico.split('.');
-    
-    if (partes.length === 2) {
-      const parteInteira = partes[0].replace(',', '.');
-      const parteDecimal = partes[1];
-      
-      return `R$ ${parteInteira},${parteDecimal}`;
-    } else if (partes.length === 1) {
-      if (valorNumerico.includes(',')) {
-        return `R$ ${valorNumerico.replace(',', '.')}`;
-      } else {
-        return `R$ ${valorNumerico}`;
-      }
-    }
-  }
-  
-  return valor;
-};
-
-// ===================================================================
-// INÍCIO DA CORREÇÃO: Função para converter valores monetários do formato brasileiro para número
-// ===================================================================
-// Função para converter valores monetários do formato brasileiro para número
-const converterValorMonetarioParaNumero = (valorFormatado: string): number => {
-  if (!valorFormatado) return 0;
-  
-  // Remove o símbolo da moeda e espaços
-  let valorLimpo = valorFormatado.replace('R$', '').trim();
-  
-  // CORREÇÃO: Detectar o formato do valor antes de converter
-  // Se o valor contém ambos ponto e vírgula, assume formato brasileiro (ex: 3.499,99)
-  if (valorLimpo.includes('.') && valorLimpo.includes(',')) {
-    // Remove o separador de milhar (ponto)
-    valorLimpo = valorLimpo.replace(/\./g, '');
-    // Substitui o separador decimal (vírgula) por ponto
-    valorLimpo = valorLimpo.replace(',', '.');
-  } 
-  // Se o valor contém apenas vírgula, assume formato brasileiro (ex: 3499,99)
-  else if (valorLimpo.includes(',')) {
-    // Substitui o separador decimal (vírgula) por ponto
-    valorLimpo = valorLimpo.replace(',', '.');
-  }
-  // Se o valor contém apenas ponto, assume formato internacional (ex: 3499.99)
-  // Neste caso, não precisa fazer nada
-  
-  // Converte para número
-  const valorNumerico = parseFloat(valorLimpo);
-  
-  return isNaN(valorNumerico) ? 0 : valorNumerico;
-};
-// ===================================================================
-// FIM DA CORREÇÃO
-// ===================================================================
 
 export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinalCampaignLimitPercent, isTutorialOpen, setIsTutorialOpen }: PaymentFlowCalculatorProps) {
   const { toast } = useToast();
@@ -981,7 +1081,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  // TODO: Implementar funcionalidade de dados do corretor
   const [brokerData, setBrokerData] = useState({ name: '', creci: '' });
   const [showInsuranceDetails, setShowInsuranceDetails] = useState(false);
   const [allUnits, setAllUnits] = useState<CombinedUnit[]>([]);
@@ -991,8 +1090,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   const [sunPositionFilter, setSunPositionFilter] = useState<string>("Todos");
   const [isSaleValueLocked, setIsSaleValueLocked] = useState(false);
   const [isUnitSelectorOpen, setIsUnitSelectorOpen] = useState(false);
-
-  // Novos estados para a simulação automatizada
   const [isAutomatedSimulationEnabled, setIsAutomatedSimulationEnabled] = useState(false);
   const [isSimulatingCaixa, setIsSimulatingCaixa] = useState(false);
   const [customerData, setCustomerData] = useState({
@@ -1029,20 +1126,17 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     name: "payments",
   });
   
-  const watchedPayments = form.watch('payments'); // This watches for changes in the entire payments array
-  const watchedAppraisalValue = form.watch('appraisalValue'); // This watches for changes in appraisalValue
-  const watchedSaleValue = form.watch('saleValue'); // This watches for changes in saleValue
-  const watchedPropertyId = form.watch('propertyId'); // This watches for changes in propertyId
-  const watchedFinancingParticipants = form.watch('financingParticipants'); // This watches for changes in financingParticipants
+  const watchedPayments = form.watch('payments');
+  const watchedAppraisalValue = form.watch('appraisalValue');
+  const watchedSaleValue = form.watch('saleValue');
+  const watchedPropertyId = form.watch('propertyId');
+  const watchedFinancingParticipants = form.watch('financingParticipants');
   const watchedNotaryPaymentMethod = form.watch('notaryPaymentMethod');
 
   const { setValue, trigger, getValues, setError, clearErrors } = form;
   
   const hasSinal1 = watchedPayments.some(p => p.type === 'sinal1');
 
-  // ===================================================================
-  // INÍCIO DA CORREÇÃO: Função calculateRate movida para cá
-  // ===================================================================
   const calculateRate = useCallback((nper: number, pmt: number, pv: number): number => {
     if (nper <= 0 || pmt <= 0 || pv <= 0) return 0;
 
@@ -1081,9 +1175,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     
     return initialRate; 
   }, []);
-  // ===================================================================
-  // FIM DA CORREÇÃO
-  // ===================================================================
 
   const hasSinal2 = watchedPayments.some(p => p.type === 'sinal2');
   
@@ -1161,7 +1252,99 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     return 0;
   }, [watchedPayments, watchedAppraisalValue, watchedSaleValue]);
 
-  // Manipula mudanças nos campos monetários da simulação Caixa
+  const installmentsPlaceholder = useMemo(() => {
+    if (!selectedProperty) return "Número de parcelas";
+    
+    const isReservaParque = selectedProperty.enterpriseName.includes('Reserva Parque Clube');
+    const isEspecial = form.watch('conditionType') === 'especial';
+    
+    if (isEspecial) {
+      return `Máximo: 66 parcelas`;
+    } else if (isReservaParque) {
+      return `Máximo: 60 parcelas`;
+    } else {
+      return `Máximo: 52 parcelas`;
+    }
+  }, [selectedProperty, form]);
+
+  const adjustPaymentsToMatchTarget = useCallback((
+    payments: PaymentField[],
+    target: number,
+    actual: number,
+    appraisalValue: number,
+    saleValue: number
+  ): PaymentField[] => {
+    const difference = target - actual;
+    const newPayments = [...payments];
+    
+    const descontoPayment = newPayments.find(p => p.type === 'desconto');
+    const descontoValue = descontoPayment?.value || 0;
+    const valorFinalImovel = saleValue - descontoValue;
+    
+    const proSolutoIndex = newPayments.findIndex(p => p.type === 'proSoluto');
+    const sinalAtoIndex = newPayments.findIndex(p => p.type === 'sinalAto');
+    
+    if (proSolutoIndex !== -1) {
+      newPayments[proSolutoIndex].value += difference;
+      
+      const isReservaParque = selectedProperty?.enterpriseName.includes('Reserva Parque Clube');
+      const conditionType = form.getValues('conditionType') as 'padrao' | 'especial';
+      const proSolutoLimitPercent = isReservaParque ? 0.1799 : (conditionType === 'especial' ? 0.1799 : 0.1499);
+      const maxProSolutoValue = saleValue * proSolutoLimitPercent;
+      
+      if (newPayments[proSolutoIndex].value > maxProSolutoValue) {
+        newPayments[proSolutoIndex].value = maxProSolutoValue;
+        
+        const remainingDifference = maxProSolutoValue - newPayments[proSolutoIndex].value;
+        if (sinalAtoIndex !== -1) {
+          newPayments[sinalAtoIndex].value += remainingDifference;
+        }
+      }
+    } else if (sinalAtoIndex !== -1) {
+      newPayments[sinalAtoIndex].value += difference;
+      
+      const sinalMinimo = 0.055 * valorFinalImovel;
+      if (newPayments[sinalAtoIndex].value < sinalMinimo) {
+        newPayments[sinalAtoIndex].value = sinalMinimo;
+        
+        const remainingDifference = sinalMinimo - newPayments[sinalAtoIndex].value;
+        if (proSolutoIndex !== -1) {
+          newPayments[proSolutoIndex].value += remainingDifference;
+          
+          const isReservaParque = selectedProperty?.enterpriseName.includes('Reserva Parque Clube');
+          const conditionType = form.getValues('conditionType') as 'padrao' | 'especial';
+          const proSolutoLimitPercent = isReservaParque ? 0.1799 : (conditionType === 'especial' ? 0.1799 : 0.1499);
+          const maxProSolutoValue = saleValue * proSolutoLimitPercent;
+          
+          if (newPayments[proSolutoIndex].value > maxProSolutoValue) {
+            newPayments[proSolutoIndex].value = maxProSolutoValue;
+            
+            const remainingDifference = maxProSolutoValue - newPayments[proSolutoIndex].value;
+            if (sinalAtoIndex !== -1) {
+              newPayments[sinalAtoIndex].value += remainingDifference;
+            }
+          }
+        }
+      }
+    }
+    
+    return newPayments;
+  }, [selectedProperty, form]);
+
+  const ensureCorrectDates = useCallback((payments: PaymentField[]): PaymentField[] => {
+    if (!deliveryDateObj) return payments;
+    
+    return payments.map(payment => {
+      if (isDateLocked(payment.type)) {
+        return {
+          ...payment,
+          date: deliveryDateObj
+        };
+      }
+      return payment;
+    });
+  }, [deliveryDateObj]);
+
   const handleCaixaMonetaryChange = (name: 'renda', value: string) => {
     if (value === '') {
       setValoresFormatados(prev => ({ ...prev, [name]: '' }));
@@ -1183,7 +1366,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     setCustomerData(prev => ({ ...prev, [name]: apenasNumeros }));
   };
 
-  // Manipula mudanças em outros campos da simulação Caixa
   const handleCaixaDataChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
@@ -1194,14 +1376,12 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     }
   };
 
-  // Função para lidar com foco nos campos monetários da simulação Caixa
   const handleCaixaMonetaryFocus = (name: 'renda') => {
     if (!valoresFormatados[name] || valoresFormatados[name] === 'R$ 0,00') {
       setValoresFormatados(prev => ({ ...prev, [name]: '' }));
     }
   };
 
-  // Função para lidar com perda de foco nos campos monetários da simulação Caixa
   const handleCaixaMonetaryBlur = (name: 'renda') => {
     if (!valoresFormatados[name] || valoresFormatados[name] === '') {
       setValoresFormatados(prev => ({ ...prev, [name]: 'R$ 0,00' }));
@@ -1209,10 +1389,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     }
   };
 
-  // ===================================================================
-  // INÍCIO DA CORREÇÃO: Função para simular financiamento na Caixa
-  // ===================================================================
-  // Função para simular financiamento na Caixa
   const handleSimulateCaixaFinancing = async () => {
     if (!selectedProperty || !watchedAppraisalValue) {
       toast({
@@ -1243,7 +1419,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       );
       
       const dadosParaBackend = {
-        valorImovel: (watchedAppraisalValue * 100).toString(), // Convertendo para centavos
+        valorImovel: (watchedAppraisalValue * 100).toString(),
         renda: customerData.renda,
         dataNascimento: formatarDataParaBackend(customerData.dataNascimento),
         sistemaAmortizacao: customerData.sistemaAmortizacao,
@@ -1255,20 +1431,13 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       if (data.sucesso && data.dados) {
         setCaixaSimulationResult(data.dados);
         
-        // Preencher automaticamente os campos do formulário principal
         setValue('grossIncome', parseFloat(customerData.renda) / 100, { shouldValidate: true });
         
-        // CORREÇÃO: Converter o valor da parcela corretamente
-        // Primeiro, aplicar a função de correção de formato
         const parcelaFormatada = corrigirFormatoValor(data.dados.Primeira_Prestacao || '0');
-        // Depois, converter para número usando a função corrigida
         const parcelaSimulada = converterValorMonetarioParaNumero(parcelaFormatada);
         setValue('simulationInstallmentValue', parcelaSimulada, { shouldValidate: true });
         
-        // CORREÇÃO: Converter o valor do financiamento corretamente
-        // Primeiro, aplicar a função de correção de formato
         const financiamentoFormatado = corrigirFormatoValor(data.dados.Valor_Total_Financiado || '0');
-        // Depois, converter para número usando a função corrigida
         const valorFinanciado = converterValorMonetarioParaNumero(financiamentoFormatado);
         
         const financingPayment: PaymentField = {
@@ -1330,39 +1499,33 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       setIsSimulatingCaixa(false);
     }
   };
-  // ===================================================================
-  // FIM DA CORREÇÃO
-  // ===================================================================
 
   useEffect(() => {
     if (!selectedProperty || !deliveryDateObj) return;
     
     const hasFinancing = watchedPayments.some(p => p.type === 'financiamento');
     
-    if (hasFinancing && bonusAdimplenciaValue > 0) {
-      let bonusDate = deliveryDateObj;
-      if (new Date() > bonusDate) {
-        bonusDate = lastDayOfMonth(addMonths(new Date(), 1));
-      }
-      
-      const newBonusPayment: PaymentField = {
-        type: "bonusAdimplencia",
-        value: bonusAdimplenciaValue,
-        date: bonusDate,
-      };
+    const fieldsToAdd = [
+      { type: 'financiamento' as PaymentFieldType, condition: hasFinancing && !watchedPayments.some(p => p.type === 'financiamento') },
+      { type: 'bonusAdimplencia' as PaymentFieldType, condition: hasFinancing && bonusAdimplenciaValue > 0 && !watchedPayments.some(p => p.type === 'bonusAdimplencia') },
+      { type: 'desconto' as PaymentFieldType, condition: !watchedPayments.some(p => p.type === 'desconto') },
+      { type: 'bonusCampanha' as PaymentFieldType, condition: !watchedPayments.some(p => p.type === 'bonusCampanha') },
+      { type: 'fgts' as PaymentFieldType, condition: !watchedPayments.some(p => p.type === 'fgts') }
+    ];
 
-      const bonusIndex = watchedPayments.findIndex((p: PaymentField) => p.type === 'bonusAdimplencia');
-      
-      if (bonusIndex > -1) {
-        if (watchedPayments[bonusIndex].value !== bonusAdimplenciaValue) {
-          const newPayments = [...watchedPayments];
-          newPayments[bonusIndex] = newBonusPayment;
-          replace(newPayments);
-        }
-      } else {
-        append(newBonusPayment);
+    fieldsToAdd.forEach(({ type, condition }) => {
+      if (condition) {
+        const fieldToAdd: PaymentField = {
+          type,
+          value: type === 'bonusAdimplencia' ? bonusAdimplenciaValue : 0,
+          date: deliveryDateObj,
+        };
+        
+        append(fieldToAdd);
       }
-    } else {
+    });
+
+    if (!hasFinancing || bonusAdimplenciaValue <= 0) {
       const bonusIndex = watchedPayments.findIndex((p: PaymentField) => p.type === 'bonusAdimplencia');
       if (bonusIndex > -1) {
         remove(bonusIndex);
@@ -1486,9 +1649,141 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     });
   }, [setValue, toast]);
 
-  // ===================================================================
-  // INÍCIO DA ALTERAÇÃO 2: Correção no botão "Aplicar Condição Mínima"
-  // ===================================================================
+  const validateBusinessRulesAfterMinimumCondition = useCallback((
+    payments: PaymentField[],
+    appraisalValue: number,
+    saleValue: number,
+    grossIncome: number,
+    simulationInstallmentValue: number,
+    installments: number,
+    deliveryDate: Date | null,
+    constructionStartDate: Date | null,
+    propertyEnterpriseName: string,
+    conditionType: 'padrao' | 'especial'
+  ): { isValid: boolean; violation?: string } => {
+    const proSolutoPayment = payments.find(p => p.type === 'proSoluto');
+    let proSolutoValue = 0;
+    if (proSolutoPayment) {
+      proSolutoValue = proSolutoPayment.value;
+    }
+  
+    const { installment: priceInstallmentValue } = calculatePriceInstallment(
+      proSolutoValue,
+      installments,
+      deliveryDate,
+      payments
+    );
+  
+    const { breakdown: insuranceBreakdown } = calculateConstructionInsuranceLocal(
+      constructionStartDate,
+      deliveryDate,
+      simulationInstallmentValue
+    );
+  
+    let maxIncomeCommitmentPercentage = 0;
+  
+    if (grossIncome > 0 && insuranceBreakdown.length > 0) {
+      insuranceBreakdown.forEach(month => {
+        if (month.isPayable) {
+          const monthlyCommitment = ((month.value + priceInstallmentValue) / grossIncome) * 100;
+          maxIncomeCommitmentPercentage = Math.max(maxIncomeCommitmentPercentage, monthlyCommitment);
+        }
+      });
+    } else if (grossIncome > 0) {
+      maxIncomeCommitmentPercentage = (priceInstallmentValue / grossIncome) * 100;
+    }
+  
+    if (maxIncomeCommitmentPercentage > 50) {
+      return {
+        isValid: false,
+        violation: `O comprometimento de renda (${maxIncomeCommitmentPercentage.toFixed(2)}%) excede o limite de 50%.`
+      };
+    }
+  
+    const proSolutoCorrigido = calculateCorrectedProSoluto(
+      proSolutoValue,
+      deliveryDate,
+      payments
+    );
+  
+    const proSolutoCommitmentPercentage = saleValue > 0
+      ? (proSolutoCorrigido / saleValue) * 100
+      : 0;
+  
+    if (proSolutoCommitmentPercentage > 100) {
+      return {
+        isValid: false,
+        violation: `O comprometimento do pró-soluto (${proSolutoCommitmentPercentage.toFixed(2)}%) excede 100% do valor de venda.`
+      };
+    }
+  
+    const sinalAto = payments.find(p => p.type === 'sinalAto');
+    if (sinalAto) {
+      const descontoPayment = payments.find(p => p.type === 'desconto');
+      const descontoValue = descontoPayment?.value || 0;
+      const valorFinalImovel = saleValue - descontoValue;
+      const sinalMinimo = 0.055 * valorFinalImovel;
+      
+      if (sinalAto.value < sinalMinimo) {
+        return {
+          isValid: false,
+          violation: `O Sinal Ato (${centsToBrl(sinalAto.value * 100)}) é menor que o mínimo de 5,5% do valor final da unidade (${centsToBrl(sinalMinimo * 100)}).`
+        };
+      }
+    }
+  
+    const isReservaParque = propertyEnterpriseName.includes('Reserva Parque Clube');
+    const expectedLimitPercent = isReservaParque ? 0.1799 : (conditionType === 'especial' ? 0.1799 : 0.1499);
+    
+    if (proSolutoCorrigido > saleValue * expectedLimitPercent) {
+      return {
+        isValid: false,
+        violation: `O valor do pró-soluto corrigido (${centsToBrl(proSolutoCorrigido * 100)}) excede o limite de ${(expectedLimitPercent * 100).toFixed(2)}% do valor de venda do imóvel.`
+      };
+    }
+  
+    if (installments > 0) {
+      let maxInstallments;
+      if (isReservaParque) {
+        maxInstallments = conditionType === 'especial' ? 66 : 60;
+      } else {
+        maxInstallments = conditionType === 'especial' ? 66 : 52;
+      }
+      
+      if (installments > maxInstallments) {
+        return {
+          isValid: false,
+          violation: `O número de parcelas (${installments}) excede o limite de ${maxInstallments} para a condição selecionada.`
+        };
+      }
+    }
+  
+    const validation = validatePaymentSumWithBusinessLogic(
+      payments,
+      appraisalValue,
+      saleValue,
+      false,
+      undefined
+    );
+  
+    if (!validation.isValid) {
+      return {
+        isValid: false,
+        violation: validation.businessLogicViolation || `A soma dos pagamentos (${centsToBrl(validation.actual * 100)}) não corresponde ao valor necessário (${centsToBrl(validation.expected * 100)}).`
+      };
+    }
+  
+    const actualLimitPercent = isReservaParque ? 0.18 : (conditionType === 'especial' ? 0.18 : 0.15);
+    if (Math.abs(actualLimitPercent - expectedLimitPercent) > 0.0001) {
+      return {
+        isValid: false,
+        violation: `O limite do pró-soluto configurado (${(actualLimitPercent * 100).toFixed(2)}%) não corresponde ao esperado para esta condição (${(expectedLimitPercent * 100).toFixed(2)}%).`
+      };
+    }
+  
+    return { isValid: true };
+  }, [calculatePriceInstallment, calculateConstructionInsuranceLocal, calculateCorrectedProSoluto]);
+
   const onSubmit = useCallback((values: FormValues) => {
     clearErrors();
 
@@ -1496,9 +1791,11 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       setError("propertyId", { message: "Selecione um imóvel para continuar." });
       return;
     }
+
+    const correctedPayments = ensureCorrectDates(values.payments);
     
     const validation = validatePaymentSumWithBusinessLogic(
-      values.payments,
+      correctedPayments,
       values.appraisalValue,
       values.saleValue,
       isSinalCampaignActive,
@@ -1577,37 +1874,27 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     const totalInsuranceCost = insuranceTotal;
     const totalCost = totalEntryCost + totalProSolutoCost + totalFinancedCost + totalNotaryCost + totalInsuranceCost;
 
-    // ===================================================================
-    // INÍCIO DA CORREÇÃO: Cálculo do comprometimento de renda máximo
-    // ===================================================================
     let maxIncomeCommitmentPercentage = 0;
 
     if (values.grossIncome > 0 && insuranceBreakdown.length > 0) {
-      // Itera sobre cada mês com seguro de obras
       insuranceBreakdown.forEach(month => {
-        if (month.isPayable) { // Considera apenas meses futuros
+        if (month.isPayable) {
           const monthlyCommitment = ((month.value + priceInstallmentValue) / values.grossIncome) * 100;
           maxIncomeCommitmentPercentage = Math.max(maxIncomeCommitmentPercentage, monthlyCommitment);
         }
       });
     } else if (values.grossIncome > 0) {
-      // Se não houver seguro de obras, usa apenas a parcela do pró-soluto
       maxIncomeCommitmentPercentage = (priceInstallmentValue / values.grossIncome) * 100;
     }
 
     const incomeCommitmentPercentage = maxIncomeCommitmentPercentage;
-    // ===================================================================
-    // FIM DA CORREÇÃO
-    // ===================================================================
 
-    // CÁLCULO CORRIGIDO DO PRÓ-SOLUTO
     const proSolutoCorrigido = calculateCorrectedProSoluto(
       proSolutoValue,
       deliveryDateObj,
       values.payments
     );
 
-    // CORREÇÃO: O comprometimento do pró-soluto deve ser calculado com base no valor de venda original
     const proSolutoCommitmentPercentage = values.saleValue > 0
       ? (proSolutoCorrigido / values.saleValue) * 100
       : 0;
@@ -1648,163 +1935,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     
     setResults(newResults);
     resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [clearErrors, selectedProperty, deliveryDateObj, constructionStartDateObj, setError, toast, isSinalCampaignActive, sinalCampaignLimitPercent, validatePaymentSumWithBusinessLogic, calculatePriceInstallment, calculateNotaryInstallment, calculateConstructionInsuranceLocal, calculateCorrectedProSoluto, calculateRate, results]);
-
-  // ===================================================================
-  // INÍCIO DA ALTERAÇÃO 3: Validação completa de regras de negócio
-  // ===================================================================
-  const validateBusinessRulesAfterMinimumCondition = useCallback((
-    payments: PaymentField[],
-    appraisalValue: number,
-    saleValue: number,
-    grossIncome: number,
-    simulationInstallmentValue: number,
-    installments: number,
-    deliveryDate: Date | null,
-    constructionStartDate: Date | null,
-    propertyEnterpriseName: string,
-    conditionType: 'padrao' | 'especial'
-  ): { isValid: boolean; violation?: string } => {
-    // Verificar se o pró-soluto existe nos pagamentos
-    const proSolutoPayment = payments.find(p => p.type === 'proSoluto');
-    let proSolutoValue = 0;
-    if (proSolutoPayment) {
-      proSolutoValue = proSolutoPayment.value;
-    }
-
-    // Calcular a parcela do pró-soluto
-    const { installment: priceInstallmentValue } = calculatePriceInstallment(
-      proSolutoValue,
-      installments,
-      deliveryDate,
-      payments
-    );
-
-    // Calcular o seguro de obras
-    const { breakdown: insuranceBreakdown } = calculateConstructionInsuranceLocal(
-      constructionStartDate,
-      deliveryDate,
-      simulationInstallmentValue
-    );
-
-    // Calcular o comprometimento de renda máximo
-    let maxIncomeCommitmentPercentage = 0;
-
-    if (grossIncome > 0 && insuranceBreakdown.length > 0) {
-      insuranceBreakdown.forEach(month => {
-        if (month.isPayable) {
-          const monthlyCommitment = ((month.value + priceInstallmentValue) / grossIncome) * 100;
-          maxIncomeCommitmentPercentage = Math.max(maxIncomeCommitmentPercentage, monthlyCommitment);
-        }
-      });
-    } else if (grossIncome > 0) {
-      maxIncomeCommitmentPercentage = (priceInstallmentValue / grossIncome) * 100;
-    }
-
-    // Verificar se o comprometimento de renda excede 50%
-    if (maxIncomeCommitmentPercentage > 50) {
-      return {
-        isValid: false,
-        violation: `O comprometimento de renda (${maxIncomeCommitmentPercentage.toFixed(2)}%) excede o limite de 50%.`
-      };
-    }
-
-    // Calcular o pró-soluto corrigido
-    const proSolutoCorrigido = calculateCorrectedProSoluto(
-      proSolutoValue,
-      deliveryDate,
-      payments
-    );
-
-    // CORREÇÃO: O comprometimento do pró-soluto deve ser calculado com base no valor de venda original
-    const proSolutoCommitmentPercentage = saleValue > 0
-      ? (proSolutoCorrigido / saleValue) * 100
-      : 0;
-
-    // Verificar se o comprometimento do pró-soluto excede 100%
-    if (proSolutoCommitmentPercentage > 100) {
-      return {
-        isValid: false,
-        violation: `O comprometimento do pró-soluto (${proSolutoCommitmentPercentage.toFixed(2)}%) excede 100% do valor de venda.`
-      };
-    }
-
-    // Verificar se o sinal ato é menor que o mínimo
-    const sinalAto = payments.find(p => p.type === 'sinalAto');
-    if (sinalAto) {
-      const descontoPayment = payments.find(p => p.type === 'desconto');
-      const descontoValue = descontoPayment?.value || 0;
-      const valorFinalImovel = saleValue - descontoValue;
-      const sinalMinimo = 0.055 * valorFinalImovel;
-      
-      if (sinalAto.value < sinalMinimo) {
-        return {
-          isValid: false,
-          violation: `O Sinal Ato (${centsToBrl(sinalAto.value * 100)}) é menor que o mínimo de 5,5% do valor final da unidade (${centsToBrl(sinalMinimo * 100)}).`
-        };
-      }
-    }
-
-    // Verificar se o pró-soluto excede o limite permitido
-    const isReservaParque = propertyEnterpriseName.includes('Reserva Parque Clube');
-    // CORREÇÃO: Usar os percentuais corretos para os limites do pró-soluto (14,99% e 17,99%)
-    const expectedLimitPercent = isReservaParque ? 0.1799 : (conditionType === 'especial' ? 0.1799 : 0.1499);
-    
-    // CORREÇÃO: Verificar se o valor corrigido do pró-soluto excede o limite percentual
-    if (proSolutoCorrigido > saleValue * expectedLimitPercent) {
-      return {
-        isValid: false,
-        violation: `O valor do pró-soluto corrigido (${centsToBrl(proSolutoCorrigido * 100)}) excede o limite de ${(expectedLimitPercent * 100).toFixed(2)}% do valor de venda do imóvel.`
-      };
-    }
-
-    // Verificar se o número de parcelas excede o limite
-    if (installments > 0) {
-      let maxInstallments;
-      if (isReservaParque) {
-        maxInstallments = conditionType === 'especial' ? 66 : 60;
-      } else {
-        maxInstallments = conditionType === 'especial' ? 66 : 52;
-      }
-      
-      if (installments > maxInstallments) {
-        return {
-          isValid: false,
-          violation: `O número de parcelas (${installments}) excede o limite de ${maxInstallments} para a condição selecionada.`
-        };
-      }
-    }
-
-    // Verificar validação de soma de pagamentos
-    const validation = validatePaymentSumWithBusinessLogic(
-      payments,
-      appraisalValue,
-      saleValue,
-      false, // Não verificar campanha aqui
-      undefined
-    );
-
-    if (!validation.isValid) {
-      return {
-        isValid: false,
-        violation: validation.businessLogicViolation || `A soma dos pagamentos (${centsToBrl(validation.actual * 100)}) não corresponde ao valor necessário (${centsToBrl(validation.expected * 100)}).`
-      };
-    }
-
-    // CORREÇÃO: Verificar se o limite do pró-soluto está correto para a condição selecionada
-    const actualLimitPercent = isReservaParque ? 0.18 : (conditionType === 'especial' ? 0.18 : 0.15);
-    if (Math.abs(actualLimitPercent - expectedLimitPercent) > 0.0001) {
-      return {
-        isValid: false,
-        violation: `O limite do pró-soluto configurado (${(actualLimitPercent * 100).toFixed(2)}%) não corresponde ao esperado para esta condição (${(expectedLimitPercent * 100).toFixed(2)}%).`
-      };
-    }
-
-    return { isValid: true };
-  }, [calculatePriceInstallment, calculateConstructionInsuranceLocal, calculateCorrectedProSoluto]);
-  // ===================================================================
-  // FIM DA ALTERAÇÃO 3
-  // ===================================================================
+  }, [clearErrors, selectedProperty, deliveryDateObj, constructionStartDateObj, setError, toast, isSinalCampaignActive, sinalCampaignLimitPercent, validatePaymentSumWithBusinessLogic, calculatePriceInstallment, calculateNotaryInstallment, calculateConstructionInsuranceLocal, calculateCorrectedProSoluto, calculateRate, results, ensureCorrectDates]);
 
   const handleApplyMinimumCondition = useCallback(() => {
     const values = form.getValues();
@@ -1841,10 +1972,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       deliveryDateObj
     );
 
-    // ===================================================================
-    // INÍCIO DA ALTERAÇÃO 4: Validação de regras de negócio após aplicar condição mínima
-    // ===================================================================
-    // Validar todas as regras de negócio após aplicar a condição mínima
     const businessRulesValidation = validateBusinessRulesAfterMinimumCondition(
       newPayments,
       values.appraisalValue,
@@ -1866,21 +1993,45 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       });
       return;
     }
-    // ===================================================================
-    // FIM DA ALTERAÇÃO 4
-    // ===================================================================
 
-    replace(newPayments);
+    const validation = validatePaymentSumWithBusinessLogic(
+      newPayments,
+      values.appraisalValue,
+      values.saleValue,
+      isSinalCampaignActive,
+      sinalCampaignLimitPercent
+    );
+
+    let finalPayments = [...newPayments];
     
-    toast({
-      title: "Condição Mínima Aplicada",
-      description: "Os pagamentos foram ajustados. Calculando resultados...",
-    });
+    if (!validation.isValid) {
+      const adjustedPayments = adjustPaymentsToMatchTarget(
+        newPayments,
+        validation.expected,
+        validation.actual,
+        values.appraisalValue,
+        values.saleValue
+      );
+      
+      finalPayments = adjustedPayments;
+      
+      toast({
+        title: "Condição Mínima Aplicada com Ajustes",
+        description: "Os pagamentos foram ajustados para corresponder ao valor necessário.",
+      });
+    } else {
+      finalPayments = newPayments;
+      
+      toast({
+        title: "Condição Mínima Aplicada",
+        description: "Os pagamentos foram ajustados. Calculando resultados...",
+      });
+    }
 
-    // CORREÇÃO: Após aplicar a condição, acionar a validação e o cálculo
+    replace(finalPayments);
+
     trigger().then(isValid => {
         if (isValid) {
-            // Pega os valores mais recentes do formulário e executa a lógica de cálculo
             onSubmit(getValues());
         } else {
             toast({
@@ -1890,12 +2041,8 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             });
         }
     });
-  }, [form, selectedProperty, deliveryDateObj, toast, replace, isSinalCampaignActive, sinalCampaignLimitPercent, trigger, getValues, onSubmit, validateBusinessRulesAfterMinimumCondition, constructionStartDateObj]);
-  // ===================================================================
-  // FIM DA ALTERAÇÃO 2
-  // ===================================================================
+  }, [form, selectedProperty, deliveryDateObj, toast, replace, isSinalCampaignActive, sinalCampaignLimitPercent, trigger, getValues, onSubmit, validateBusinessRulesAfterMinimumCondition, constructionStartDateObj, adjustPaymentsToMatchTarget]);
 
-  // Função para limpar todos os campos
   const handleClearAll = useCallback(() => {
     form.reset({
       propertyId: "",
@@ -1921,7 +2068,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     setTypologyFilter("Todos");
     setSunPositionFilter("Todos");
     
-    // Limpar dados da simulação Caixa
     setCustomerData({
       renda: "",
       dataNascimento: "",
@@ -2173,7 +2319,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
         <CardContent className="p-3 sm:p-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
-              {/* Seção de Dados do Cliente (aparece quando a simulação automatizada está ativada) */}
               {isAutomatedSimulationEnabled && (
                 <Card className="border-blue-200 dark:border-blue-800">
                   <CardHeader className="pb-3">
@@ -2291,7 +2436,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 <FormItem>
                   <FormLabel className="text-sm font-medium">Empreendimento</FormLabel>
                   <Select 
-                    value={field.value || ""} // Garante que valor vazio seja tratado corretamente
+                    value={field.value || ""}
                     onValueChange={(value) => {
                       field.onChange(value);
                       handlePropertyChange(value, properties, form, setResults, setIsSaleValueLocked, setAllUnits, toast);
@@ -2534,6 +2679,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                           {...field}
                           onChange={(e) => field.onChange(e.target.valueAsNumber)}
                           className="h-10 sm:h-11"
+                          placeholder={installmentsPlaceholder}
                         />
                       </FormControl>
                       <FormMessage />
@@ -2608,8 +2754,8 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                           type="number"
                           {...field}
                           onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                          placeholder={watchedNotaryPaymentMethod === 'creditCard' ? '1-12' : '36 ou 40'}
                           className="h-10 sm:h-11"
+                          placeholder={watchedNotaryPaymentMethod === 'creditCard' ? '1-12' : '36 ou 40'}
                         />
                       </FormControl>
                       <FormMessage />
@@ -2689,7 +2835,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
           </CardHeader>
           <CardContent className="p-3 sm:p-6">
             <div className="space-y-4 sm:space-y-6">
-              {/* Cards de Resumo Rápido */}
               <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 xs:gap-4">
                 <Card>
                   <CardContent className="p-3 sm:p-4">
@@ -2737,7 +2882,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 </Card>
               </div>
 
-              {/* Resumo de Custos e Análise de Renda */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 <Card>
                   <CardHeader className="pb-3 sm:pb-4">
@@ -2767,7 +2911,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                       </div>
                       <div>
                         <div className="flex justify-between mb-2 text-sm"><span className="text-sm">Percentual Pró-Soluto</span><span className="text-sm font-medium">{(results.proSolutoCommitmentPercentage || 0).toFixed(2)}%</span></div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2"><div className={`h-2 rounded-full ${results.proSolutoCommitmentPercentage > 100 ? 'bg-red-500' : results.proSolutoCommitmentPercentage > 50 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.proSolutoCommitmentPercentage || 0, 100)}%` }} /></div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2"><div className={`h-2 rounded-full ${results.proSolutoCommitmentPercentage > 100 ? 'bg-red-500' : results.proSolutoCommitmentPercentage > 50 ? 'bg-red-500' : results.proSolutoCommitmentPercentage > 50 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.proSolutoCommitmentPercentage || 0, 100)}%` }} /></div>
                       </div>
                       {results.incomeError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.incomeError}</AlertDescription></Alert>}
                       {results.proSolutoError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.proSolutoError}</AlertDescription></Alert>}
@@ -2776,7 +2920,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 </Card>
               </div>
 
-              {/* Cronograma de Pagamentos */}
               <div className="space-y-4">
                 <h3 className="text-base sm:text-lg font-semibold">Cronograma de Pagamentos</h3>
                 <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0 scrollbar-thin scrollbar-thumb-gray-300">
@@ -2786,7 +2929,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 </div>
               </div>
               
-              {/* Detalhamento do Seguro de Obras */}
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <h3 className="text-base sm:text-lg font-semibold">Detalhamento do Seguro de Obras</h3>
@@ -2841,7 +2983,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 )}
               </div>
               
-              {/* Botão de Gerar PDF */}
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
                 <Button onClick={handleGeneratePdf} disabled={isGeneratingPdf} className="w-full sm:flex-1 h-10 sm:h-11">
                   {isGeneratingPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
@@ -2916,21 +3057,21 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
               </div>
 
               <div>
-              <Label className="text-sm">Posição Solar</Label>
-              <Select value={sunPositionFilter} onValueChange={setSunPositionFilter}>
-                <SelectTrigger className="h-10 sm:h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Todos">Todos</SelectItem>
-                  {filterOptions.sunPositions.map((position) => (
-                    <SelectItem key={position} value={position}>
-                      {position}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                <Label className="text-sm">Posição Solar</Label>
+                <Select value={sunPositionFilter} onValueChange={setSunPositionFilter}>
+                  <SelectTrigger className="h-10 sm:h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todos">Todos</SelectItem>
+                    {filterOptions.sunPositions.map((position) => (
+                      <SelectItem key={position} value={position}>
+                        {position}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
