@@ -1,59 +1,52 @@
-
+// src/components/ui/currency-input.tsx
 "use client";
 
-import { useRef, type ComponentProps } from "react";
-import { Input } from "@/components/ui/input";
+import React from "react";
+import { Input, type InputProps } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { centsToBrl } from "@/lib/business/formatters";
 
-// Define InputProps localmente para desacoplar do componente Input
-type InputProps = ComponentProps<'input'>;
+// Helper to format cents to BRL string
+const centsToFormattedBRL = (cents: number | null, options: { includeSymbol?: boolean } = {}): string => {
+  if (cents === null || isNaN(cents)) return "";
+  const real = cents / 100;
+  return real.toLocaleString("pt-BR", {
+    style: options.includeSymbol ? "currency" : "decimal",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
 
-interface CurrencyInputProps extends Omit<InputProps, 'onChange' | 'value' | 'defaultValue'> {
+interface CurrencyInputProps extends Omit<InputProps, 'onChange' | 'value'> {
   value: number | null; // Value in CENTS
   onValueChange: (valueInCents: number | null) => void;
 }
 
-export const CurrencyInput = ({
-  value: valueInCents,
-  onValueChange,
-  className,
-  onBlur,
-  ...props
-}: CurrencyInputProps) => {
-    const inputRef = useRef<HTMLInputElement>(null);
+export const CurrencyInput = React.forwardRef<HTMLInputElement, CurrencyInputProps>(
+  ({ value, onValueChange, className, ...props }, ref) => {
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { value: rawValue } = e.target;
-        const numericValue = rawValue.replace(/\D/g, '');
-        const cents = parseInt(numericValue, 10) || 0;
-
-        if (onValueChange) {
-            onValueChange(cents);
-        }
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const rawValue = e.target.value;
+      const numericValue = rawValue.replace(/\D/g, "");
+      const cents = numericValue ? parseInt(numericValue, 10) : null;
+      onValueChange(cents);
     };
 
-    const handleInternalBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-        if (onBlur) {
-            onBlur(e);
-        }
-    };
-    
-    const displayValue = centsToBrl(valueInCents, { includeSymbol: false });
+    const formattedValue = centsToFormattedBRL(value, { includeSymbol: false });
 
     return (
       <Input
-        ref={inputRef}
-        value={displayValue}
-        onChange={handleChange}
-        onBlur={handleInternalBlur}
-        placeholder="0,00"
-        className={cn('text-left', className)}
-        inputMode="numeric"
+        ref={ref}
         type="text"
+        inputMode="numeric"
+        value={formattedValue}
+        onChange={handleInputChange}
+        placeholder="0,00"
+        className={cn("text-left", className)}
         {...props}
       />
     );
   }
+);
 
-CurrencyInput.displayName = 'CurrencyInput';
+CurrencyInput.displayName = "CurrencyInput";

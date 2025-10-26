@@ -14,12 +14,12 @@ const FeatureCard = ({
   title: string, 
   description: string 
 }) => (
-  <Card className="feature-card text-center">
+  <Card className="feature-card text-center bg-background-secondary border-none shadow-apple">
     <CardHeader className="items-center pb-4">
       <div className="flex items-center justify-center w-16 h-16 rounded-full bg-accent/10 text-accent mb-4">
         {icon}
       </div>
-      <CardTitle className="text-xl">{title}</CardTitle>
+      <CardTitle className="text-xl font-semibold">{title}</CardTitle>
     </CardHeader>
     <CardContent>
       <p className="text-text-secondary">{description}</p>
@@ -35,20 +35,21 @@ export default function RootPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background-secondary">
+    <div className="min-h-screen bg-background-primary text-text-primary">
       {/* Hero Section */}
-      <section className="py-20 px-4">
-        <div className="max-w-6xl mx-auto text-center fade-in">
-          <h1 className="text-4xl md:text-5xl font-bold mb-6 text-text-primary">
+      <section className="py-24 sm:py-32 px-4">
+        <div className="max-w-7xl mx-auto text-center fade-in">
+          <h1 className="text-4xl md:text-6xl font-bold mb-6 tracking-tight">
             Entrada Facilitada
           </h1>
-          <p className="text-xl text-text-secondary max-w-3xl mx-auto mb-10">
+          <p className="text-lg md:text-xl text-text-secondary max-w-3xl mx-auto mb-10">
             A ferramenta definitiva para corretores. Crie fluxos de pagamento personalizados, extraia dados com IA e gere propostas em PDF em segundos.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
               onClick={() => handleNavigate('/login')} 
               size="lg"
+              className="rounded-full px-8 py-6 text-lg"
             >
               Fazer Login
             </Button>
@@ -56,6 +57,7 @@ export default function RootPage() {
               variant="outline" 
               onClick={() => handleNavigate('/plans')}
               size="lg"
+              className="rounded-full px-8 py-6 text-lg"
             >
               Ver Planos
             </Button>
@@ -64,9 +66,9 @@ export default function RootPage() {
       </section>
 
       {/* Features Section */}
-      <section className="py-16 px-4 bg-background-primary">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-12 text-text-primary">Funcionalidades Poderosas</h2>
+      <section className="py-24 sm:py-32 px-4 bg-background-secondary">
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-16 tracking-tight">Funcionalidades Poderosas</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <FeatureCard 
               icon={<Zap size={28} />} 
@@ -88,15 +90,16 @@ export default function RootPage() {
       </section>
 
       {/* Call to Action Section */}
-      <section className="py-16 px-4">
+      <section className="py-24 sm:py-32 px-4">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold mb-6 text-text-primary">Pronto para agilizar suas vendas?</h2>
-          <p className="text-xl text-text-secondary mb-8">
+          <h2 className="text-3xl md:text-4xl font-bold mb-6 tracking-tight">Pronto para agilizar suas vendas?</h2>
+          <p className="text-lg md:text-xl text-text-secondary mb-10">
             Escolha um plano que se adapte às suas necessidades e comece a usar o simulador mais completo do mercado.
           </p>
           <Button 
             onClick={() => handleNavigate('/plans')}
             size="lg"
+            className="rounded-full px-8 py-6 text-lg"
           >
             Começar Agora
           </Button>

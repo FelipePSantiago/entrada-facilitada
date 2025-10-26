@@ -1,170 +1,100 @@
 // src/app/login/page.tsx
 "use client";
 import { useState } from "react";
-import Link from "next/link";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
-import { Loader2, Eye, EyeOff } from "lucide-react";
-import { signInWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
-import { auth } from "@/lib/firebase/clientApp";
-import { Separator } from "@/components/ui/separator";
-import { useAuth } from "@/contexts/AuthContext";
-import { FirebaseError } from "firebase/app";
+import { Building } from "lucide-react";
+import Link from "next/link";
+import { toast } from "@/hooks/use-toast";
 
 export default function LoginPage() {
-  const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const { authLoading, user, isFullyAuthenticated } = useAuth();
+  const { login } = useAuth();
+  const router = useRouter();
 
-  const handleLogin = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     setIsLoading(true);
-    
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
-      if (!userCredential.user.emailVerified) {
-        await sendEmailVerification(userCredential.user);
-        toast({
-          title: "Verificação de E-mail Necessária",
-          description: "Enviamos um novo link de verificação para o seu e-mail. Por favor, verifique sua caixa de entrada antes de fazer login.",
-        });
-        await auth.signOut();
-        setIsLoading(false);
-        return;
-      }
-    } catch (e) {
-      const error = e as FirebaseError;
-      let title = "Erro no Login";
-      let description = "Ocorreu um erro inesperado. Por favor, tente novamente.";
-      
-      switch (error.code) {
-        case 'auth/invalid-credential':
-        case 'auth/wrong-password':
-        case 'auth/user-not-found':
-          title = 'Credenciais Inválidas';
-          description = 'E-mail ou senha incorretos. Verifique seus dados e tente novamente.';
-          break;
-        case 'auth/user-disabled':
-          title = 'Conta Desativada';
-          description = 'Sua conta foi desativada. Entre em contato com o suporte.';
-          break;
-        case 'appCheck/recaptcha-error':
-          title = 'Erro de Verificação';
-          description = 'Não foi possível verificar seu dispositivo. Recarregue a página.';
-          break;
-        default:
-          console.error('Erro de login não tratado:', error);
-          break;
-      }
-      
-      toast({
-        variant: "destructive",
-        title: title,
-        description: description,
+      await login(email, password);
+      toast({ title: "Login bem-sucedido!" });
+      router.push("/");
+    } catch (error: any) {
+      toast({ 
+        title: "Erro de autenticação",
+        description: error.message || "Ocorreu um erro ao fazer login.",
+        variant: "destructive"
       });
+    } finally {
       setIsLoading(false);
     }
   };
 
-  if (authLoading || (user && !isFullyAuthenticated)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-accent" />
-          <p className="text-text-secondary">Verificando autenticação...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background-secondary px-4">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Login</CardTitle>
-          <CardDescription>
-            Entre com suas credenciais para acessar o simulador.
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleLogin}>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="seu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+    <div className="flex min-h-screen items-center justify-center bg-background-secondary p-4">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <Link href="/" className="inline-flex items-center gap-2">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-white">
+              <Building className="h-7 w-7" />
             </div>
-            <div className="space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight text-text-primary">Entrada Facilitada</h1>
+          </Link>
+          <p className="mt-4 text-text-secondary">Bem-vindo de volta! Faça login para continuar.</p>
+        </div>
+
+        <form 
+          onSubmit={handleLogin} 
+          className="bg-background-primary p-8 rounded-2xl shadow-apple space-y-6"
+        >
+          <div className="space-y-2">
+            <Label htmlFor="email">E-mail</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="seu@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="h-12"
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
               <Label htmlFor="password">Senha</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-                <button
-                  type="button"
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-text-secondary hover:text-text-primary"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-            <div className="text-right">
-              <Link 
-                href="/forgot-password" 
-                className="text-sm text-accent hover:underline"
-              >
+              <Link href="/forgot-password" className="text-sm text-accent hover:underline">
                 Esqueceu a senha?
               </Link>
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={isLoading}
-              size="lg"
-            >
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Entrar
-            </Button>
-            <Separator />
-            <div className="text-center text-sm">
-              <span className="text-text-secondary">Não tem uma conta?</span>{" "}
-              <Link 
-                href="/plans" 
-                className="text-accent hover:underline font-medium"
-              >
-                VER PLANOS
-              </Link>
-            </div>
-          </CardFooter>
+            <Input
+              id="password"
+              type="password"
+              placeholder="Sua senha"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="h-12"
+            />
+          </div>
+          
+          <Button type="submit" className="w-full h-12 text-lg" disabled={isLoading}>
+            {isLoading ? "Entrando..." : "Entrar"}
+          </Button>
         </form>
-      </Card>
+
+        <p className="text-center text-sm text-text-secondary">
+          Não tem uma conta?{" "}
+          <Link href="/signup" className="font-medium text-accent hover:underline">
+            Cadastre-se
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

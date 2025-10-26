@@ -3,15 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { 
-  Home, 
-  Calculator, 
-  CreditCard, 
-  User, 
-  LogOut, 
+import {
+  Home,
+  Calculator,
+  CreditCard,
+  User,
+  LogOut,
   Menu,
   X,
-  Building
+  Building,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,11 +28,11 @@ export function Header() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  
+
   const isActive = (path: string) => {
     return pathname === path;
   };
-  
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -40,17 +40,17 @@ export function Header() {
       console.error("Erro ao fazer logout:", error);
     }
   };
-  
+
   const navigation = [
     { name: "Início", href: "/", icon: Home },
     { name: "Simulador", href: "/simulator", icon: Calculator },
     { name: "Simulação Caixa", href: "/caixa-simulation", icon: Building },
     { name: "Planos", href: "/plans", icon: CreditCard },
   ];
-  
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center justify-between px-4">
+      <div className="container flex h-16 max-w-7xl items-center justify-between px-4">
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white">
@@ -58,7 +58,7 @@ export function Header() {
             </div>
             <span className="text-xl font-bold text-text-primary">Entrada Facilitada</span>
           </Link>
-          
+
           <nav className="hidden md:flex items-center gap-1">
             {navigation.map((item) => (
               <Link
@@ -76,7 +76,7 @@ export function Header() {
             ))}
           </nav>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {user ? (
             <DropdownMenu>
@@ -100,19 +100,19 @@ export function Header() {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/profile" className="flex items-center gap-2">
+                  <Link href="/profile" className="flex items-center gap-2 w-full">
                     <User className="h-4 w-4" />
                     <span>Perfil</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/settings" className="flex items-center gap-2">
+                  <Link href="/settings" className="flex items-center gap-2 w-full">
                     <Calculator className="h-4 w-4" />
                     <span>Configurações</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2">
+                <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 w-full cursor-pointer">
                   <LogOut className="h-4 w-4" />
                   <span>Sair</span>
                 </DropdownMenuItem>
@@ -128,60 +128,54 @@ export function Header() {
               </Button>
             </div>
           )}
-          
+
           <Button
             variant="ghost"
             size="icon"
             className="md:hidden"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
-            {mobileMenuOpen ? (
-              <X className="h-5 w-5" />
-            ) : (
-              <Menu className="h-5 w-5" />
-            )}
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             <span className="sr-only">Alternar menu</span>
           </Button>
         </div>
       </div>
-      
-      {/* Mobile menu */}
+
       {mobileMenuOpen && (
         <div className="border-t md:hidden">
           <div className="container px-4 py-4">
-            <nav className="flex flex-col space-y-2">
+            <nav className="grid gap-2">
               {navigation.map((item) => (
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-base font-medium transition-colors ${
                     isActive(item.href)
                       ? "bg-accent/10 text-accent"
                       : "text-text-secondary hover:text-text-primary"
                   }`}
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  <item.icon className="h-4 w-4" />
+                  <item.icon className="h-5 w-5" />
                   {item.name}
                 </Link>
               ))}
-              
               {!user && (
                 <>
                   <Link
                     href="/login"
-                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-base font-medium text-text-secondary transition-colors hover:text-text-primary"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <User className="h-4 w-4" />
+                    <User className="h-5 w-5" />
                     Entrar
                   </Link>
                   <Link
                     href="/plans"
-                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-base font-medium text-text-secondary transition-colors hover:text-text-primary"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <CreditCard className="h-4 w-4" />
+                    <CreditCard className="h-5 w-5" />
                     Planos
                   </Link>
                 </>
