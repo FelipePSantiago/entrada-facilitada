@@ -1,10 +1,9 @@
-// src/app/error.tsx
 "use client";
 
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 
 export default function Error({
   error,
@@ -14,32 +13,28 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Log the error to an error reporting service
     console.error(error);
   }, [error]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4">
-      <Card className="w-full max-w-md text-center">
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8 flex items-center justify-center min-h-[calc(100vh-15rem)]">
+      <Card className="w-full max-w-lg text-center">
         <CardHeader>
-          <div className="mx-auto w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4">
-            <AlertTriangle className="h-8 w-8 text-red-600 dark:text-red-400" />
-          </div>
-          <CardTitle className="text-2xl">Ocorreu um Erro</CardTitle>
-          <CardDescription>
-            Algo deu errado ao carregar esta página.
-          </CardDescription>
+            <div className="mx-auto bg-destructive/10 p-3 rounded-full w-fit">
+                <AlertTriangle className="h-8 w-8 text-destructive" />
+            </div>
+            <CardTitle className="mt-4">Ocorreu um Erro no Simulador</CardTitle>
+            <CardDescription>
+                Não foi possível carregar a calculadora. Por favor, tente recarregar a página.
+            </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {error.message || "Erro desconhecido"}
-            </p>
-          </div>
-          <Button onClick={reset} className="w-full">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Tentar Novamente
-          </Button>
+         <CardContent>
+          <p className="text-sm text-muted-foreground">
+             Detalhes do erro: {error.message || "Erro desconhecido."}
+          </p>
+        </CardContent>
+        <CardContent>
+          <Button onClick={() => reset()}>Tentar Novamente</Button>
         </CardContent>
       </Card>
     </div>

@@ -1,4 +1,3 @@
-// src/components/ui/select.tsx
 "use client"
 
 import * as React from "react"

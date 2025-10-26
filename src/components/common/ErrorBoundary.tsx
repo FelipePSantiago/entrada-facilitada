@@ -1,9 +1,7 @@
-// src/components/common/ErrorBoundary.tsx
 "use client";
-import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+
+import React, { Component, ReactNode } from "react";
+import { getErrorMessage } from "@/lib/utils";
 
 interface Props {
   children: ReactNode;
@@ -12,60 +10,47 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  error?: Error;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false
-  };
-
-  public static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught error:', error, errorInfo);
+  static getDerivedStateFromError() {
+    return { hasError: true };
   }
 
-  public render() {
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    const errorMessage = getErrorMessage(error);
+    console.error("Erro capturado pelo ErrorBoundary:", errorMessage, errorInfo);
+  }
+
+  render() {
     if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback;
-      }
-      
-      return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader className="text-center">
-              <div className="mx-auto w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4">
-                <AlertTriangle className="h-8 w-8 text-red-600 dark:text-red-400" />
-              </div>
-              <CardTitle className="text-2xl">Ops! Algo deu errado</CardTitle>
-              <CardDescription>
-                Ocorreu um erro inesperado. Tente recarregar a página.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {this.state.error?.message || "Erro desconhecido"}
+      return this.props.fallback || (
+        <div className="flex flex-col items-center justify-center h-screen bg-background text-center p-4">
+            <div className="max-w-md">
+                <h1 className="text-2xl font-bold text-destructive mb-2">Oops! Algo deu errado.</h1>
+                <p className="text-muted-foreground mb-4">
+                    Nossa equipe foi notificada. Por favor, tente recarregar a página ou volte mais tarde.
                 </p>
-              </div>
-              
-              <Button 
-                onClick={() => window.location.reload()} 
-                className="w-full"
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Recarregar Página
-              </Button>
-            </CardContent>
-          </Card>
+                <button 
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        // Tenta limpar o cache relacionado a chunks antes de recarregar
+                        window.location.reload();
+                      }
+                    }}
+                    className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+                >
+                    Recarregar Página
+                </button>
+            </div>
         </div>
       );
     }
-
     return this.props.children;
   }
 }

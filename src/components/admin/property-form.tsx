@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { getSavePropertyAction } from "@/actions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { auth } from "@/lib/firebase/clientApp"; // Import auth
+
 
 const formSchema = z.object({
   id: z.string().min(1, { message: "O ID é obrigatório." }).regex(/^[a-z0-9-]+$/, { message: "ID deve conter apenas letras minúsculas, números e hífens."}),
@@ -73,13 +73,13 @@ export function PropertyForm({ initialData, onCancel, isSubmitting, setIsSubmitt
   }, [initialData, form]);
   
   const handleFormSubmit = async (values: PropertyFormValues) => {
-    if (!user || !functions || !auth.currentUser) { // Check for auth.currentUser
+    if (!user || !functions) {
       toast({ variant: "destructive", title: "Erro de autenticação" });
       return;
     }
     setIsSubmitting(true);
     try {
-      const idToken = await auth.currentUser.getIdToken(true); // Corrected call
+      const idToken = await user.getIdToken(true);
       const dataToSubmit = {
           ...values,
           idToken,

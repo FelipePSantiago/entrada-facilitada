@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { jsPDF } from 'jspdf';
 import type { UserOptions } from 'jspdf-autotable';
 import type { FieldValue, Timestamp } from 'firebase/firestore';
+// CORREÇÃO 1: Importar os tipos necessários do react-hook-form
 import { type UseFormReturn, type Control } from 'react-hook-form';
 
 // #region User & Auth Types
@@ -24,6 +25,7 @@ export interface TwoFactorSecret {
 export type PropertyBrand = "Riva" | "Direcional";
 export type UnitStatus = "Disponível" | "Vendido" | "Reservado" | "Indisponível";
 
+// Base Unit interface (minimal fields needed for availability structures)
 export interface Unit {
   unitId: string;
   unitNumber: string; 
@@ -44,21 +46,24 @@ export interface UnitPricing {
   privateArea: number;
   sunPosition: string;
   parkingSpaces: number;
-  totalArea?: number;
+  totalArea?: number; // Making totalArea optional as it wasn't in original Unit
   appraisalValue: number; // in cents
   complianceBonus: number; // in cents
   saleValue: number; // in cents
 }
 
+// Combined type used in the calculator, extending base Unit with pricing and potentially other fields
 export interface CombinedUnit extends Unit, UnitPricing {}
 
+// Structure representing a floor within a tower
 export interface Floor {
   floor: string;
   units: Unit[]; 
 }
 
+// Structure representing a tower within the availability data
 export interface Tower {
-  tower: string;
+  tower: string; // Name or identifier of the tower
   floors: Floor[];
 }
 
@@ -72,9 +77,9 @@ export interface Property {
     deliveryDate: string; 
     constructionStartDate: string;
     brand: PropertyBrand;
-    availability?: Availability | null;
+    availability?: Availability | null; // Reference to Availability
     lastPriceUpdate?: Timestamp | null;
-    pricing?: CombinedUnit[] | null;
+    pricing?: CombinedUnit[] | null; // Reference to Pricing
 }
 
 export interface Availability {
@@ -86,7 +91,7 @@ export interface Availability {
 export const paymentFieldSchema = z.object({
   type: z.enum([
     "sinalAto", "sinal1", "sinal2", "sinal3", "proSoluto", 
-    "bonusAdimplencia", "desconto", "bonusCampanha", "fgts", "financiamento", "balloon"
+    "bonusAdimplencia", "desconto", "bonusCampanha", "fgts", "financiamento"
   ]),
   value: z.coerce.number().min(0),
   date: z.date(),
@@ -108,9 +113,6 @@ export const formSchema = z.object({
   notaryFees: z.coerce.number().optional(),
   notaryPaymentMethod: z.enum(["creditCard", "bankSlip"]).optional(),
   notaryInstallments: z.coerce.number().int().optional(),
-  birthDate: z.date().optional(),
-  downPayment: z.coerce.number().positive().optional(),
-  financingMonths: z.coerce.number().int().positive().optional(),
 });
 
 export const propertyFormSchema = z.object({
@@ -172,6 +174,7 @@ export interface ExtractPricingOutput {
 
 // #region PDF & Generic Types
 
+// CORREÇÃO: Remover a propriedade 'results' pois ela é passada separadamente
 export interface PdfFormValues extends Omit<FormValues, 'results'> {
   brokerName: string;
   brokerCreci: string;
@@ -189,6 +192,7 @@ export interface PDFPageData extends UserOptions {
   } | null;
 }
 
+// CORREÇÃO: Interface REAL do PaymentTimeline baseada no componente analisado
 export interface PaymentTimelineProps {
   results: Results;
   formValues: FormValues;
@@ -200,11 +204,13 @@ export interface ChartData {
   fill: string;
 }
 
+// CORREÇÃO: Interface REAL do ResultChart baseada no componente analisado
 export interface ResultChartProps {
   data: ChartData[];
   value: number;
 }
 
+// CORREÇÃO: Atualizar interface para incluir allUnits e filteredUnits
 export interface UnitSelectorDialogContentProps {
   allUnits: CombinedUnit[];
   filteredUnits: CombinedUnit[];
@@ -227,6 +233,7 @@ export interface UnitSelectorDialogContentProps {
   isReservaParque: boolean;
 }
 
+// CORREÇÃO: Atualizar interface Step para usar content e target em vez de description e targetId
 export interface Step {
   id: string;
   title: string;
@@ -235,9 +242,11 @@ export interface Step {
   isCompleted?: () => boolean;
 }
 
+// CORREÇÃO: Permitir results ser null e usar o tipo correto para 'form'
 export interface InteractiveTutorialProps {
   isOpen: boolean;
   onClose: () => void;
+  // CORREÇÃO 2: Substituir 'any' pelo tipo específico do react-hook-form
   form: UseFormReturn<FormValues>;
   results: Results | null;
   steps: Step[];
@@ -258,25 +267,30 @@ export interface DatePickerProps {
   placeholder?: string;
 }
 
+// CORREÇÃO: Interface REAL do PaymentTimelineComponent baseada no componente analisado
 export interface PaymentTimelineComponentProps {
   results: Results;
   formValues: FormValues;
 }
 
+// CORREÇÃO: Interface REAL do ResultChartComponent baseada no componente analisado
 export interface ResultChartComponentProps {
   data: ChartData[];
   value: number;
 }
 
+// NOVA INTERFACE: Para a função generatePdf
 export interface GeneratePdfFunction {
   (formValues: PdfFormValues, results: PdfResults, selectedProperty: Property): Promise<void>;
 }
 
+// Interface para dados extraídos
 export interface ExtractedData extends Partial<ExtractPricingOutput> {
   grossIncome?: number;
   simulationInstallmentValue?: number;
 }
 
+// Interface estendida para Results com paymentValidation
 export interface ExtendedResults extends Results {
   paymentValidation?: {
     isValid: boolean;
@@ -287,6 +301,7 @@ export interface ExtendedResults extends Results {
   };
 }
 
+// Interface para propriedades do PaymentFlowCalculator
 export interface PaymentFlowCalculatorProps {
   properties: Property[];
   isSinalCampaignActive: boolean;
@@ -295,6 +310,7 @@ export interface PaymentFlowCalculatorProps {
   setIsTutorialOpen: (isOpen: boolean) => void;
 }
 
+// Interface para UnitCard
 export interface UnitCardProps {
   unit: CombinedUnit;
   isReservaParque: boolean;
@@ -302,20 +318,24 @@ export interface UnitCardProps {
   style?: React.CSSProperties;
 }
 
+// Interface para CurrencyFormField
 export interface CurrencyFormFieldProps {
   name: keyof FormValues;
   label: string;
+  // CORREÇÃO 3: Substituir 'any' pelo tipo específico do react-hook-form
   control: Control<FormValues>;
   readOnly?: boolean;
   placeholder?: string;
   id?: string;
 }
 
+// Interface para o componente PaymentTimeline (alias para compatibilidade)
 export interface PaymentTimelineComponentProps {
   results: Results;
   formValues: FormValues;
 }
 
+// Interface para o componente ResultChart (alias para compatibilidade)
 export interface ResultChartComponentProps {
   data: ChartData[];
   value: number;

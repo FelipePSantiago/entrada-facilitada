@@ -1,20 +1,10 @@
-// src/components/common/Header.tsx
 "use client";
+
+import { LayoutDashboard, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import {
-  Home,
-  Calculator,
-  CreditCard,
-  User,
-  LogOut,
-  Menu,
-  X,
-  Building,
-} from "lucide-react";
-import { useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,167 +13,98 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { auth } from "@/lib/firebase/clientApp";
+import { signOut } from "firebase/auth";
 
-export function Header() {
+export default function Header() {
+  const { isAdmin, isFullyAuthenticated, user } = useAuth();
   const pathname = usePathname();
-  const { user, logout } = useAuth();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  const isActive = (path: string) => {
-    return pathname === path;
-  };
+  const { toast } = useToast();
 
   const handleLogout = async () => {
     try {
-      await logout();
-    } catch (error) {
-      console.error("Erro ao fazer logout:", error);
+      await signOut(auth);
+      toast({
+        title: "Logout bem-sucedido!",
+        description: "Você foi desconectado.",
+      });
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Erro no Logout",
+        description: "Não foi possível fazer o logout. Tente novamente.",
+      });
     }
   };
 
-  const navigation = [
-    { name: "Início", href: "/", icon: Home },
-    { name: "Simulador", href: "/simulator", icon: Calculator },
-    { name: "Simulação Caixa", href: "/caixa-simulation", icon: Building },
-    { name: "Planos", href: "/plans", icon: CreditCard },
-  ];
+  const getInitials = (email: string) => {
+    if (!email) return "?";
+    return email[0].toUpperCase();
+  };
 
   return (
-    <header className="header-apple">
-      <div className="header-container-apple">
-        <div className="flex items-center gap-6">
-          <Link href="/">
-            <div className="header-logo-icon-apple">
-              <Building className="h-5 w-5" />
-            </div>
-            <span className="header-logo-text-apple">Entrada Facilitada</span>
-          </Link>
+    <header className="fixed top-0 left-0 w-full bg-background/95 p-4 shadow-sm z-10 backdrop-blur">
+      <div className="container mx-auto flex justify-between items-center">
+        <Link href="/" className="text-2xl font-bold text-primary">
+          Entrada Facilitada
+        </Link>
 
-          <nav className="header-nav-apple">
-            {navigation.map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive(item.href)
-                    ? "bg-accent/10 text-accent"
-                    : "text-text-secondary hover:text-text-primary"
-                }`}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.name}
-              </Link>
-            ))}
-          </nav>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {user ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button className="user-dropdown-button-apple">
-                  <div className="user-dropdown-icon-apple">
-                    <User className="h-4 w-4" />
-                  </div>
+        <div className="flex justify-end items-center gap-4">
+          <ThemeToggle />
+          {isFullyAuthenticated && (
+            <>
+              {isAdmin && (
+                <Button
+                  variant={pathname.startsWith("/admin") ? "secondary" : "ghost"}
+                  asChild
+                >
+                  <Link href="/admin/properties">
+                    <LayoutDashboard className="mr-2 h-4 w-4" />
+                    Admin
+                  </Link>
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none text-text-primary">
-                      {user.displayName || user.email}
-                    </p>
-                    <p className="text-xs leading-none text-text-secondary">
-                      {user.email}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/profile" className="flex items-center gap-2 w-full">
-                    <User className="h-4 w-4" />
-                    <span>Perfil</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/settings" className="flex items-center gap-2 w-full">
-                    <Calculator className="h-4 w-4" />
-                    <span>Configurações</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 w-full cursor-pointer">
-                  <LogOut className="h-4 w-4" />
-                  <span>Sair</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <div className="header-nav-apple">
-              <Button asChild className="button-secondary-apple">
-                <Link href="/login">Entrar</Link>
-              </Button>
-              <Button asChild className="button-primary-apple">
-                <Link href="/plans">Planos</Link>
-              </Button>
-            </div>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="relative h-10 w-10 rounded-full"
+                  >
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage
+                        src={user?.photoURL || ""}
+                        alt={user?.displayName || "Avatar"}
+                      />
+                      <AvatarFallback>{getInitials(user?.email || "")}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">
+                        Minha Conta
+                      </p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {user?.email}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Sair</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
           )}
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            <span className="sr-only">Alternar menu</span>
-          </Button>
         </div>
       </div>
-
-      {mobileMenuOpen && (
-        <div className="border-t md:hidden">
-          <div className="container px-4 py-4">
-            <nav className="grid gap-2">
-              {navigation.map((item) => (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-base font-medium transition-colors ${
-                    isActive(item.href)
-                      ? "bg-accent/10 text-accent"
-                      : "text-text-secondary hover:text-text-primary"
-                  }`}
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <item.icon className="h-5 w-5" />
-                  {item.name}
-                </Link>
-              ))}
-              {!user && (
-                <>
-                  <Link
-                    href="/login"
-                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-base font-medium text-text-secondary transition-colors hover:text-text-primary"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <User className="h-5 w-5" />
-                    Entrar
-                  </Link>
-                  <Link
-                    href="/plans"
-                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-base font-medium text-text-secondary transition-colors hover:text-text-primary"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <CreditCard className="h-5 w-5" />
-                    Planos
-                  </Link>
-                </>
-              )}
-            </nav>
-          </div>
-        </div>
-      )}
     </header>
   );
 }

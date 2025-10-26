@@ -1,34 +1,53 @@
-// src/app/layout.tsx
-import { AuthProvider } from "@/contexts/AuthContext";
-import { Inter } from 'next/font/google'
-import { ThemeToggle } from '@/components/theme-toggle';
+import type { Metadata } from "next";
+import "@/app/globals.css";
 
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-inter',
-})
+import { ChunkErrorHandler } from "@/components/common/chunk-error-handler";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
+import Header from "@/components/common/Header";
+import { Providers } from "@/components/providers";
+import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/toaster";
 
-
-import "./globals.css";
-
-export const metadata = {
+export const metadata: Metadata = {
   title: "Entrada Facilitada",
-  description: "A ferramenta definitiva para corretores. Crie fluxos de pagamento personalizados, extraia dados com IA e gere propostas em PDF em segundos.",
+  description:
+    "Calcule o fluxo de pagamento para o parcelamento da entrada de um financiamento imobiliário.",
+  openGraph: {
+    images: ["https://i.ibb.co/WW6nrBnQ/Riva-LOGO.png"],
+  },
+  icons: {
+    icon: "https://i.ibb.co/WW6nrBnQ/Riva-LOGO.png",
+  },
 };
 
 export default function RootLayout({
   children,
-}: {
-  children: React.ReactNode
-}) {
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang="pt-BR" className={inter.variable}>
-      <body>
-        <AuthProvider>
-          <ThemeToggle />
-          {children}
-        </AuthProvider>
+    <html lang="pt-BR" suppressHydrationWarning>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      </head>
+      <body className="font-sans antialiased">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ErrorBoundary>
+            <Providers>
+              <ChunkErrorHandler />
+              <Header />
+              <main className="flex w-full flex-col items-center justify-center pt-24">
+                {children}
+              </main>
+              <Toaster />
+            </Providers>
+          </ErrorBoundary>
+        </ThemeProvider>
       </body>
     </html>
   );

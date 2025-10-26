@@ -1,56 +1,54 @@
-'use client';
+"use client"
+
 import React from 'react';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, TooltipItem } from 'chart.js';
-import { Pie } from 'react-chartjs-2';
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { formatPercentage } from '@/lib/business/formatters';
 
-ChartJS.register(ArcElement, Tooltip, Legend);
+const CHART_COLORS = {
+  entrada: '#8884d8',      // Lilás
+  proSoluto: '#82ca9d',    // Verde claro
+  cartorio: '#ffc658',     // Amarelo
+  seguro: '#ff7c7c',        // Vermelho claro
+};
 
-interface ResultChartProps {
-  totalPaid: number;
-  balance: number;
-  propertyValue: number;
+export interface ChartData {
+  name: 'Entrada' | 'Pró-Soluto' | 'Cartório' | 'Seguro';
+  value: number;
 }
 
-export function ResultChart({ totalPaid, balance }: ResultChartProps) {
-  const data = {
-    labels: ['Total Pago', 'Saldo Devedor'],
-    datasets: [
-      {
-        data: [totalPaid, balance],
-        backgroundColor: ['rgba(75, 192, 192, 0.6)', 'rgba(255, 99, 132, 0.6)'],
-        borderColor: ['rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)'],
-        borderWidth: 1,
-      },
-    ],
-  };
+interface ResultChartProps {
+  data: ChartData[];
+  value: number;
+}
 
-  const options = {
-    responsive: true,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      title: {
-        display: true,
-        text: 'Composição do Valor do Imóvel',
-      },
-      tooltip: {
-        callbacks: {
-          label: function(context: TooltipItem<'pie'>) {
-            let label = context.dataset.label || '';
-            if (label) {
-              label += ': ';
-            }
-            const value = context.raw;
-            if (typeof value === 'number') {
-              label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-            }
-            return label;
-          }
-        }
-      }
-    },
-  };
-
-  return <Pie data={data} options={options} />;
+export function ResultChart({ data, value }: ResultChartProps) {
+  return (
+    <div className="relative w-40 h-40 mx-auto">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            dataKey="value"
+            nameKey="name"
+            cx="50%"
+            cy="50%"
+            innerRadius={45} // Ajustado para um visual mais "Apple-like"
+            outerRadius={65} // Ajustado para um visual mais "Apple-like"
+            startAngle={90}
+            endAngle={450}
+            paddingAngle={2}
+            stroke="none"
+          >
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={CHART_COLORS[entry.name.toLowerCase().replace('-', '') as keyof typeof CHART_COLORS] || '#cccccc'} />
+            ))}
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span className="text-2xl font-bold tracking-tighter text-gray-800 dark:text-gray-200">{formatPercentage(value)}</span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">Custo Total</span>
+      </div>
+    </div>
+  );
 }
