@@ -1,7 +1,6 @@
 "use client";
 
 import React, { Component, ReactNode } from "react";
-import { getErrorMessage } from "@/lib/utils";
 
 interface Props {
   children: ReactNode;
@@ -23,8 +22,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    const errorMessage = getErrorMessage(error);
-    console.error("Erro capturado pelo ErrorBoundary:", errorMessage, errorInfo);
+    console.error("Erro capturado pelo ErrorBoundary:", error.message, errorInfo);
   }
 
   render() {
@@ -39,7 +37,6 @@ export class ErrorBoundary extends Component<Props, State> {
                 <button 
                     onClick={() => {
                       if (typeof window !== 'undefined') {
-                        // Tenta limpar o cache relacionado a chunks antes de recarregar
                         window.location.reload();
                       }
                     }}

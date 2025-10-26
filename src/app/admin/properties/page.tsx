@@ -56,6 +56,7 @@ import { Timestamp } from 'firebase/firestore';
 import { Skeleton } from "@/components/ui/skeleton";
 import { parseExcel } from "@/lib/parsers/excel-parser";
 import { httpsCallable } from "firebase/functions"; // Moved isDateLocked here
+import { auth } from "@/lib/firebase/clientApp"; // Import auth
 
 const AvailabilityManager = dynamic(() => 
     import('@/components/admin/availability-manager').then(mod => mod.AvailabilityManager), 
@@ -103,7 +104,7 @@ export default function AdminPropertiesPage() {
         fileReader.onerror = () => reject(new Error('Falha ao ler o arquivo.'));
       });
       
-      const idToken = await user.getIdToken(true);
+      const idToken = await auth.currentUser?.getIdToken(true);
       if (!idToken) throw new Error("Usuário não autenticado");
 
       const batchCreateProperties = httpsCallable(functions, 'batchCreatePropertiesAction');
@@ -172,7 +173,7 @@ export default function AdminPropertiesPage() {
               const transformedData = parsedData.map(item => transformer(item));
 
               if (fieldName === 'pricing') {
-                  const idToken = await user.getIdToken(true);
+                  const idToken = await auth.currentUser?.getIdToken(true);
                   if (!idToken) throw new Error("Usuário não autenticado");
                   const updatePropertyPricing = httpsCallable(functions, 'updatePropertyPricingAction');
                   await updatePropertyPricing({ propertyId, pricingData: transformedData, idToken });
@@ -256,7 +257,7 @@ export default function AdminPropertiesPage() {
     }
     setIsDeleting(prev => ({...prev, [propertyId]: true}));
     try {
-        const idToken = await user.getIdToken(true);
+        const idToken = await auth.currentUser?.getIdToken(true);
         if (!idToken) throw new Error("Usuário não autenticado");
         const deletePropertyPricing = httpsCallable(functions, 'deletePropertyPricingAction');
         await deletePropertyPricing({ propertyId, idToken });
@@ -283,7 +284,7 @@ export default function AdminPropertiesPage() {
     }
     setIsDeleting(prev => ({ ...prev, [propertyId]: true }));
     try {
-      const idToken = await user.getIdToken(true);
+      const idToken = await auth.currentUser?.getIdToken(true);
       if (!idToken) throw new Error("Usuário não autenticado");
       const deleteProperty = httpsCallable(functions, 'deletePropertyAction');
       await deleteProperty({ propertyId, idToken });
@@ -310,7 +311,7 @@ export default function AdminPropertiesPage() {
     }
     setIsDeletingAll(true);
     try {
-        const idToken = await user.getIdToken(true);
+        const idToken = await auth.currentUser?.getIdToken(true);
         const deleteAllProperties = httpsCallable(functions, 'deleteAllPropertiesAction');
         const result = await deleteAllProperties({ idToken });
         const { deletedCount } = result.data as { deletedCount: number };
@@ -410,7 +411,7 @@ export default function AdminPropertiesPage() {
                                             <div className="flex items-center gap-2">
                                                 <Building className="h-4 w-4" />
                                                 <span>{property.enterpriseName}</span>
-                                                {property.pricing && property.pricing.length > 0 && property.pricing.every(p => p.saleValue > 0) && ( // Check if pricing exists and has valid sale values
+                                                {property.pricing && property.pricing.length > 0 && property.pricing.every((p: CombinedUnit) => p.saleValue > 0) && ( // Check if pricing exists and has valid sale values
                                                     <div className="flex items-center gap-1 text-xs text-green-600">
                                                         <FileBarChart2 className="h-4 w-4" />
                                                         <span>Preços OK</span>

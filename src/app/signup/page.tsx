@@ -11,6 +11,7 @@ import Link from "next/link";
 import { toast } from "@/hooks/use-toast";
 
 export default function SignupPage() {
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -30,13 +31,14 @@ export default function SignupPage() {
     }
     setIsLoading(true);
     try {
-      await signup(email, password);
+      await signup(email, password, displayName);
       toast({ title: "Cadastro bem-sucedido!" });
       router.push("/");
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro ao criar a conta.";
       toast({ 
         title: "Erro de cadastro",
-        description: error.message || "Ocorreu um erro ao criar a conta.",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -61,6 +63,18 @@ export default function SignupPage() {
           onSubmit={handleSignup} 
           className="bg-background-primary p-8 rounded-2xl shadow-apple space-y-6"
         >
+          <div className="space-y-2">
+            <Label htmlFor="displayName">Nome</Label>
+            <Input
+              id="displayName"
+              type="text"
+              placeholder="Seu nome completo"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              required
+              className="h-12"
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="email">E-mail</Label>
             <Input

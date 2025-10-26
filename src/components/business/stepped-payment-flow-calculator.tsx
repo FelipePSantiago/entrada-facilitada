@@ -1,3 +1,4 @@
+
 // src/components/business/stepped-payment-flow-calculator.tsx
 "use client";
 
@@ -9,64 +10,67 @@ import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { PaymentTimeline } from "./payment-timeline";
 import { ResultChart } from "./result-chart";
-import { generatePaymentPDF } from "@/lib/generators/pdf-generator";
 import { usePaymentCalculator } from "@/hooks/usePaymentCalculator";
 import { toast } from "@/hooks/use-toast";
-import { Apricot } from "lucide-react";
+import { Trash2 } from "lucide-react";
+import { FormValues, PaymentField as Payment } from "@/types";
 
 export const SteppedPaymentFlowCalculator: React.FC = () => {
-  const [propertyValue, setPropertyValue] = useState<number>(300000);
-  const [downPayment, setDownPayment] = useState<number>(30000);
-  const [financingMonths, setFinancingMonths] = useState<number>(36);
-  const [balloons, setBalloons] = useState<{ month: number; value: number }[]>([
-    { month: 12, value: 15000 },
-    { month: 24, value: 15000 },
-  ]);
-
-  const { payments, totalPaid, balance, calculatePayments } = usePaymentCalculator('stepped');
+  const { results, calculatePaymentFlow } = usePaymentCalculator();
+  const [formValues, setFormValues] = useState<FormValues>({
+    propertyId: "",
+    appraisalValue: 300000,
+    saleValue: 300000,
+    grossIncome: 8000,
+    simulationInstallmentValue: 2000,
+    financingParticipants: 1,
+    conditionType: "padrao",
+    downPayment: 30000,
+    financingMonths: 36,
+    payments: [
+      { type: 'balloon', date: new Date(new Date().setMonth(new Date().getMonth() + 12)), value: 15000 },
+      { type: 'balloon', date: new Date(new Date().setMonth(new Date().getMonth() + 24)), value: 15000 },
+    ],
+  });
 
   const handleCalculate = (e: React.FormEvent) => {
     e.preventDefault();
-    calculatePayments(propertyValue, downPayment, financingMonths, balloons);
+    calculatePaymentFlow(formValues, false, null);
   };
 
   const handleAddBalloon = () => {
-    setBalloons([...balloons, { month: 0, value: 0 }]);
+    const newBalloon: Payment = { type: 'balloon', date: new Date(), value: 0 };
+    setFormValues(prev => ({...prev, payments: [...(prev.payments || []), newBalloon]}));
   };
 
   const handleRemoveBalloon = (index: number) => {
-    setBalloons(balloons.filter((_, i) => i !== index));
+    setFormValues(prev => ({...prev, payments: prev.payments?.filter((_, i) => i !== index) || []}));
   };
 
-  const handleBalloonChange = (index: number, field: 'month' | 'value', value: number) => {
-    const newBalloons = [...balloons];
-    newBalloons[index][field] = value;
-    setBalloons(newBalloons);
+  const handleBalloonChange = (index: number, field: 'date' | 'value', value: Date | number) => {
+    const newPayments = [...(formValues.payments || [])];
+    const oldDate = newPayments[index].date;
+
+    if (field === 'date' && value instanceof Date) {
+        newPayments[index].date = value;
+    } else if (field === 'value') {
+        newPayments[index].value = value as number;
+    } else if (field === 'date' && typeof value === 'number') { // Handle month change
+        const newDate = new Date(oldDate);
+        newDate.setMonth(newDate.getMonth() - (newDate.getMonth() - (value-1)))
+        newPayments[index].date = newDate;
+    }
+
+    setFormValues(prev => ({...prev, payments: newPayments}));
   };
   
   const handleGeneratePDF = () => {
-    if (payments.length > 0) {
-      generatePaymentPDF({ 
-        propertyValue, 
-        downPayment, 
-        financingMonths,
-        payments,
-        totalPaid,
-        balance,
-        balloons
-      });
-    } else {
-      toast({ 
-        title: "Nenhum cálculo encontrado",
-        description: "Por favor, calcule o fluxo de pagamento antes de gerar o PDF.",
-        variant: "destructive"
-      });
-    }
+    toast({ title: "Funcionalidade desativada temporariamente", description: "A geração de PDF para esta simulação está em manutenção.", variant: "default" });
   };
 
   const formattedBalance = useMemo(() => {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(balance);
-  }, [balance]);
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(results?.summary.remaining || 0);
+  }, [results]);
 
   return (
     <div className="space-y-8">
@@ -82,8 +86,8 @@ export const SteppedPaymentFlowCalculator: React.FC = () => {
                   <Label htmlFor="propertyValue">Valor do Imóvel</Label>
                   <CurrencyInput
                     id="propertyValue"
-                    value={propertyValue}
-                    onValueChange={(value) => setPropertyValue(value || 0)}
+                    value={formValues.saleValue}
+                    onValueChange={(value) => setFormValues(prev => ({...prev, saleValue: value || 0}))}
                     className="h-12 text-base"
                   />
                 </div>
@@ -91,8 +95,8 @@ export const SteppedPaymentFlowCalculator: React.FC = () => {
                   <Label htmlFor="downPayment">Valor da Entrada</Label>
                   <CurrencyInput
                     id="downPayment"
-                    value={downPayment}
-                    onValueChange={(value) => setDownPayment(value || 0)}
+                    value={formValues.downPayment || 0}
+                    onValueChange={(value) => setFormValues(prev => ({...prev, downPayment: value || 0}))}
                     className="h-12 text-base"
                   />
                 </div>
@@ -101,8 +105,8 @@ export const SteppedPaymentFlowCalculator: React.FC = () => {
                   <Input
                     id="financingMonths"
                     type="number"
-                    value={financingMonths}
-                    onChange={(e) => setFinancingMonths(Number(e.target.value))}
+                    value={formValues.financingMonths || 0}
+                    onChange={(e) => setFormValues(prev => ({...prev, financingMonths: Number(e.target.value)}))}
                     className="h-12 text-base"
                   />
                 </div>
@@ -110,7 +114,7 @@ export const SteppedPaymentFlowCalculator: React.FC = () => {
 
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-text-primary">Parcelas Balão</h3>
-                {balloons.map((balloon, index) => (
+                {formValues.payments?.map((balloon, index) => (
                   <div key={index} className="flex items-center gap-2 p-3 bg-background-secondary rounded-lg">
                     <div className="flex-1 space-y-1">
                       <Label htmlFor={`balloon-month-${index}`} className="text-sm">Mês</Label>
@@ -118,8 +122,8 @@ export const SteppedPaymentFlowCalculator: React.FC = () => {
                         id={`balloon-month-${index}`}
                         type="number"
                         placeholder="Mês"
-                        value={balloon.month}
-                        onChange={(e) => handleBalloonChange(index, 'month', Number(e.target.value))}
+                        value={balloon.date.getMonth()+1}
+                        onChange={(e) => handleBalloonChange(index, 'date', Number(e.target.value))}
                         className="h-10"
                       />
                     </div>
@@ -140,7 +144,7 @@ export const SteppedPaymentFlowCalculator: React.FC = () => {
                       onClick={() => handleRemoveBalloon(index)}
                       className="self-end"
                     >
-                      <Apricot className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 ))}
@@ -158,7 +162,7 @@ export const SteppedPaymentFlowCalculator: React.FC = () => {
         </CardContent>
       </Card>
 
-      {payments.length > 0 && (
+      {results && (
         <Card className="shadow-apple rounded-2xl mt-8">
           <CardHeader>
             <CardTitle className="text-2xl font-semibold tracking-tight">Resultados da Simulação</CardTitle>
@@ -170,14 +174,14 @@ export const SteppedPaymentFlowCalculator: React.FC = () => {
                 <p className="text-4xl font-bold text-text-primary">{formattedBalance}</p>
               </div>
               <ResultChart 
-                totalPaid={totalPaid} 
-                balance={balance} 
-                propertyValue={propertyValue} 
+                totalPaid={formValues.payments?.reduce((acc, p) => acc + p.value, 0) || 0}
+                balance={results.summary.remaining} 
+                propertyValue={formValues.saleValue} 
               />
             </div>
             <div>
               <h3 className="text-xl font-semibold mb-4 text-center">Linha do Tempo de Pagamentos</h3>
-              <PaymentTimeline payments={payments} />
+              <PaymentTimeline results={results} formValues={formValues} />
             </div>
           </CardContent>
         </Card>

@@ -1,3 +1,4 @@
+
 // src/components/business/caixa-simulation.tsx
 "use client";
 import React, { useState, useMemo } from "react";
@@ -8,17 +9,23 @@ import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { PaymentTimeline } from "./payment-timeline";
 import { ResultChart } from "./result-chart";
-import { generatePaymentPDF } from "@/lib/generators/pdf-generator";
 import { usePaymentCalculator } from "@/hooks/usePaymentCalculator";
 import { toast } from "@/hooks/use-toast";
 import { UploadCloud } from "lucide-react";
+import { FormValues } from "@/types";
 
-async function extractDataFromPDF(file: File): Promise<any> {
+// Define the shape of the data extracted from the PDF
+interface ExtractedPdfData {
+  propertyValue?: number;
+  downPayment?: number;
+  financingMonths?: number;
+}
+
+async function extractDataFromPDF(file: File): Promise<ExtractedPdfData> {
   const formData = new FormData();
   formData.append("file", file);
 
-  // Substitua pela URL da sua API de extração de PDF
-  const response = await fetch("/api/extract-pdf", { 
+  const response = await fetch("/api/extract-pdf", {
     method: "POST",
     body: formData,
   });
@@ -34,12 +41,21 @@ async function extractDataFromPDF(file: File): Promise<any> {
 export const CaixaSimulation: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [isParsing, setIsParsing] = useState(false);
+  const { results, calculatePaymentFlow } = usePaymentCalculator();
 
-  const [propertyValue, setPropertyValue] = useState<number>(0);
-  const [downPayment, setDownPayment] = useState<number>(0);
-  const [financingMonths, setFinancingMonths] = useState<number>(0);
-  
-  const { payments, totalPaid, balance, calculatePayments } = usePaymentCalculator('linear');
+  const [formValues, setFormValues] = useState<FormValues>({
+    propertyId: "",
+    appraisalValue: 0,
+    saleValue: 0,
+    grossIncome: 0,
+    simulationInstallmentValue: 0,
+    financingParticipants: 1,
+    payments: [],
+    conditionType: "padrao",
+    birthDate: new Date(),
+    downPayment: 0,
+    financingMonths: 0,
+  });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -55,12 +71,16 @@ export const CaixaSimulation: React.FC = () => {
     setIsParsing(true);
     try {
       const data = await extractDataFromPDF(file);
-      setPropertyValue(data.propertyValue || 0);
-      setDownPayment(data.downPayment || 0);
-      setFinancingMonths(data.financingMonths || 0);
+      setFormValues(prev => ({
+        ...prev,
+        saleValue: data.propertyValue || 0,
+        downPayment: data.downPayment || 0,
+        financingMonths: data.financingMonths || 0,
+      }));
       toast({ title: "Dados extraídos com sucesso!" });
-    } catch (error: any) {
-      toast({ title: "Erro ao processar PDF", description: error.message, variant: "destructive" });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido";
+      toast({ title: "Erro ao processar PDF", description: errorMessage, variant: "destructive" });
     } finally {
       setIsParsing(false);
     }
@@ -68,25 +88,14 @@ export const CaixaSimulation: React.FC = () => {
   
   const handleCalculate = (e: React.FormEvent) => {
     e.preventDefault();
-    calculatePayments(propertyValue, downPayment, financingMonths);
+    calculatePaymentFlow(formValues, false, null);
   };
 
   const handleGeneratePDF = () => {
-    if (payments.length > 0) {
-      generatePaymentPDF({ 
-        propertyValue, 
-        downPayment, 
-        financingMonths,
-        payments,
-        totalPaid,
-        balance
-      });
-    } else {
-      toast({ title: "Nenhum cálculo encontrado", description: "Calcule o fluxo de pagamento antes de gerar.", variant: "destructive" });
-    }
+    toast({ title: "Funcionalidade desativada temporariamente", description: "A geração de PDF para esta simulação está em manutenção.", variant: "default" });
   };
 
-  const formattedBalance = useMemo(() => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(balance), [balance]);
+  const formattedBalance = useMemo(() => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(results?.summary.remaining || 0), [results]);
 
   return (
     <div className="space-y-8">
@@ -118,15 +127,15 @@ export const CaixaSimulation: React.FC = () => {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="propertyValue">Valor do Imóvel</Label>
-                  <CurrencyInput id="propertyValue" value={propertyValue} onValueChange={(value) => setPropertyValue(value || 0)} className="h-12 text-base"/>
+                  <CurrencyInput id="propertyValue" value={formValues.saleValue} onValueChange={(value) => setFormValues(prev => ({ ...prev, saleValue: value || 0}))} className="h-12 text-base"/>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="downPayment">Valor da Entrada</Label>
-                  <CurrencyInput id="downPayment" value={downPayment} onValueChange={(value) => setDownPayment(value || 0)} className="h-12 text-base"/>
+                  <CurrencyInput id="downPayment" value={formValues.downPayment || 0} onValueChange={(value) => setFormValues(prev => ({...prev, downPayment: value || 0}))} className="h-12 text-base"/>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="financingMonths">Prazo (meses)</Label>
-                  <Input id="financingMonths" type="number" value={financingMonths} onChange={(e) => setFinancingMonths(Number(e.target.value))} className="h-12 text-base"/>
+                  <Input id="financingMonths" type="number" value={formValues.financingMonths || 0} onChange={(e) => setFormValues(prev => ({...prev, financingMonths: Number(e.target.value)}))} className="h-12 text-base"/>
                 </div>
               </div>
               <div className="flex flex-col gap-4">
@@ -137,7 +146,7 @@ export const CaixaSimulation: React.FC = () => {
         </CardContent>
       </Card>
 
-      {payments.length > 0 && (
+      {results && (
         <Card className="shadow-apple rounded-2xl">
           <CardHeader>
             <CardTitle className="text-2xl font-semibold tracking-tight">Resultados da Simulação</CardTitle>
@@ -148,11 +157,15 @@ export const CaixaSimulation: React.FC = () => {
                 <h3 className="text-lg text-text-secondary">Saldo Devedor</h3>
                 <p className="text-4xl font-bold text-text-primary">{formattedBalance}</p>
               </div>
-              <ResultChart totalPaid={totalPaid} balance={balance} propertyValue={propertyValue} />
+              <ResultChart 
+                totalPaid={formValues.payments.reduce((acc, p) => acc + p.value, 0)}
+                balance={results.summary.remaining} 
+                propertyValue={formValues.saleValue} 
+              />
             </div>
             <div>
               <h3 className="text-xl font-semibold mb-4 text-center">Linha do Tempo de Pagamentos</h3>
-              <PaymentTimeline payments={payments} />
+              <PaymentTimeline results={results} formValues={formValues} />
             </div>
           </CardContent>
         </Card>

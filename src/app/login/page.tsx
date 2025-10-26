@@ -24,10 +24,11 @@ export default function LoginPage() {
       await login(email, password);
       toast({ title: "Login bem-sucedido!" });
       router.push("/");
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro ao fazer login.";
       toast({ 
         title: "Erro de autenticação",
-        description: error.message || "Ocorreu um erro ao fazer login.",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {

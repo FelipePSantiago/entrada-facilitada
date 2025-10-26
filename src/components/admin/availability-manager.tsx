@@ -22,7 +22,7 @@ import {
 import { FileSpreadsheet, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { httpsCallable } from 'firebase/functions';
-
+import { auth } from '@/lib/firebase/clientApp'; // Import auth
 
 interface AvailabilityManagerProps {
     property: Property;
@@ -38,9 +38,9 @@ export function AvailabilityManager({ property }: AvailabilityManagerProps) {
     const availabilityExcelInputRef = useRef<HTMLInputElement>(null);
 
     const allUnits = useMemo(() => {
-        return (property.availability?.towers?.flatMap((tower: Tower) => // Explicitly type tower
+        return (property.availability?.towers?.flatMap((tower: Tower) =>
             tower.floors.flatMap((floor: Floor) =>
-                floor.units.map((unit: Unit): Unit & { towerName: string; floorName: string } => // Explicitly type the returned object
+                floor.units.map((unit: Unit): Unit & { towerName: string; floorName: string } => 
                     ({
                         ...unit,
                         towerName: tower.tower,
@@ -49,16 +49,16 @@ export function AvailabilityManager({ property }: AvailabilityManagerProps) {
                 )
             )
         ) || []);
-    }, [property.availability]); // Added closing parenthesis for the inner flatMap call and wrapping the entire chain
+    }, [property.availability]);
 
-    const handleStatusChange = async (unitId: string, newStatus: UnitStatus) => { // Added closing parenthesis for the inner flatMap call and wrapping the entire chain
-        if (!user || !functions) {
+    const handleStatusChange = async (unitId: string, newStatus: UnitStatus) => {
+        if (!user || !functions || !auth.currentUser) { // Check for auth.currentUser
             toast({ variant: 'destructive', title: '❌ Erro de Autenticação', description: 'Por favor, faça login novamente.' });
             return;
         }
         setIsUpdating(prev => ({ ...prev, [unitId]: true }));
         try {
-            const idToken = await user.getIdToken(true);
+            const idToken = await auth.currentUser.getIdToken(true); // Corrected call
             const handleUnitStatusChange = httpsCallable(functions, 'handleUnitStatusChangeAction');
             await handleUnitStatusChange({ propertyId: property.id, unitId, newStatus, idToken });
             toast({
@@ -78,7 +78,7 @@ export function AvailabilityManager({ property }: AvailabilityManagerProps) {
     };
 
     const handleAvailabilityUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files?.[0] || !user || !functions) {
+        if (!e.target.files?.[0] || !user || !functions || !auth.currentUser) { // Check for auth.currentUser
             toast({ variant: 'destructive', title: '❌ Erro de Autenticação', description: 'Por favor, faça login novamente.' });
             return;
         }
@@ -97,11 +97,10 @@ export function AvailabilityManager({ property }: AvailabilityManagerProps) {
                     }
                     resolve(e.target.result);
                 };
-                fileReader.onerror = () => reject(new Error('Falha ao ler o arquivo.\''));
+                fileReader.onerror = () => reject(new Error('Falha ao ler o arquivo.'));
             });
 
-
-            const idToken = await user.getIdToken(true);
+            const idToken = await auth.currentUser.getIdToken(true); // Corrected call
             const updatePropertyAvailability = httpsCallable(functions, 'updatePropertyAvailabilityAction');
             const result = await updatePropertyAvailability({ propertyId: property.id, fileContent, idToken });
             const { unitsUpdatedCount } = result.data as { unitsUpdatedCount: number };
@@ -159,11 +158,9 @@ export function AvailabilityManager({ property }: AvailabilityManagerProps) {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {/* Iterate over allUnits which now includes towerName and floorName */}
-                            {allUnits.map((unit) => ( // Explicitly type unit
-                                <TableRow key={unit.unitId}> 
+                            {allUnits.map((unit) => (
+                                <TableRow key={unit.unitId}>
                                     <TableCell>{unit.unitNumber}</TableCell>
-                                    {/* Access towerName and floorName directly */}
                                     <TableCell>{unit.towerName}</TableCell>
                                     <TableCell>{unit.floorName}</TableCell>
                                     <TableCell>

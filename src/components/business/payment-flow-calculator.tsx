@@ -1,3 +1,4 @@
+
 // src/components/business/payment-flow-calculator.tsx
 "use client";
 
@@ -9,44 +10,38 @@ import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { PaymentTimeline } from "./payment-timeline";
 import { ResultChart } from "./result-chart";
-import { generatePaymentPDF } from "@/lib/generators/pdf-generator";
 import { usePaymentCalculator } from "@/hooks/usePaymentCalculator";
 import { toast } from "@/hooks/use-toast";
+import { FormValues } from "@/types";
 
 export const PaymentFlowCalculator: React.FC = () => {
-  const [propertyValue, setPropertyValue] = useState<number>(300000);
-  const [downPayment, setDownPayment] = useState<number>(60000);
-  const [financingMonths, setFinancingMonths] = useState<number>(36);
-
-  const { payments, totalPaid, balance, calculatePayments } = usePaymentCalculator('linear');
+  const { results, calculatePaymentFlow } = usePaymentCalculator();
+  const [formValues, setFormValues] = useState<FormValues>({
+    propertyId: "",
+    appraisalValue: 300000,
+    saleValue: 300000,
+    grossIncome: 8000,
+    simulationInstallmentValue: 2000,
+    financingParticipants: 1,
+    payments: [],
+    conditionType: "padrao",
+    birthDate: new Date(),
+    downPayment: 60000,
+    financingMonths: 36,
+  });
 
   const handleCalculate = (e: React.FormEvent) => {
     e.preventDefault();
-    calculatePayments(propertyValue, downPayment, financingMonths);
+    calculatePaymentFlow(formValues, false, null);
   };
 
   const handleGeneratePDF = () => {
-    if (payments.length > 0) {
-      generatePaymentPDF({ 
-        propertyValue, 
-        downPayment, 
-        financingMonths,
-        payments,
-        totalPaid,
-        balance
-      });
-    } else {
-      toast({ 
-        title: "Nenhum cálculo encontrado",
-        description: "Por favor, calcule o fluxo de pagamento antes de gerar o PDF.",
-        variant: "destructive"
-      });
-    }
+    toast({ title: "Funcionalidade desativada temporariamente", description: "A geração de PDF para esta simulação está em manutenção.", variant: "default" });
   };
 
   const formattedBalance = useMemo(() => {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(balance);
-  }, [balance]);
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(results?.summary.remaining || 0);
+  }, [results]);
 
   return (
     <div className="space-y-8">
@@ -61,8 +56,8 @@ export const PaymentFlowCalculator: React.FC = () => {
                 <Label htmlFor="propertyValue">Valor do Imóvel</Label>
                 <CurrencyInput
                   id="propertyValue"
-                  value={propertyValue}
-                  onValueChange={(value) => setPropertyValue(value || 0)}
+                  value={formValues.saleValue}
+                  onValueChange={(value) => setFormValues(prev => ({...prev, saleValue: value || 0}))}
                   className="h-12 text-base"
                 />
               </div>
@@ -70,8 +65,8 @@ export const PaymentFlowCalculator: React.FC = () => {
                 <Label htmlFor="downPayment">Valor da Entrada</Label>
                 <CurrencyInput
                   id="downPayment"
-                  value={downPayment}
-                  onValueChange={(value) => setDownPayment(value || 0)}
+                  value={formValues.downPayment || 0}
+                  onValueChange={(value) => setFormValues(prev => ({...prev, downPayment: value || 0}))}
                   className="h-12 text-base"
                 />
               </div>
@@ -80,8 +75,8 @@ export const PaymentFlowCalculator: React.FC = () => {
                 <Input
                   id="financingMonths"
                   type="number"
-                  value={financingMonths}
-                  onChange={(e) => setFinancingMonths(Number(e.target.value))}
+                  value={formValues.financingMonths || 0}
+                  onChange={(e) => setFormValues(prev => ({...prev, financingMonths: Number(e.target.value)}))}
                   className="h-12 text-base"
                 />
               </div>
@@ -95,7 +90,7 @@ export const PaymentFlowCalculator: React.FC = () => {
         </CardContent>
       </Card>
 
-      {payments.length > 0 && (
+      {results && (
         <Card className="shadow-apple rounded-2xl">
           <CardHeader>
             <CardTitle className="text-2xl font-semibold tracking-tight">Resultados da Simulação</CardTitle>
@@ -107,14 +102,14 @@ export const PaymentFlowCalculator: React.FC = () => {
                 <p className="text-4xl font-bold text-text-primary">{formattedBalance}</p>
               </div>
               <ResultChart 
-                totalPaid={totalPaid} 
-                balance={balance} 
-                propertyValue={propertyValue} 
+                totalPaid={formValues.payments.reduce((acc, p) => acc + p.value, 0)}
+                balance={results.summary.remaining}
+                propertyValue={formValues.saleValue} 
               />
             </div>
             <div>
               <h3 className="text-xl font-semibold mb-4 text-center">Linha do Tempo de Pagamentos</h3>
-              <PaymentTimeline payments={payments} />
+              <PaymentTimeline results={results} formValues={formValues} />
             </div>
           </CardContent>
         </Card>

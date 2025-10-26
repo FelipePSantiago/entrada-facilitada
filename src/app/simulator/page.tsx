@@ -1,14 +1,12 @@
 // src/app/simulator/page.tsx
 "use client";
 
-import { useState } from "react";
 import { SteppedPaymentFlowCalculator } from "@/components/business/stepped-payment-flow-calculator";
 import { PaymentFlowCalculator } from "@/components/business/payment-flow-calculator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Building } from "lucide-react";
 
 export default function SimulatorPage() {
-  const [activeTab, setActiveTab] = useState("stepped");
 
   return (
     <div className="min-h-screen bg-background-secondary">
@@ -25,7 +23,7 @@ export default function SimulatorPage() {
           </p>
         </div>
 
-        <Tabs defaultValue="stepped" className="w-full" onValueChange={setActiveTab}>
+        <Tabs defaultValue="stepped" className="w-full">
           <TabsList className="grid w-full grid-cols-2 h-12 rounded-xl p-1">
             <TabsTrigger value="stepped" className="h-full rounded-lg text-base">
               Tabela Price (Com Balões)

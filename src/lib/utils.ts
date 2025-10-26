@@ -47,7 +47,7 @@ export function generateId(): string {
 }
 
 // Debounce function
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -278,4 +278,35 @@ export function calculateAmortizationSchedule(
   }
   
   return schedule;
+}
+
+// Get value from object with multiple possible keys
+export function getValue(obj: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    // Direct match
+    if (obj[key] !== undefined) {
+      return obj[key];
+    }
+    
+    // Case-insensitive match
+    const lowerKey = key.toLowerCase();
+    const foundKey = Object.keys(obj).find(k => k.toLowerCase() === lowerKey);
+    if (foundKey && obj[foundKey] !== undefined) {
+      return obj[foundKey];
+    }
+  }
+  return undefined;
+}
+
+/**
+ * DEPRECATION WARNING: This function is named incorrectly.
+ * The values being passed from the excel parser are already in Reais (float), not cents.
+ * This function currently just formats the number as BRL currency.
+ * The correct function to use is `formatCurrency`.
+ * This function is kept for now to fix build errors until the logic can be refactored.
+ */
+export function centsToBrl(value: number): string {
+  // This is technically incorrect as the name implies it converts cents to BRL.
+  // However, the value passed is already a float in BRL.
+  return formatCurrency(value);
 }

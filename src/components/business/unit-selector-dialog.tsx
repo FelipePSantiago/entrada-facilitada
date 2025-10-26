@@ -2,18 +2,16 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Search, 
   Building, 
@@ -59,13 +57,11 @@ export function UnitSelectorDialog({
   const [selectedType, setSelectedType] = useState<string>("all");
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
   
-  // Simulação de carregamento de unidades - substitua com sua lógica real
   useEffect(() => {
     const fetchUnits = async () => {
       setLoading(true);
       
       try {
-        // Simulação de dados - substitua com sua chamada de API real
         const mockUnits: Unit[] = [
           {
             id: "1",
@@ -132,7 +128,6 @@ export function UnitSelectorDialog({
         setUnits(mockUnits);
         setFilteredUnits(mockUnits);
         
-        // Define a unidade selecionada se o ID for fornecido
         if (selectedUnitId) {
           const unit = mockUnits.find(u => u.id === selectedUnitId);
           if (unit) setSelectedUnit(unit);
@@ -149,7 +144,6 @@ export function UnitSelectorDialog({
     }
   }, [open, selectedUnitId]);
   
-  // Filtra as unidades com base no termo de busca e tipo
   useEffect(() => {
     let filtered = units;
     
@@ -167,7 +161,6 @@ export function UnitSelectorDialog({
     setFilteredUnits(filtered);
   }, [units, searchTerm, selectedType]);
   
-  // Formata valores como moeda brasileira
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
@@ -175,22 +168,18 @@ export function UnitSelectorDialog({
     }).format(value);
   };
   
-  // Obtém o ícone do tipo de unidade
   const getUnitTypeIcon = (type: string) => {
     return type === "casa" ? <Home className="h-4 w-4" /> : <Building className="h-4 w-4" />;
   };
   
-  // Obtém o texto do tipo de unidade
   const getUnitTypeText = (type: string) => {
     return type === "casa" ? "Casa" : "Apartamento";
   };
   
-  // Seleciona uma unidade
   const handleSelectUnit = (unit: Unit) => {
     setSelectedUnit(unit);
   };
   
-  // Confirma a seleção da unidade
   const handleConfirmSelection = () => {
     if (selectedUnit) {
       onUnitSelect(selectedUnit);
@@ -199,23 +188,22 @@ export function UnitSelectorDialog({
   };
   
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
         {children}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      </AlertDialogTrigger>
+      <AlertDialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
             <Building className="h-5 w-5" />
             Selecionar Unidade
-          </DialogTitle>
-          <DialogDescription>
+          </AlertDialogTitle>
+          <AlertDialogDescription>
             Escolha uma unidade para simular o financiamento
-          </DialogDescription>
-        </DialogHeader>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
         
         <div className="space-y-4">
-          {/* Campo de busca */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
@@ -226,7 +214,6 @@ export function UnitSelectorDialog({
             />
           </div>
           
-          {/* Filtros */}
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-gray-500" />
             <div className="flex gap-2">
@@ -254,7 +241,6 @@ export function UnitSelectorDialog({
             </div>
           </div>
           
-          {/* Lista de unidades */}
           <div className="space-y-3">
             {loading ? (
               <div className="flex justify-center py-8">
@@ -333,7 +319,6 @@ export function UnitSelectorDialog({
             )}
           </div>
           
-          {/* Botões de ação */}
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancelar
@@ -346,7 +331,7 @@ export function UnitSelectorDialog({
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

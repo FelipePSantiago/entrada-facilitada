@@ -1,8 +1,9 @@
+
 // src/contexts/AuthContext.tsx
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { 
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import {
   User as FirebaseUser,
   onAuthStateChanged,
   signOut as firebaseSignOut,
@@ -10,14 +11,17 @@ import {
   signInWithPopup,
   sendPasswordResetEmail as firebaseSendPasswordResetEmail,
   confirmPasswordReset as firebaseConfirmPasswordReset,
-  checkActionCode as firebaseCheckActionCode,
   applyActionCode as firebaseApplyActionCode,
   verifyPasswordResetCode as firebaseVerifyPasswordResetCode,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile
 } from "firebase/auth";
 import { auth } from "@/lib/firebase/clientApp";
 import { httpsCallable, getFunctions, Functions } from "firebase/functions";
 import { app } from "@/firebase/config";
 import { toast } from "sonner";
+import type { Property } from "@/types";
 
 interface User {
   uid: string;
@@ -36,32 +40,34 @@ interface AuthContextType {
   user: User | null;
   authLoading: boolean;
   isFullyAuthenticated: boolean;
+
+  isAdmin: boolean;
   has2FA: boolean | undefined;
   propertiesLoading: boolean;
-  properties: any[];
+  properties: Property[];
+  functions: Functions | null;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
-  register: (email: string, password: string, displayName: string) => Promise<void>;
+  signup: (email: string, password: string, displayName: string) => Promise<void>;
   sendPasswordResetEmail: (email: string) => Promise<void>;
   confirmPasswordReset: (code: string, newPassword: string) => Promise<void>;
   verifyEmail: (code: string) => Promise<void>;
   resetPassword: (code: string, newPassword: string) => Promise<void>;
   refreshUser: () => Promise<void>;
-  setIsPageLoading: (loading: boolean) => void;
   setIsFullyAuthenticated: (authenticated: boolean) => void;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [isFullyAuthenticated, setIsFullyAuthenticated] = useState(false);
   const [has2FA, setHas2FA] = useState<boolean | undefined>(undefined);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
-  const [properties, setProperties] = useState<any[]>([]);
-  const [pageLoading, setPageLoading] = useState(false);
+  const [properties, setProperties] = useState<Property[]>([]);
   const [functions, setFunctions] = useState<Functions | null>(null);
 
   useEffect(() => {
@@ -70,8 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Check if user has 2FA enabled
-  const check2FAStatus = async (uid: string) => {
+  const check2FAStatus = useCallback(async (uid: string) => {
     if (!functions) return;
     try {
       const checkUser2FA = httpsCallable(functions, 'checkUser2FA');
@@ -81,52 +86,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('Error checking 2FA status:', error);
       setHas2FA(false);
     }
-  };
+  }, [functions]);
 
-  // Fetch user properties
-  const fetchUserProperties = async (uid: string) => {
+  const fetchUserProperties = useCallback(async (uid: string) => {
     if (!functions) return;
     setPropertiesLoading(true);
     try {
       const getUserProperties = httpsCallable(functions, 'getUserProperties');
       const result = await getUserProperties({ uid });
-      setProperties(result.data as any[] || []);
+      setProperties(result.data as Property[] || []);
     } catch (error) {
       console.error('Error fetching user properties:', error);
       setProperties([]);
     } finally {
       setPropertiesLoading(false);
     }
-  };
+  }, [functions]);
 
-  // Transform Firebase user to app user
-  const transformUser = (firebaseUser: FirebaseUser): User => {
+  const transformUser = (firebaseUser: FirebaseUser, claims?: { [key: string]: any }): User => {
     return {
       uid: firebaseUser.uid,
       email: firebaseUser.email,
       displayName: firebaseUser.displayName,
       photoURL: firebaseUser.photoURL,
       emailVerified: firebaseUser.emailVerified,
-      customClaims: (firebaseUser as any).customClaims || {},
+      customClaims: claims || {},
     };
   };
 
-  // Listen for auth state changes
   useEffect(() => {
-    if (!functions) return;
-
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setAuthLoading(true);
-      
       if (firebaseUser) {
-        const transformedUser = transformUser(firebaseUser);
+        const idTokenResult = await firebaseUser.getIdTokenResult(true);
+        const transformedUser = transformUser(firebaseUser, idTokenResult.claims);
         setUser(transformedUser);
-        
+        setIsAdmin(idTokenResult.claims.role === 'admin');
+
         await check2FAStatus(firebaseUser.uid);
-        
+
         const emailVerified = firebaseUser.emailVerified;
         const has2FAVerified = localStorage.getItem(`2fa-verified-${firebaseUser.uid}`) === 'true';
-        
+
         if (emailVerified && (has2FA === false || has2FAVerified)) {
           setIsFullyAuthenticated(true);
           await fetchUserProperties(firebaseUser.uid);
@@ -135,28 +136,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } else {
         setUser(null);
+        setIsAdmin(false);
         setIsFullyAuthenticated(false);
         setHas2FA(false);
         setProperties([]);
       }
-      
       setAuthLoading(false);
     });
 
     return () => unsubscribe();
-  }, [functions, has2FA]);
+  }, [functions, has2FA, check2FAStatus, fetchUserProperties]);
 
-  // Login with email and password
   const login = async (email: string, password: string) => {
     try {
-      // Logic handled by onAuthStateChanged
+      await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
       console.error('Login error:', error);
       throw error;
     }
   };
 
-  // Login with Google
   const loginWithGoogle = async () => {
     try {
       const provider = new GoogleAuthProvider();
@@ -167,12 +166,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Logout
   const logout = async () => {
     try {
+      const uid = user?.uid;
       await firebaseSignOut(auth);
-      if (user) {
-        localStorage.removeItem(`2fa-verified-${user.uid}`);
+      if (uid) {
+        localStorage.removeItem(`2fa-verified-${uid}`);
       }
     } catch (error) {
       console.error('Logout error:', error);
@@ -180,17 +179,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Register new user
-  const register = async (email: string, password: string, displayName: string) => {
+  const signup = async (email: string, password: string, displayName: string) => {
     try {
-      // Logic handled by signup page
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      if (userCredential.user) {
+        await updateProfile(userCredential.user, { displayName });
+      }
     } catch (error) {
       console.error('Registration error:', error);
       throw error;
     }
   };
 
-  // Send password reset email
   const sendPasswordResetEmail = async (email: string) => {
     try {
       await firebaseSendPasswordResetEmail(auth, email);
@@ -202,7 +202,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Confirm password reset
   const confirmPasswordReset = async (code: string, newPassword: string) => {
     try {
       await firebaseConfirmPasswordReset(auth, code, newPassword);
@@ -214,7 +213,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Verify email
   const verifyEmail = async (code: string) => {
     try {
       await firebaseApplyActionCode(auth, code);
@@ -226,7 +224,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Reset password
   const resetPassword = async (code: string, newPassword: string) => {
     try {
       await firebaseVerifyPasswordResetCode(auth, code);
@@ -239,15 +236,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Refresh user data
   const refreshUser = async () => {
     if (auth.currentUser && functions) {
-      await auth.currentUser.reload();
-      const transformedUser = transformUser(auth.currentUser);
-      setUser(transformedUser);
-      
-      await check2FAStatus(auth.currentUser.uid);
-      await fetchUserProperties(auth.currentUser.uid);
+        const idTokenResult = await auth.currentUser.getIdTokenResult(true);
+        const transformedUser = transformUser(auth.currentUser, idTokenResult.claims);
+        setUser(transformedUser);
+        setIsAdmin(idTokenResult.claims.role === 'admin');
+
+        await check2FAStatus(auth.currentUser.uid);
+        await fetchUserProperties(auth.currentUser.uid);
     }
   };
 
@@ -255,19 +252,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     authLoading,
     isFullyAuthenticated,
+    isAdmin,
     has2FA,
     propertiesLoading,
     properties,
+    functions,
     login,
     loginWithGoogle,
     logout,
-    register,
+    signup,
     sendPasswordResetEmail,
     confirmPasswordReset,
     verifyEmail,
     resetPassword,
     refreshUser,
-    setIsPageLoading: setPageLoading,
     setIsFullyAuthenticated,
   };
 
