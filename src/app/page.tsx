@@ -14,15 +14,15 @@ const FeatureCard = ({
   title: string, 
   description: string 
 }) => (
-  <Card className="feature-card text-center bg-background-secondary border-none shadow-apple">
-    <CardHeader className="items-center pb-4">
-      <div className="flex items-center justify-center w-16 h-16 rounded-full bg-accent/10 text-accent mb-4">
+  <Card className="feature-card-apple">
+    <CardHeader className="feature-header-apple">
+      <div className="feature-icon-apple">
         {icon}
       </div>
-      <CardTitle className="text-xl font-semibold">{title}</CardTitle>
+ <CardTitle className="feature-content-apple-title">{title}</CardTitle>
     </CardHeader>
     <CardContent>
-      <p className="text-text-secondary">{description}</p>
+ <p className="feature-content-apple-description">{description}</p>
     </CardContent>
   </Card>
 );

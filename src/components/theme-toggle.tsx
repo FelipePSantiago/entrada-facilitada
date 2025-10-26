@@ -1,43 +1,52 @@
 // src/components/theme-toggle.tsx
 "use client";
 
+import * as React from "react";
+import { useState, useEffect } from "react";
 import { Moon, Sun } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
-  const toggleTheme = (newTheme: "light" | "dark") => {
-    setTheme(newTheme);
-    document.documentElement.setAttribute("data-theme", newTheme);
-    localStorage.setItem("theme", newTheme);
-  };
-
   useEffect(() => {
     const storedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
     if (storedTheme) {
-      toggleTheme(storedTheme);
+      setTheme(storedTheme);
     } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      toggleTheme("dark");
+      setTheme("dark");
+    } else {
+      setTheme("light");
     }
   }, []);
 
+  useEffect(() => {
+    const html = document.documentElement;
+    if (theme === "dark") {
+      html.classList.add("dark");
+    } else {
+      html.classList.remove("dark");
+    }
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prevTheme) => (prevTheme === "light" ? "dark" : "light"));
+  };
+
   return (
-    <div className="theme-toggle">
-      <button
-        className={theme === "light" ? "active" : ""}
-        onClick={() => toggleTheme("light")}
-        aria-label="Tema claro"
-      >
-        <Sun size={16} />
-      </button>
-      <button
-        className={theme === "dark" ? "active" : ""}
-        onClick={() => toggleTheme("dark")}
-        aria-label="Tema escuro"
-      >
-        <Moon size={16} />
-      </button>
-    </div>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={toggleTheme}
+      className="theme-toggle-apple"
+    >
+      {theme === "light" ? (
+        <Sun className="h-5 w-5 theme-toggle-icon-apple" />
+      ) : (
+        <Moon className="h-5 w-5 theme-toggle-icon-apple" />
+      )}
+      <span className="sr-only">Toggle theme</span>
+    </Button>
   );
 }

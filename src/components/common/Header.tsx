@@ -49,17 +49,17 @@ export function Header() {
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 max-w-7xl items-center justify-between px-4">
+    <header className="header-apple">
+      <div className="header-container-apple">
         <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white">
+          <Link href="/">
+            <div className="header-logo-icon-apple">
               <Building className="h-5 w-5" />
             </div>
-            <span className="text-xl font-bold text-text-primary">Entrada Facilitada</span>
+            <span className="header-logo-text-apple">Entrada Facilitada</span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="header-nav-apple">
             {navigation.map((item) => (
               <Link
                 key={item.name}
@@ -81,8 +81,8 @@ export function Header() {
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white">
+                <Button className="user-dropdown-button-apple">
+                  <div className="user-dropdown-icon-apple">
                     <User className="h-4 w-4" />
                   </div>
                 </Button>
@@ -119,11 +119,11 @@ export function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div className="hidden md:flex items-center gap-2">
-              <Button variant="ghost" asChild>
+            <div className="header-nav-apple">
+              <Button asChild className="button-secondary-apple">
                 <Link href="/login">Entrar</Link>
               </Button>
-              <Button asChild>
+              <Button asChild className="button-primary-apple">
                 <Link href="/plans">Planos</Link>
               </Button>
             </div>
