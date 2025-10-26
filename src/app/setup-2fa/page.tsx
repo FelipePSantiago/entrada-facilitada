@@ -1,5 +1,5 @@
+// src/app/setup-2fa/page.tsx
 "use client";
-
 import { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ShieldCheck, KeyRound } from "lucide-react";
+import { Loader2, ShieldCheck, KeyRound, Smartphone } from "lucide-react";
 import QRCode from "qrcode";
 import { useAuth } from "@/contexts/AuthContext";
 import { httpsCallable } from "firebase/functions";
@@ -30,7 +30,7 @@ function Setup2FAPageContent() {
   const [token, setToken] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
-  
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace('/login');
@@ -45,170 +45,230 @@ function Setup2FAPageContent() {
           const generateTwoFactorSecret = httpsCallable(functions, 'generateTwoFactorSecretAction');
           const result = await generateTwoFactorSecret();
           const otpauthUrl = result.data as string;
-
+          
           if (!otpauthUrl) {
-              throw new Error("Não foi possível obter a URI de autenticação. Tente recarregar a página.");
+            throw new Error("Não foi possível obter a URI de autenticação. Tente recarregar a página.");
           }
+          
           setSecretUri(otpauthUrl);
           const qr = await QRCode.toDataURL(otpauthUrl);
           setQrCode(qr);
         } catch (error: unknown) {
           const err = error instanceof Error ? error : new Error("Erro desconhecido");
           console.error("Error generating 2FA secret for setup:", err);
-          toast({ variant: "destructive", title: "Erro ao Gerar Segredo 2FA", description: err.message || "Por favor, recarregue a página." });
+          toast({
+            variant: "destructive",
+            title: "Erro ao Gerar Segredo 2FA",
+            description: err.message || "Por favor, recarregue a página.",
+          });
         } finally {
           setIsLoading(false);
         }
       };
+      
       generateSecret();
     }
   }, [user, authLoading, has2FA, toast, functions]);
 
   const handleVerifyAndSave = async (event: React.FormEvent) => {
     event.preventDefault();
+    
     if (!user || !secretUri || !functions) {
-      toast({ variant: "destructive", title: "Erro", description: "Usuário ou segredo 2FA não encontrado." });
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Usuário ou segredo 2FA não encontrado.",
+      });
       return;
     }
+    
     setIsVerifying(true);
-
+    
     try {
-        const verifyAndEnableTwoFactor = httpsCallable(functions, 'verifyAndEnableTwoFactorAction');
-        const result = await verifyAndEnableTwoFactor({ secretUri, token });
-        const isEnabled = result.data as boolean;
-
-        if (isEnabled) {
-            toast({
-              title: "Configuração 2FA Concluída!",
-              description: "Você será redirecionado para a página principal.",
-            });
-            
-            localStorage.setItem(`2fa-verified-${user.uid}`, 'true');
-            setIsFullyAuthenticated(true);
-            router.push('/simulator');
-
-        } else {
-            throw new Error("Código inválido. Tente novamente.");
-        }
-    } catch (error: unknown) {
-        const err = error as Error;
+      const verifyAndEnableTwoFactor = httpsCallable(functions, 'verifyAndEnableTwoFactorAction');
+      const result = await verifyAndEnableTwoFactor({ secretUri, token });
+      const isEnabled = result.data as boolean;
+      
+      if (isEnabled) {
         toast({
-            variant: "destructive",
-            title: "Erro na Verificação",
-            description: err.message || "Não foi possível verificar o código.",
+          title: "Configuração 2FA Concluída!",
+          description: "Você será redirecionado para a página principal.",
         });
+        
+        localStorage.setItem(`2fa-verified-${user.uid}`, 'true');
+        setIsFullyAuthenticated(true);
+        router.push('/simulator');
+      } else {
+        throw new Error("Código inválido. Tente novamente.");
+      }
+    } catch (error: unknown) {
+      const err = error as Error;
+      toast({
+        variant: "destructive",
+        title: "Erro na Verificação",
+        description: err.message || "Não foi possível verificar o código.",
+      });
     } finally {
-        setIsVerifying(false);
+      setIsVerifying(false);
     }
   };
-  
+
   if (authLoading || (user && has2FA === undefined)) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-4 text-muted-foreground">Verificando configuração de segurança...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p>Verificando configuração de segurança...</p>
+        </div>
       </div>
     );
   }
 
   if (isLoading && has2FA === false) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-4 text-muted-foreground">Gerando configuração de segurança...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p>Gerando configuração de segurança...</p>
+        </div>
       </div>
     );
   }
 
-
   if (!qrCode && !isLoading && has2FA === false) {
-     return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)] text-center">
-        <p className="text-destructive">Não foi possível gerar a configuração. Por favor, recarregue a página.</p>
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-red-500" />
+              Erro na Configuração
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>Não foi possível gerar a configuração. Por favor, recarregue a página.</p>
+            <Button 
+              onClick={() => window.location.reload()} 
+              className="w-full mt-4"
+            >
+              Recarregar Página
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   if (has2FA === false && !isLoading) {
     return (
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <ShieldCheck className="mx-auto h-12 w-12 text-primary" />
-          <CardTitle className="text-2xl mt-4">Configuração de Segurança Obrigatória</CardTitle>
-          <CardDescription>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 py-8 px-4">
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 mb-4">
+              <ShieldCheck className="h-8 w-8" />
+            </div>
+            <h1 className="text-3xl font-bold mb-2">Configuração de Segurança Obrigatória</h1>
+            <p className="text-gray-600 dark:text-gray-400">
               Para proteger sua conta, é necessário configurar a autenticação de dois fatores (2FA).
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleVerifyAndSave}>
-          <CardContent className="space-y-6">
-              <div className="space-y-2 text-sm text-left p-4 bg-secondary/50 rounded-lg">
-                  <p className="font-semibold">O que fazer:</p>
-                  <ol className="list-decimal list-inside space-y-1">
-                      <li>Instale um aplicativo autenticador (ex: Google Authenticator, Authy).</li>
-                      <li>No aplicativo, escaneie o QR Code abaixo.</li>
-                      <li>Digite o código de 6 dígitos gerado pelo aplicativo para verificar.</li>
-                  </ol>
+            </p>
+          </div>
+
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <KeyRound className="h-5 w-5" />
+                Configurar Autenticação de Dois Fatores
+              </CardTitle>
+              <CardDescription>
+                Siga os passos abaixo para configurar a autenticação de dois fatores
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                <h3 className="font-semibold mb-2 flex items-center gap-2">
+                  <Smartphone className="h-4 w-4" />
+                  O que fazer:
+                </h3>
+                <ol className="list-decimal list-inside space-y-2 text-sm">
+                  <li>Instale um aplicativo autenticador (ex: Google Authenticator, Authy).</li>
+                  <li>No aplicativo, escaneie o QR Code abaixo.</li>
+                  <li>Digite o código de 6 dígitos gerado pelo aplicativo para verificar.</li>
+                </ol>
               </div>
 
-              <div className="flex flex-col items-center gap-4">
-                  {qrCode ? (
-                      <Image
-                          src={qrCode}
-                          alt="QR Code para 2FA"
-                          width={200}
-                          height={200}
-                          className="rounded-lg border shadow-md"
-                      />
-                  ) : (
-                      <div className="h-[200px] w-[200px] flex items-center justify-center">
-                          <Loader2 className="h-8 w-8 animate-spin" />
-                      </div>
-                  )}
-              </div>
-              
-              <div className="grid gap-2">
-                  <Label htmlFor="token">Código de Verificação</Label>
-                  <div className="relative">
-                      <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                      <Input
-                      id="token"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]{6}"
-                      maxLength={6}
-                      required
-                      value={token}
-                      onChange={(e) => setToken(e.target.value)}
-                      className="pl-10 text-center tracking-[0.5em]"
-                      placeholder="_ _ _ _ _ _"
-                      />
+              <div className="flex justify-center">
+                {qrCode ? (
+                  <div className="p-4 bg-white rounded-lg shadow-md">
+                    <Image 
+                      src={qrCode} 
+                      alt="QR Code para autenticação de dois fatores" 
+                      width={200} 
+                      height={200} 
+                    />
                   </div>
+                ) : (
+                  <div className="w-[200px] h-[200px] bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                  </div>
+                )}
               </div>
-          </CardContent>
-          <CardFooter className="flex flex-col gap-4">
-              <Button type="submit" className="w-full" disabled={isVerifying || token.length !== 6}>
-              {isVerifying && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Verificar e Salvar
-              </Button>
-          </CardFooter>
-        </form>
-      </Card>
+
+              <form onSubmit={handleVerifyAndSave} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="token">Código de Verificação</Label>
+                  <Input
+                    id="token"
+                    type="text"
+                    maxLength={6}
+                    pattern="[0-9]{6}"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value.replace(/\D/g, ''))}
+                    className="text-center text-lg tracking-[0.5em]"
+                    placeholder="000000"
+                    required
+                  />
+                </div>
+                
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  disabled={isVerifying || token.length !== 6}
+                >
+                  {isVerifying && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Verificar e Salvar
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     );
   }
 
   // Fallback for any other state (prevents blank screen)
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-4 text-muted-foreground">Aguardando...</p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+      <div className="text-center">
+        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+        <p>Aguardando...</p>
+      </div>
     </div>
   );
 }
 
-export default function Setup2FAPage() {
-    return (
-        <Suspense fallback={<div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>}>
-            <Setup2FAPageContent />
-        </Suspense>
-    );
+function Setup2FAPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p>Carregando...</p>
+        </div>
+      </div>
+    }>
+      <Setup2FAPageContent />
+    </Suspense>
+  );
 }
+
+export default Setup2FAPage;

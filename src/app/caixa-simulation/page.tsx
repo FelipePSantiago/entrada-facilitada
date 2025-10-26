@@ -1,5 +1,5 @@
+// src/app/caixa-simulation/page.tsx
 "use client";
-
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getFunctions, httpsCallable, HttpsCallableResult } from "firebase/functions";
@@ -7,15 +7,15 @@ import { app } from "@/firebase/config";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { getAuth } from "firebase/auth";
 import { FaSpinner } from "react-icons/fa";
-
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { AlertCircle, CheckCircle } from "lucide-react";
 
-// Interface for the simulation result data
+// Interface para os dados do resultado da simulação
 interface SimulationResult {
   sucesso: boolean;
   dados?: {
@@ -38,11 +38,8 @@ interface SimulationResult {
 // Função para formatar valor em centavos para exibição (59800000 → R$ 598.000,00)
 const formatarCentavosParaReal = (centavos: string): string => {
   if (!centavos || centavos === '0') return 'R$ 0,00';
-  
   const numero = parseFloat(centavos) / 100; // Divide por 100 para converter centavos para reais
-  
   if (isNaN(numero)) return 'R$ 0,00';
-  
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
@@ -75,7 +72,6 @@ const corrigirFormatoValor = (valor: string): string => {
       // e a segunda é a parte decimal
       const parteInteira = partes[0].replace(',', '.'); // Converte vírgula de milhar para ponto
       const parteDecimal = partes[1];
-      
       return `R$ ${parteInteira},${parteDecimal}`;
     } else if (partes.length === 1) {
       // Se só tem uma parte, pode ser que não tenha milhares ou não tenha decimais
@@ -126,16 +122,16 @@ const formatarDataParaBackend = (data: string): string => {
 const CaixaSimulationForm = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<SimulationResult['dados'] | null>(null);
+  const [result, setResult] = useState<SimulationResult | null>(null);
   const [error, setError] = useState("");
-
+  
   const [formData, setFormData] = useState({
     renda: "",
     dataNascimento: "",
     valorImovel: "",
     sistemaAmortizacao: "PRICE TR",
   });
-
+  
   const [valoresFormatados, setValoresFormatados] = useState({
     valorImovel: "",
     renda: ""
@@ -166,9 +162,9 @@ const CaixaSimulationForm = () => {
     const valorFormatado = formatarDuranteDigitacao(apenasNumeros);
     
     console.log(`📊 Conversão ${name}:`);
-    console.log('  Valor bruto:', value);
-    console.log('  Apenas números (centavos):', apenasNumeros);
-    console.log('  Formatado (reais):', valorFormatado);
+    console.log(' Valor bruto:', value);
+    console.log(' Apenas números (centavos):', apenasNumeros);
+    console.log(' Formatado (reais):', valorFormatado);
     
     // Atualiza ambos os estados
     setValoresFormatados(prev => ({ ...prev, [name]: valorFormatado }));
@@ -214,7 +210,7 @@ const CaixaSimulationForm = () => {
     setLoading(true);
     setResult(null);
     setError("");
-
+    
     try {
       const functions = getFunctions(app);
       const simularFinanciamento = httpsCallable<Record<string, string>, SimulationResult>(
@@ -223,15 +219,15 @@ const CaixaSimulationForm = () => {
       );
       
       console.log('🚀 DADOS ENVIADOS PARA BACKEND:');
-      console.log('  Valor Imóvel:', {
-        digitado: formData.valorImovel,
-        formatado: valoresFormatados.valorImovel,
-        enviado: formData.valorImovel
+      console.log(' Valor Imóvel:', { 
+        digitado: valoresFormatados.valorImovel, 
+        formatado: valoresFormatados.valorImovel, 
+        enviado: formData.valorImovel 
       });
-      console.log('  Renda:', {
-        digitado: formData.renda,
-        formatado: valoresFormatados.renda,
-        enviado: formData.renda
+      console.log(' Renda:', { 
+        digitado: valoresFormatados.renda, 
+        formatado: valoresFormatados.renda, 
+        enviado: formData.renda 
       });
       
       // Validação dos dados
@@ -252,14 +248,14 @@ const CaixaSimulationForm = () => {
       
       const response: HttpsCallableResult<SimulationResult> = await simularFinanciamento(dadosParaBackend);
       const data = response.data;
-
+      
       console.log('✅ RESPOSTA DO BACKEND:', data);
-
+      
       if (data.sucesso && data.dados) {
-        setResult(data.dados);
-        toast({ 
-          title: "Sucesso!", 
-          description: "Simulação realizada com sucesso." 
+        setResult(data);
+        toast({
+          title: "Sucesso!",
+          description: "Simulação realizada com sucesso.",
         });
       } else if (data.message) {
         // If data.sucesso is false but there's a message, throw an error with the message
@@ -302,10 +298,10 @@ const CaixaSimulationForm = () => {
       }
       
       setError(errorMessage);
-      toast({ 
-        variant: "destructive", 
-        title: "Erro na Simulação", 
-        description: errorMessage 
+      toast({
+        variant: "destructive",
+        title: "Erro na Simulação",
+        description: errorMessage
       });
     } finally {
       setLoading(false);
@@ -313,158 +309,189 @@ const CaixaSimulationForm = () => {
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardHeader>
-        <CardTitle>Origem de recurso: SBPE</CardTitle>
-        <CardDescription>
-          Preencha os dados para simular o financiamento.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="valorImovel">Valor de Avaliação do Imóvel</Label>
-            <Input 
-              id="valorImovel" 
-              name="valorImovel" 
-              type="text"
-              value={valoresFormatados.valorImovel}
-              onChange={handleChange}
-              onFocus={() => handleMonetaryFocus('valorImovel')}
-              onBlur={() => handleMonetaryBlur('valorImovel')}
-              placeholder="R$ 0,00"
-              required 
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="renda">Renda Familiar Mensal Bruta</Label>
-            <Input 
-              id="renda" 
-              name="renda" 
-              type="text"
-              value={valoresFormatados.renda}
-              onChange={handleChange}
-              onFocus={() => handleMonetaryFocus('renda')}
-              onBlur={() => handleMonetaryBlur('renda')}
-              placeholder="R$ 0,00"
-              required 
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="dataNascimento">Data de Nascimento</Label>
-            <Input 
-              id="dataNascimento" 
-              name="dataNascimento" 
-              type="date" 
-              value={formData.dataNascimento} 
-              onChange={handleChange} 
-              required 
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="sistemaAmortizacao">Sistema de Amortização</Label>
-            <Select 
-              value={formData.sistemaAmortizacao} 
-              onValueChange={(value) => setFormData(prev => ({ ...prev, sistemaAmortizacao: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o sistema" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="PRICE TR">PRICE TR</SelectItem>
-                <SelectItem value="SAC TR">SAC TR</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <Button type="submit" disabled={loading} className="w-full md:col-span-2">
-            {loading && <FaSpinner className="mr-2 h-4 w-4 animate-spin" />}
-            {loading ? "Simulando..." : "Simular Financiamento"}
-          </Button>
-        </form>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 py-8 px-4">
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl font-bold mb-2">Simulação Caixa</h1>
+          <p className="text-gray-600 dark:text-gray-400">Origem de recurso: SBPE</p>
+        </div>
 
-        {error && (
-          <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-            <strong>Erro:</strong> {error}
-          </div>
-        )}
-
+        <Card className="shadow-lg mb-6">
+          <CardHeader>
+            <CardTitle className="text-xl">Preencha os dados para simular o financiamento.</CardTitle>
+            <CardDescription>
+              Todos os campos são obrigatórios para realizar a simulação.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="valorImovel">Valor de Avaliação do Imóvel</Label>
+                  <Input
+                    id="valorImovel"
+                    name="valorImovel"
+                    value={valoresFormatados.valorImovel}
+                    onChange={handleChange}
+                    onFocus={() => handleMonetaryFocus('valorImovel')}
+                    onBlur={() => handleMonetaryBlur('valorImovel')}
+                    placeholder="R$ 0,00"
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="renda">Renda Familiar Mensal Bruta</Label>
+                  <Input
+                    id="renda"
+                    name="renda"
+                    value={valoresFormatados.renda}
+                    onChange={handleChange}
+                    onFocus={() => handleMonetaryFocus('renda')}
+                    onBlur={() => handleMonetaryBlur('renda')}
+                    placeholder="R$ 0,00"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="dataNascimento">Data de Nascimento</Label>
+                  <Input
+                    id="dataNascimento"
+                    name="dataNascimento"
+                    type="date"
+                    value={formData.dataNascimento}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="sistemaAmortizacao">Sistema de Amortização</Label>
+                  <Select value={formData.sistemaAmortizacao} onValueChange={(value) => setFormData(prev => ({ ...prev, sistemaAmortizacao: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o sistema" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PRICE TR">PRICE TR</SelectItem>
+                      <SelectItem value="SAC">SAC</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={loading}
+                size="lg"
+              >
+                {loading && <FaSpinner className="mr-2 h-4 w-4 animate-spin" />}
+                {loading ? "Simulando..." : "Simular Financiamento"}
+              </Button>
+            </form>
+            
+            {error && (
+              <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="font-semibold text-red-800 dark:text-red-400">Erro:</h4>
+                  <p className="text-red-700 dark:text-red-300">{error}</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        
         {result && (
-          <Card className="mt-6">
+          <Card className="shadow-lg">
             <CardHeader>
-              <CardTitle>Resultados da Simulação Caixa</CardTitle>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-500" />
+                Resultados da Simulação Caixa
+              </CardTitle>
               <CardDescription>
                 Valores extraídos diretamente do portal da Caixa
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="border rounded-lg p-4">
-                  <p className="font-semibold text-sm text-muted-foreground">Prazo:</p>
-                  <p className="text-lg font-bold">{result.Prazo || 'N/A'}</p>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Prazo:</span>
+                    <span className="font-medium">{result.dados.Prazo || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Valor Total Financiado:</span>
+                    <span className="font-medium">{corrigirFormatoValor(result.dados.Valor_Total_Financiado || 'N/A')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Primeira Prestação:</span>
+                    <span className="font-medium">{corrigirFormatoValor(result.dados.Primeira_Prestacao || 'N/A')}</span>
+                  </div>
                 </div>
-                <div className="border rounded-lg p-4">
-                  <p className="font-semibold text-sm text-muted-foreground">Valor Total Financiado:</p>
-                  <p className="text-lg font-bold text-green-600">
-                    {corrigirFormatoValor(result.Valor_Total_Financiado || 'N/A')}
-                  </p>
-                </div>
-                <div className="border rounded-lg p-4">
-                  <p className="font-semibold text-sm text-muted-foreground">Primeira Prestação:</p>
-                  <p className="text-lg font-bold text-blue-600">
-                    {corrigirFormatoValor(result.Primeira_Prestacao || 'N/A')}
-                  </p>
-                </div>
-                <div className="border rounded-lg p-4">
-                  <p className="font-semibold text-sm text-muted-foreground">Juros Efetivos:</p>
-                  <p className="text-lg font-bold text-purple-600">
-                    {corrigirFormatoValor(result.Juros_Efetivos || 'N/A')}
-                  </p>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Juros Efetivos:</span>
+                    <span className="font-medium">{corrigirFormatoValor(result.dados.Juros_Efetivos || 'N/A')}</span>
+                  </div>
+                  {result.dados.valorImovel && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Valor do Imóvel:</span>
+                      <span className="font-medium">{corrigirFormatoValor(result.dados.valorImovel)}</span>
+                    </div>
+                  )}
+                  {result.dados.sistemaAmortizacao && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Sistema de Amortização:</span>
+                      <span className="font-medium">{result.dados.sistemaAmortizacao}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>
           </Card>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 };
 
 export default function CaixaSimulationPage() {
   const [user, loading] = useAuthState(getAuth(app));
-  const router = useRouter();
-  const { toast } = useToast();
-
-  useEffect(() => {
-    if (!loading && !user) {
-      toast({ 
-        variant: "destructive", 
-        title: "Acesso Restrito", 
-        description: "Você precisa estar logado para acessar esta página." 
-      });
-      router.push("/login");
-    }
-  }, [user, loading, router, toast]);
-
+  
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <FaSpinner className="h-8 w-8 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <div className="text-center">
+          <FaSpinner className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p>Carregando...</p>
+        </div>
       </div>
     );
   }
-
+  
   if (!user) {
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-2xl">Acesso Restrito</CardTitle>
+            <CardDescription>
+              Você precisa estar logado para acessar esta página.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild className="w-full">
+              <a href="/login">Fazer Login</a>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
-
-  return (
-    <div className="container mx-auto p-4 py-8">
-      <h1 className="text-3xl font-bold text-center mb-8">Simulação Automatizada Caixa</h1>
-      <CaixaSimulationForm />
-    </div>
-  );
+  
+  return <CaixaSimulationForm />;
 }

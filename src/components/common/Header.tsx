@@ -1,14 +1,20 @@
-
+// src/components/common/Header.tsx
 "use client";
-
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { 
+  Home, 
+  Calculator, 
+  CreditCard, 
+  User, 
+  LogOut, 
+  Menu,
+  X,
+  Building
+} from "lucide-react";
+import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase/clientApp";
-import { useToast } from "@/hooks/use-toast";
-import { LayoutDashboard, LogOut } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,83 +23,173 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ThemeToggle } from "@/components/theme-toggle";
 
-export default function Header() {
-    const { user, isAdmin, isFullyAuthenticated } = useAuth();
-    const pathname = usePathname();
-    const { toast } = useToast();
-
-    const handleLogout = async () => {
-        try {
-            await signOut(auth);
-            toast({
-                title: "Logout bem-sucedido!",
-                description: "Você foi desconectado.",
-            });
-        } catch {
-             toast({
-                variant: "destructive",
-                title: "Erro no Logout",
-                description: "Não foi possível fazer o logout. Tente novamente.",
-            });
-        }
-    };
-    
-    const getInitials = (email: string) => {
-        if (!email) return '?';
-        return email[0].toUpperCase();
-    };
-
-    return (
-        <header className="absolute top-0 left-0 w-full p-4 bg-background/80 backdrop-blur-sm shadow-sm z-10">
-          <div className="container mx-auto flex justify-between items-center">
-            <Link href="/" className="text-2xl font-bold text-primary">
-                Entrada Facilitada
-            </Link>
-            
-            <div className="flex justify-end items-center gap-2">
-              <ThemeToggle />
-              {isFullyAuthenticated && (
+export function Header() {
+  const pathname = usePathname();
+  const { user, logout } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  const isActive = (path: string) => {
+    return pathname === path;
+  };
+  
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error);
+    }
+  };
+  
+  const navigation = [
+    { name: "Início", href: "/", icon: Home },
+    { name: "Simulador", href: "/simulator", icon: Calculator },
+    { name: "Simulação Caixa", href: "/caixa-simulation", icon: Building },
+    { name: "Planos", href: "/plans", icon: CreditCard },
+  ];
+  
+  return (
+    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/60">
+      <div className="container flex h-16 items-center justify-between px-4">
+        <div className="flex items-center gap-6">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white">
+              <Building className="h-5 w-5" />
+            </div>
+            <span className="text-xl font-bold text-text-primary">Entrada Facilitada</span>
+          </Link>
+          
+          <nav className="hidden md:flex items-center gap-1">
+            {navigation.map((item) => (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  isActive(item.href)
+                    ? "bg-accent/10 text-accent"
+                    : "text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.name}
+              </Link>
+            ))}
+          </nav>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white">
+                    <User className="h-4 w-4" />
+                  </div>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none text-text-primary">
+                      {user.displayName || user.email}
+                    </p>
+                    <p className="text-xs leading-none text-text-secondary">
+                      {user.email}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/profile" className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    <span>Perfil</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/settings" className="flex items-center gap-2">
+                    <Calculator className="h-4 w-4" />
+                    <span>Configurações</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2">
+                  <LogOut className="h-4 w-4" />
+                  <span>Sair</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <div className="hidden md:flex items-center gap-2">
+              <Button variant="ghost" asChild>
+                <Link href="/login">Entrar</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/plans">Planos</Link>
+              </Button>
+            </div>
+          )}
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            {mobileMenuOpen ? (
+              <X className="h-5 w-5" />
+            ) : (
+              <Menu className="h-5 w-5" />
+            )}
+            <span className="sr-only">Alternar menu</span>
+          </Button>
+        </div>
+      </div>
+      
+      {/* Mobile menu */}
+      {mobileMenuOpen && (
+        <div className="border-t md:hidden">
+          <div className="container px-4 py-4">
+            <nav className="flex flex-col space-y-2">
+              {navigation.map((item) => (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive(item.href)
+                      ? "bg-accent/10 text-accent"
+                      : "text-text-secondary hover:text-text-primary"
+                  }`}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.name}
+                </Link>
+              ))}
+              
+              {!user && (
                 <>
-                  {isAdmin && (
-                    <Button variant={pathname.startsWith('/admin') ? "secondary" : "ghost"} asChild>
-                       <Link href="/admin/properties">
-                        <LayoutDashboard className="mr-2 h-4 w-4" />
-                         Admin
-                       </Link>
-                    </Button>
-                  )}
-                 <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                           <Avatar className="h-8 w-8">
-                                <AvatarImage src={user?.photoURL || ''} alt={user?.displayName || 'Avatar'} />
-                                <AvatarFallback>{getInitials(user?.email || '')}</AvatarFallback>
-                            </Avatar>
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-56" align="end" forceMount>
-                        <DropdownMenuLabel className="font-normal">
-                          <div className="flex flex-col space-y-1">
-                            <p className="text-sm font-medium leading-none">Minha Conta</p>
-                            <p className="text-xs leading-none text-muted-foreground">
-                              {user?.email}
-                            </p>
-                          </div>
-                        </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={handleLogout}>
-                          <LogOut className="mr-2 h-4 w-4" />
-                          <span>Sair</span>
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                 </DropdownMenu>
+                  <Link
+                    href="/login"
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <User className="h-4 w-4" />
+                    Entrar
+                  </Link>
+                  <Link
+                    href="/plans"
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    Planos
+                  </Link>
                 </>
               )}
-            </div>
+            </nav>
           </div>
-        </header>
-    )
+        </div>
+      )}
+    </header>
+  );
 }

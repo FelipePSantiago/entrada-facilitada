@@ -1,3 +1,4 @@
+// src/components/ui/toast.tsx
 "use client"
 
 import * as React from "react"
@@ -31,7 +32,7 @@ const toastVariants = cva(
       variant: {
         default: "border bg-background text-foreground",
         destructive:
-          "destructive group border-destructive bg-destructive text-destructive-foreground",
+          "destructive group border-red-500 bg-red-500 text-white",
       },
     },
     defaultVariants: {

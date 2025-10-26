@@ -1,8 +1,8 @@
+// src/app/plans/page.tsx
 "use client";
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Check, CreditCard, ArrowLeft } from "lucide-react"
+import { Check, CreditCard, ArrowLeft, QrCode } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -15,133 +15,135 @@ import {
 } from "@/components/ui/card"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
 
 type Plan = "Mensal" | "Semestral" | "Anual"
+type PaymentMethod = "creditCard" | "pix"
 
 const plans = {
   Mensal: {
     price: "30",
-    links: {
-      creditCard: "https://pay.sumup.com/b2c/Q0FRYLR6",
-    },
+    period: "/mês",
+    features: [
+      "Simulações Ilimitadas",
+      "Exportação de PDF",
+      "Suporte Prioritário"
+    ],
   },
   Semestral: {
     price: "150",
-    links: {
-      creditCard: "https://pay.sumup.com/b2c/Q3QCURHB",
-    },
+    period: "/semestre",
+    features: [
+      "Simulações Ilimitadas",
+      "Exportação de PDF",
+      "Suporte Prioritário",
+      "Economia de 2 meses"
+    ],
   },
   Anual: {
     price: "250",
-    links: {
-      creditCard: "https://pay.sumup.com/b2c/QI2UYEAT",
-    },
+    period: "/ano",
+    features: [
+      "Simulações Ilimitadas",
+      "Exportação de PDF",
+      "Suporte Prioritário",
+      "Economia de 5 meses",
+      "Acesso a novos recursos"
+    ],
   },
 }
 
 export default function PlansPage() {
   const router = useRouter()
   const [selectedPlan, setSelectedPlan] = useState<Plan>("Anual")
-  const [paymentMethod, setPaymentMethod] = useState("creditCard")
-
-  const handleSubscription = () => {
-    router.push(`/signup?plan=${selectedPlan}&paymentMethod=${paymentMethod}`);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("creditCard")
+  
+  const handleSubscription = () => { 
+    router.push(`/signup?plan=${selectedPlan}&paymentMethod=${paymentMethod}`); 
   };
 
   return (
-    <Card className="w-full max-w-4xl relative m-4">
-      <CardHeader className="text-center">
-        <Button 
-          variant="outline" 
-          className="absolute top-4 left-4 sm:top-6 sm:left-6" 
-          onClick={() => router.back()}
-        >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar
-        </Button>
-        <CardTitle className="text-2xl sm:text-3xl font-bold pt-16 sm:pt-12">
-          Escolha o Plano Ideal para Você
-        </CardTitle>
-        <CardDescription>
-          Acesso ilimitado à ferramenta de simulação.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4 sm:gap-6 md:grid-cols-3">
-        {Object.entries(plans).map(([name, plan]) => (
-          <Card
-            key={name}
-            className={cn(
-              "cursor-pointer transition-all",
-              selectedPlan === name
-                ? "border-primary ring-2 ring-primary shadow-lg"
-                : "border-border hover:shadow-md"
-            )}
-            onClick={() => setSelectedPlan(name as Plan)}
-          >
-            <CardHeader className="items-center">
-              <CardTitle>{name}</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center">
-              <p className="text-4xl font-bold">R${plan.price}</p>
-              <p className="text-sm text-muted-foreground">
-                {name === "Mensal" ? "/mês" : ""}
-                {name === "Semestral" ? "/semestre" : ""}
-                {name === "Anual" ? "/ano" : ""}
-              </p>
-            </CardContent>
-            <CardFooter className="flex-col items-start p-4 text-sm space-y-2">
-                <div className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    <span>Simulações Ilimitadas</span>
-                </div>
-                 <div className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    <span>Exportação de PDF</span>
-                </div>
-                 <div className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    <span>Suporte Prioritário</span>
-                </div>
-            </CardFooter>
-          </Card>
-        ))}
-      </CardContent>
-      <Separator className="my-6" />
-      <CardFooter className="flex flex-col items-center gap-6">
-        <div className="text-center">
-            <h3 className="text-lg font-semibold">Selecione a forma de pagamento</h3>
-            <RadioGroup
-            value={paymentMethod}
-            onValueChange={setPaymentMethod}
-            className="mt-4 flex flex-wrap justify-center gap-4 sm:gap-8"
-            >
-            <Label
-                htmlFor="creditCard"
-                className="flex flex-col items-center gap-2 cursor-pointer rounded-lg border-2 p-4 transition-all [&[data-state=checked]]:border-primary"
-                data-state={paymentMethod === 'creditCard' ? 'checked' : 'unchecked'}
-            >
-                <RadioGroupItem value="creditCard" id="creditCard" className="sr-only"/>
-                <CreditCard className="h-8 w-8" />
-                <span>Cartão de Crédito</span>
-            </Label>
-             <Label
-                htmlFor="pix"
-                className="flex flex-col items-center gap-2 cursor-pointer rounded-lg border-2 p-4 transition-all [&[data-state=checked]]:border-primary"
-                data-state={paymentMethod === 'pix' ? 'checked' : 'unchecked'}
-
-            >
-                <RadioGroupItem value="pix" id="pix" className="sr-only" />
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 24 24"><path fill="currentColor" d="M11.983 2.5a.75.75 0 0 1 .75.75v3.435a.75.75 0 0 1-1.5 0V3.25a.75.75 0 0 1 .75-.75M6.62 4.3a.75.75 0 0 1 .832.545l1.366 4.44a.75.75 0 0 1-1.424.437L6.028 5.28a.75.75 0 0 1 .545-.832m10.76 0a.75.75 0 0 1 .545.832L15.996 9.72a.75.75 0 1 1-1.424-.437l1.366-4.44a.75.75 0 0 1 .832-.545M2.5 11.983a.75.75 0 0 1 .75-.75h3.435a.75.75 0 0 1 0 1.5H3.25a.75.75 0 0 1-.75-.75m17.5 0a.75.75 0 0 1-.75.75h-3.435a.75.75 0 0 1 0-1.5h3.435a.75.75 0 0 1 .75.75m-3.435 6.134a.75.75 0 0 1 0 1.5H8.383l-3.99 3.99a.75.75 0 1 1-1.06-1.06l3.99-3.99h6.134M13.8 11.233a2.5 2.5 0 1 1-3.536-3.536a2.5 2.5 0 0 1 3.536 3.536"/></svg>
-                <span>PIX</span>
-            </Label>
-            </RadioGroup>
+    <div className="min-h-screen bg-background-secondary py-12 px-4">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl font-bold text-text-primary mb-2">Escolha o Plano Ideal para Você</h1>
+          <p className="text-text-secondary">Acesso ilimitado à ferramenta de simulação.</p>
         </div>
-        
-        <Button size="lg" className="w-full max-w-sm" onClick={handleSubscription}>
-          Ir para o Cadastro
-        </Button>
-      </CardFooter>
-    </Card>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+          {Object.entries(plans).map(([name, plan]) => (
+            <Card 
+              key={name} 
+              className={cn(
+                "relative overflow-hidden transition-all duration-300 cursor-pointer",
+                selectedPlan === name 
+                  ? "ring-2 ring-accent shadow-lg transform scale-105" 
+                  : "hover:transform hover:scale-102 hover:shadow-md"
+              )}
+              onClick={() => setSelectedPlan(name as Plan)}
+            >
+              {name === "Anual" && (
+                <div className="absolute top-0 right-0 bg-accent text-white px-3 py-1 text-xs font-semibold rounded-bl-lg">
+                  MAIS POPULAR
+                </div>
+              )}
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl text-center">{name}</CardTitle>
+                <div className="text-center">
+                  <span className="text-3xl font-bold text-text-primary">R${plan.price}</span>
+                  <span className="text-text-secondary ml-1">{plan.period}</span>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <ul className="space-y-3">
+                  {plan.features.map((feature, index) => (
+                    <li key={index} className="flex items-start">
+                      <Check className="h-5 w-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
+                      <span className="text-sm text-text-secondary">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+              <CardFooter>
+                <Button 
+                  variant={selectedPlan === name ? "default" : "outline"} 
+                  className="w-full"
+                >
+                  {selectedPlan === name ? "Selecionado" : "Selecionar"}
+                </Button>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+
+        <Card className="max-w-md mx-auto shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-lg">Selecione a forma de pagamento</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RadioGroup value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as PaymentMethod)} className="space-y-4">
+              <Label htmlFor="creditCard" className="flex items-center cursor-pointer text-base p-4 rounded-lg border border-border has-[:checked]:bg-accent/10 has-[:checked]:border-accent">
+                <RadioGroupItem value="creditCard" id="creditCard" className="mr-4" />
+                <CreditCard className="mr-2 h-5 w-5" />
+                Cartão de Crédito
+              </Label>
+              <Label htmlFor="pix" className="flex items-center cursor-pointer text-base p-4 rounded-lg border border-border has-[:checked]:bg-accent/10 has-[:checked]:border-accent">
+                <RadioGroupItem value="pix" id="pix" className="mr-4" />
+                <QrCode className="mr-2 h-5 w-5" />
+                PIX
+              </Label>
+            </RadioGroup>
+          </CardContent>
+          <CardFooter>
+            <Button 
+              onClick={handleSubscription} 
+              className="w-full"
+              size="lg"
+            >
+              Ir para o Cadastro
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    </div>
   )
 }

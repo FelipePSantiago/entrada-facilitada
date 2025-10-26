@@ -1,389 +1,352 @@
-'use client';
-
-import React, { useMemo, useRef, useState, useEffect, memo } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+// src/components/business/unit-selector-dialog.tsx
+"use client";
+import React, { useState, useEffect } from 'react';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-} from "@/components/ui/card";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
-  Grid3X3,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  Search, 
+  Building, 
+  MapPin, 
+  Home, 
+  Square, 
+  Bed, 
+  Bath, 
   Car,
-  Sun,
-  Ruler,
-  Tag,
   Filter,
-} from "lucide-react";
-import { Separator } from "@/components/ui/separator";
-import type { CombinedUnit, UnitStatus } from "@/types";
-import { cn } from "@/lib/utils";
-import { centsToBrl } from "@/lib/business/formatters";
+  Check
+} from 'lucide-react';
 
-interface VirtualRow {
-  index: number;
-  key: React.Key;
-  size: number;
-  start: number;
+interface Unit {
+  id: string;
+  name: string;
+  address: string;
+  type: string;
+  area: number;
+  bedrooms: number;
+  bathrooms: number;
+  parkingSpaces: number;
+  price: number;
+  available: boolean;
 }
 
-const getStatusBadgeClass = (status: UnitStatus) => {
-  switch (status) {
-    case 'Disponível':
-      return 'border-primary/50 bg-primary/10 text-primary hover:shadow-lg hover:border-primary';
-    case 'Vendido':
-      return 'border-destructive/50 bg-destructive/10 text-destructive opacity-60 cursor-not-allowed';
-    case 'Reservado':
-      return 'border-yellow-500/50 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 opacity-80 cursor-not-allowed';
-    case 'Indisponível':
-      return 'border-muted-foreground/50 bg-muted/80 text-muted-foreground opacity-60 cursor-not-allowed';
-    default:
-      return 'border-border bg-muted/80';
-  }
-};
-
-const useResponsiveColumns = () => {
-    const [columns, setColumns] = useState(1);
-
-    useEffect(() => {
-        const getColumns = (width: number) => {
-            if (width < 640) return 1; 
-            if (width < 768) return 2;
-            if (width < 1024) return 3;
-            if (width < 1280) return 4;
-            return 5;
-        };
-
-        const handleResize = () => {
-            setColumns(getColumns(window.innerWidth));
-        };
-
-        window.addEventListener('resize', handleResize);
-        handleResize(); 
-
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-
-    return columns;
-};
-
-interface UnitCardProps {
-    unit: CombinedUnit;
-    isReservaParque: boolean;
-    onUnitSelect: (unit: CombinedUnit) => void;
+interface UnitSelectorDialogProps {
+  children: React.ReactNode;
+  onUnitSelect: (unit: Unit) => void;
+  selectedUnitId?: string;
 }
 
-const UnitCard = memo(({ unit, isReservaParque, onUnitSelect }: UnitCardProps) => {
-    const unitDisplay = isReservaParque ? `Torre ${unit.block}` : `Bloco ${unit.block}`;
-    
-    const handleClick = () => {
-        if (unit.status === 'Disponível') {
-            onUnitSelect(unit);
+export function UnitSelectorDialog({ 
+  children, 
+  onUnitSelect, 
+  selectedUnitId 
+}: UnitSelectorDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [filteredUnits, setFilteredUnits] = useState<Unit[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedType, setSelectedType] = useState<string>("all");
+  const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
+  
+  // Simulação de carregamento de unidades - substitua com sua lógica real
+  useEffect(() => {
+    const fetchUnits = async () => {
+      setLoading(true);
+      
+      try {
+        // Simulação de dados - substitua com sua chamada de API real
+        const mockUnits: Unit[] = [
+          {
+            id: "1",
+            name: "Apto 101",
+            address: "Rua das Flores, 123 - Centro",
+            type: "apartamento",
+            area: 65,
+            bedrooms: 2,
+            bathrooms: 1,
+            parkingSpaces: 1,
+            price: 350000,
+            available: true,
+          },
+          {
+            id: "2",
+            name: "Apto 202",
+            address: "Rua das Flores, 123 - Centro",
+            type: "apartamento",
+            area: 85,
+            bedrooms: 3,
+            bathrooms: 2,
+            parkingSpaces: 2,
+            price: 450000,
+            available: true,
+          },
+          {
+            id: "3",
+            name: "Casa 01",
+            address: "Rua das Árvores, 456 - Jardim",
+            type: "casa",
+            area: 120,
+            bedrooms: 3,
+            bathrooms: 2,
+            parkingSpaces: 2,
+            price: 650000,
+            available: true,
+          },
+          {
+            id: "4",
+            name: "Apto 305",
+            address: "Avenida Principal, 789 - Nova",
+            type: "apartamento",
+            area: 75,
+            bedrooms: 2,
+            bathrooms: 2,
+            parkingSpaces: 1,
+            price: 420000,
+            available: false,
+          },
+          {
+            id: "5",
+            name: "Casa 05",
+            address: "Rua das Árvores, 456 - Jardim",
+            type: "casa",
+            area: 150,
+            bedrooms: 4,
+            bathrooms: 3,
+            parkingSpaces: 3,
+            price: 850000,
+            available: true,
+          },
+        ];
+        
+        setUnits(mockUnits);
+        setFilteredUnits(mockUnits);
+        
+        // Define a unidade selecionada se o ID for fornecido
+        if (selectedUnitId) {
+          const unit = mockUnits.find(u => u.id === selectedUnitId);
+          if (unit) setSelectedUnit(unit);
         }
+      } catch (error) {
+        console.error("Erro ao carregar unidades:", error);
+      } finally {
+        setLoading(false);
+      }
     };
     
-    return (
-        <div>
-            <Card 
-                className={cn(
-                    "cursor-pointer transition-all duration-200 shadow-sm border rounded-lg overflow-hidden group h-full flex flex-col",
-                    getStatusBadgeClass(unit.status),
-                    unit.status === 'Disponível' && 'hover:shadow-xl hover:-translate-y-1'
-                )}
-                onClick={handleClick}
-            >
-                <CardHeader className="p-4 pb-2 flex-row justify-between items-start">
-                    <div>
-                        <p className="font-bold text-base text-card-foreground">{unitDisplay}</p>
-                        <p className="font-semibold text-sm text-primary">Unidade {unit.unitNumber}</p>
-                        <p className="text-xs text-muted-foreground">{unit.floor}</p>
-                    </div>
-                    <div className={cn("text-xs font-bold px-2 py-1 rounded-full", getStatusBadgeClass(unit.status).replace(/hover:[a-z-]+/g, ''))}>
-                    {unit.status}
-                    </div>
-                </CardHeader>
-                <CardContent className="p-4 pt-2 text-xs space-y-1.5 flex-grow">
-                    <div className="flex justify-between items-baseline pt-2">
-                        <span className="font-semibold text-muted-foreground">Venda:</span>
-                        <span className="font-bold text-lg text-primary">{centsToBrl(unit.saleValue)}</span>
-                    </div>
-                    <Separator className="my-2"/>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                        <Grid3X3 className="h-4 w-4 text-primary/70"/> 
-                        <strong className="text-card-foreground/80">Tipologia:</strong> {unit.typology}
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                        <Ruler className="h-4 w-4 text-primary/70"/> 
-                        <strong className="text-card-foreground/80">Área:</strong> {(unit.privateArea).toFixed(2)}m²
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                        <Sun className="h-4 w-4 text-primary/70"/> 
-                        <strong className="text-card-foreground/80">Sol:</strong> {unit.sunPosition}
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                        <Car className="h-4 w-4 text-primary/70"/> 
-                        <strong className="text-card-foreground/80">Vagas:</strong> {unit.parkingSpaces}
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                        <Tag className="h-4 w-4 text-primary/70"/> 
-                        <strong className="text-card-foreground/80">Avaliação:</strong> {centsToBrl(unit.appraisalValue)}
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                        <Tag className="h-4 w-4 text-primary/70"/> 
-                        <strong className="text-card-foreground/80">Bônus:</strong> {centsToBrl(unit.complianceBonus)}
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
-    );
-});
-UnitCard.displayName = 'UnitCard';
-
-export const UnitSelectorDialogContent = ({
-  allUnits,
-  filteredUnits,
-  isReservaParque,
-  onUnitSelect,
-  filters,
-  filterOptions,
-}: {
-  allUnits: CombinedUnit[];
-  filteredUnits: CombinedUnit[];
-  isReservaParque: boolean;
-  onUnitSelect: (unit: CombinedUnit) => void;
-  filters: {
-    status: UnitStatus | 'Todos';
-    setStatus: (s: UnitStatus | 'Todos') => void;
-    floor: string;
-    setFloor: (f: string) => void;
-    typology: string;
-    setTypology: (t: string) => void;
-    sunPosition: string;
-    setSunPosition: (s: string) => void;
+    if (open) {
+      fetchUnits();
+    }
+  }, [open, selectedUnitId]);
+  
+  // Filtra as unidades com base no termo de busca e tipo
+  useEffect(() => {
+    let filtered = units;
+    
+    if (searchTerm) {
+      filtered = filtered.filter(unit => 
+        unit.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        unit.address.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    if (selectedType !== "all") {
+      filtered = filtered.filter(unit => unit.type === selectedType);
+    }
+    
+    setFilteredUnits(filtered);
+  }, [units, searchTerm, selectedType]);
+  
+  // Formata valores como moeda brasileira
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(value);
   };
-  filterOptions: {
-    floors: string[];
-    typologies: string[];
-    sunPositions: string[];
+  
+  // Obtém o ícone do tipo de unidade
+  const getUnitTypeIcon = (type: string) => {
+    return type === "casa" ? <Home className="h-4 w-4" /> : <Building className="h-4 w-4" />;
   };
-}) => {
-  const parentRef = useRef<HTMLDivElement>(null);
-  const columns = useResponsiveColumns();
-
-  const unitCounts = useMemo(() => {
-    return allUnits.reduce((acc, unit) => {
-      acc.total++;
-      if (unit.status === 'Disponível') acc.disponivel++;
-      else if (unit.status === 'Vendido') acc.vendido++;
-      else if (unit.status === 'Reservado') acc.reservado++;
-      else if (unit.status === 'Indisponível') acc.indisponivel++;
-      return acc;
-    }, { 
-      total: 0, 
-      disponivel: 0, 
-      vendido: 0, 
-      reservado: 0, 
-      indisponivel: 0 
-    });
-  }, [allUnits]);
-
-  const rowVirtualizer = useVirtualizer({
-    count: Math.ceil(filteredUnits.length / columns),
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 320,
-    overscan: 5,
-  });
-
+  
+  // Obtém o texto do tipo de unidade
+  const getUnitTypeText = (type: string) => {
+    return type === "casa" ? "Casa" : "Apartamento";
+  };
+  
+  // Seleciona uma unidade
+  const handleSelectUnit = (unit: Unit) => {
+    setSelectedUnit(unit);
+  };
+  
+  // Confirma a seleção da unidade
+  const handleConfirmSelection = () => {
+    if (selectedUnit) {
+      onUnitSelect(selectedUnit);
+      setOpen(false);
+    }
+  };
+  
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Header fixo - SEM botão de fechar */}
-      <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">Selecione uma Unidade</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Use os filtros para encontrar a unidade desejada e clique para selecioná-la.
-            </p>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {children}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Building className="h-5 w-5" />
+            Selecionar Unidade
+          </DialogTitle>
+          <DialogDescription>
+            Escolha uma unidade para simular o financiamento
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4">
+          {/* Campo de busca */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              placeholder="Buscar por nome ou endereço..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
           </div>
-          {/* Removido o botão de fechar personalizado */}
-        </div>
-      </div>
-
-      {/* Filtros */}
-      <div className="flex-shrink-0 border-b p-4">
-        <Accordion type="single" collapsible defaultValue="filters" className="w-full">
-          <AccordionItem value="filters" className="border-none">
-            <AccordionTrigger className="py-2 hover:no-underline">
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4" />
-                <span className="font-semibold">Filtros e Estatísticas</span>
+          
+          {/* Filtros */}
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-gray-500" />
+            <div className="flex gap-2">
+              <Button
+                variant={selectedType === "all" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedType("all")}
+              >
+                Todos
+              </Button>
+              <Button
+                variant={selectedType === "apartamento" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedType("apartamento")}
+              >
+                Apartamentos
+              </Button>
+              <Button
+                variant={selectedType === "casa" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedType("casa")}
+              >
+                Casas
+              </Button>
+            </div>
+          </div>
+          
+          {/* Lista de unidades */}
+          <div className="space-y-3">
+            {loading ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
               </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-1">
-                <Select 
-                  value={filters.status} 
-                  onValueChange={(v) => filters.setStatus(v as UnitStatus | 'Todos')}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todos os Status</SelectItem>
-                    <SelectItem value="Disponível">Disponível</SelectItem>
-                    <SelectItem value="Reservado">Reservado</SelectItem>
-                    <SelectItem value="Vendido">Vendido</SelectItem>
-                    <SelectItem value="Indisponível">Indisponível</SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                <Select 
-                  value={filters.floor} 
-                  onValueChange={filters.setFloor}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Andar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todos os Andares</SelectItem>
-                    {filterOptions.floors.map(f => (
-                      <SelectItem key={f} value={f}>{f}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                <Select 
-                  value={filters.typology} 
-                  onValueChange={filters.setTypology}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tipologia" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todas as Tipologias</SelectItem>
-                    {filterOptions.typologies.map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                <Select 
-                  value={filters.sunPosition} 
-                  onValueChange={filters.setSunPosition}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Posição Solar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos">Todas as Posições</SelectItem>
-                    {filterOptions.sunPositions.map(s => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            ) : filteredUnits.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                Nenhuma unidade encontrada com os filtros selecionados.
               </div>
-              
-              <Card className="p-3 mt-4">
-                <div className="grid grid-cols-2 sm:grid-cols-5 text-center text-xs gap-2">
-                  <div className="font-bold">
-                    Total: <span className="text-primary">{unitCounts.total}</span>
-                  </div>
-                  <div className="font-bold">
-                    Disponíveis: <span className="text-green-600">{unitCounts.disponivel}</span>
-                  </div>
-                  <div className="font-bold">
-                    Vendidos: <span className="text-red-600">{unitCounts.vendido}</span>
-                  </div>
-                  <div className="font-bold">
-                    Reservados: <span className="text-yellow-600">{unitCounts.reservado}</span>
-                  </div>
-                  <div className="font-bold">
-                    Indisponíveis: <span className="text-gray-600">{unitCounts.indisponivel}</span>
+            ) : (
+              filteredUnits.map((unit) => (
+                <div
+                  key={unit.id}
+                  className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                    selectedUnit?.id === unit.id
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                      : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                  } ${!unit.available ? "opacity-60" : ""}`}
+                  onClick={() => unit.available && handleSelectUnit(unit)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold">{unit.name}</h3>
+                        <Badge variant="outline" className="flex items-center gap-1">
+                          {getUnitTypeIcon(unit.type)}
+                          {getUnitTypeText(unit.type)}
+                        </Badge>
+                        {!unit.available && (
+                          <Badge variant="destructive">Indisponível</Badge>
+                        )}
+                        {selectedUnit?.id === unit.id && (
+                          <Badge className="bg-blue-600">
+                            <Check className="h-3 w-3 mr-1" />
+                            Selecionado
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mb-2">
+                        <MapPin className="h-3 w-3" />
+                        {unit.address}
+                      </div>
+                      
+                      <div className="flex items-center gap-4 text-sm">
+                        <div className="flex items-center gap-1">
+                          <Square className="h-3 w-3" />
+                          {unit.area}m²
+                        </div>
+                        
+                        <div className="flex items-center gap-1">
+                          <Bed className="h-3 w-3" />
+                          {unit.bedrooms} quartos
+                        </div>
+                        
+                        <div className="flex items-center gap-1">
+                          <Bath className="h-3 w-3" />
+                          {unit.bathrooms} banheiros
+                        </div>
+                        
+                        <div className="flex items-center gap-1">
+                          <Car className="h-3 w-3" />
+                          {unit.parkingSpaces} vagas
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="text-right">
+                      <div className="text-lg font-bold">
+                        {formatCurrency(unit.price)}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </Card>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      </div>
-
-      {/* Grid de unidades com scroll */}
-      <div 
-        ref={parentRef} 
-        className="flex-grow overflow-y-auto p-4"
-        style={{ 
-          height: 'calc(100vh - 200px)',
-          minHeight: '400px'
-        }}
-      >
-        <div
-          style={{
-            height: `${rowVirtualizer.getTotalSize()}px`,
-            width: '100%',
-            position: 'relative',
-          }}
-        >
-          {rowVirtualizer.getVirtualItems().map((virtualRow: VirtualRow) => {
-            const rowIndex = virtualRow.index;
-            const unitsInRow = filteredUnits.slice(
-              rowIndex * columns, 
-              rowIndex * columns + columns
-            );
-
-            return (
-              <div
-                key={virtualRow.key}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: `${virtualRow.size}px`,
-                  transform: `translateY(${virtualRow.start}px)`,
-                  display: 'grid',
-                  gridTemplateColumns: `repeat(${columns}, 1fr)`,
-                  gap: '1rem',
-                  paddingBottom: '1rem'
-                }}
-              >
-                {unitsInRow.map((unit) => (
-                  <UnitCard 
-                    key={unit.unitId} 
-                    unit={unit} 
-                    isReservaParque={isReservaParque} 
-                    onUnitSelect={onUnitSelect}
-                  />
-                ))}
-              </div>
-            );
-          })}
-        </div>
-        
-        {filteredUnits.length === 0 && (
-          <div className="text-center py-10 text-muted-foreground">
-            <p className="text-lg font-medium mb-2">Nenhuma unidade encontrada</p>
-            <p className="text-sm">
-              Não foram encontradas unidades com os filtros selecionados.
-            </p>
-            <p className="text-xs mt-1">
-              Verifique se as tabelas de disponibilidade e preços foram carregadas corretamente.
-            </p>
+              ))
+            )}
           </div>
-        )}
-      </div>
-    </div>
+          
+          {/* Botões de ação */}
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleConfirmSelection}
+              disabled={!selectedUnit || !selectedUnit.available}
+            >
+              Confirmar Seleção
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
-};
+}

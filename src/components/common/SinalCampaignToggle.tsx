@@ -1,81 +1,81 @@
+// src/components/common/SinalCampaignToggle.tsx
 "use client";
-
-import {
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-} from "@/components/ui/form";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Input } from "@/components/ui/input";
-import { Percent, Sparkles } from "lucide-react";
 import { useFormContext } from "react-hook-form";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
+import { Info, TrendingUp } from "lucide-react";
 
-// This component is now fully controlled by a parent react-hook-form FormProvider.
 export function SinalCampaignToggle() {
-  const { control, watch } = useFormContext();
-
+  const { watch, setValue } = useFormContext();
   const isSinalCampaignActive = watch("isSinalCampaignActive");
-
+  const sinalCampaignLimitPercent = watch("sinalCampaignLimitPercent");
+  
+  const handleToggle = (checked: boolean) => {
+    setValue("isSinalCampaignActive", checked);
+    
+    // Se ativou a campanha, define um valor padrão para o limite
+    if (checked && !sinalCampaignLimitPercent) {
+      setValue("sinalCampaignLimitPercent", 5);
+    }
+  };
+  
+  const handleLimitChange = (value: string) => {
+    const numValue = parseInt(value);
+    if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
+      setValue("sinalCampaignLimitPercent", numValue);
+    }
+  };
+  
   return (
-    <div id="sinal-campaign-section" className="flex flex-col gap-2">
-      <FormField
-        control={control}
-        name="isSinalCampaignActive"
-        render={({ field }) => (
-          <FormItem className="flex flex-row items-center space-x-2 space-y-0">
-            <FormControl>
-              <Switch
-                checked={field.value}
-                onCheckedChange={field.onChange}
-                id="sinal-campaign"
-              />
-            </FormControl>
-            <Label htmlFor="sinal-campaign" className="flex items-center gap-1 cursor-pointer">
-              <Sparkles className="h-4 w-4 text-yellow-500" /> CAMPANHA SINAL
+    <Card className="w-full">
+      <CardContent className="pt-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label className="text-base font-medium flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Campanha de Sinal
             </Label>
-          </FormItem>
-        )}
-      />
-
-      {isSinalCampaignActive && (
-        <div className="animate-in fade-in-50 space-y-1">
-          <FormField
-            control={control}
-            name="sinalCampaignLimitPercent"
-            render={({ field }) => (
-              <FormItem>
-                <Label
-                  htmlFor="campaign-limit"
-                  className="text-xs text-muted-foreground"
-                >
-                  Limite do Bônus (%)
-                </Label>
-                <FormControl>
-                  <div className="relative">
-                    <Input
-                      {...field}
-                      id="campaign-limit"
-                      type="number"
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // Important: Pass null for empty string, and number for valid input
-                        field.onChange(value === "" ? null : Number(value));
-                      }}
-                      // Handle null value from the form state
-                      value={field.value ?? ""}
-                      className="h-8 pl-4 pr-7"
-                      placeholder="Ex: 10"
-                    />
-                    <Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  </div>
-                </FormControl>
-              </FormItem>
-            )}
+            <p className="text-sm text-muted-foreground">
+              Ativar condições especiais para entrada reduzida
+            </p>
+          </div>
+          <Switch
+            checked={isSinalCampaignActive}
+            onCheckedChange={handleToggle}
           />
         </div>
-      )}
-    </div>
+        
+        {isSinalCampaignActive && (
+          <div className="mt-4 space-y-3">
+            <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                Esta campanha permite reduzir o valor mínimo de entrada para os clientes.
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Label htmlFor="limit-percent" className="text-sm">
+                Limite de Entrada (%)
+              </Label>
+              <div className="flex items-center gap-1">
+                <Input
+                  id="limit-percent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={sinalCampaignLimitPercent || ""}
+                  onChange={(e) => handleLimitChange(e.target.value)}
+                  className="w-16 h-8 text-center"
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

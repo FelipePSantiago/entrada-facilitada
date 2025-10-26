@@ -52,6 +52,8 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
+  Info,
+  FileText,
 } from "lucide-react";
 import { addMonths, differenceInMonths, format, lastDayOfMonth, startOfMonth, parseISO, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -82,6 +84,7 @@ import { PaymentTimeline } from "./payment-timeline";
 import { centsToBrl } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { FaSpinner } from "react-icons/fa";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const formatPercentage = (value: number) => {
   return `${(value * 100).toFixed(2)}%`;
@@ -858,11 +861,11 @@ const isDateLocked = (type: PaymentFieldType) => {
 const getStatusBadgeClass = (status: UnitStatus) => {
   switch (status) {
     case 'Disponível':
-      return 'border-blue-600/20 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-400/30 dark:bg-blue-950/50 dark:text-blue-300 dark:hover:bg-blue-900/70 transition-all duration-200';
+      return 'border-blue-500/20 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-400/30 dark:bg-blue-950/50 dark:text-blue-300 dark:hover:bg-blue-900/70 transition-all duration-200';
     case 'Vendido':
       return 'border-gray-400/20 bg-gray-50 text-gray-600 opacity-60 cursor-not-allowed dark:border-gray-600/30 dark:bg-gray-800/50 dark:text-gray-400';
     case 'Reservado':
-      return 'border-amber-600/20 bg-amber-50 text-amber-700 opacity-80 cursor-not-allowed dark:border-amber-400/30 dark:bg-amber-950/50 dark:text-amber-300';
+      return 'border-amber-500/20 bg-amber-50 text-amber-700 opacity-80 cursor-not-allowed dark:border-amber-400/30 dark:bg-amber-950/50 dark:text-amber-300';
     case 'Indisponível':
       return 'border-gray-400/20 bg-gray-50 text-gray-600 opacity-60 cursor-not-allowed dark:border-gray-600/30 dark:bg-gray-800/50 dark:text-gray-400';
     default:
@@ -978,7 +981,7 @@ const UnitCard = memo(({ unit, isReservaParque, onUnitSelect, style }: UnitCardP
       <div style={style} className="transform transition-all duration-300 hover:scale-105">
           <Card 
               className={cn(
-                  "cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl border-2 rounded-xl overflow-hidden group h-full flex flex-col",
+                  "cursor-pointer transition-all duration-300 shadow-apple dark:shadow-apple-dark border-2 rounded-xl overflow-hidden group h-full flex flex-col",
                   getStatusBadgeClass(unit.status),
                   unit.status === 'Disponível' && 'hover:border-blue-400 hover:shadow-blue-100 dark:hover:border-blue-500 dark:hover:shadow-blue-900/20'
               )}
@@ -986,7 +989,7 @@ const UnitCard = memo(({ unit, isReservaParque, onUnitSelect, style }: UnitCardP
           >
               <CardHeader className="p-3 sm:p-4 pb-2 flex-row justify-between items-start bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-900">
                   <div>
-                      <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100">{unitDisplay}</p>
+                      <p className="font-bold text-sm sm:text-base text-gray-900 dark:text-white">{unitDisplay}</p>
                       <p className="font-semibold text-xs sm:text-sm text-blue-700 dark:text-blue-400">Unidade {unit.unitNumber}</p>
                       <p className="text-xs text-gray-600 dark:text-gray-400">{unit.floor}</p>
                   </div>
@@ -1073,6 +1076,55 @@ interface PaymentFlowCalculatorProps {
     isTutorialOpen: boolean;
     setIsTutorialOpen: (isOpen: boolean) => void;
 }
+
+// Tutorial steps
+const TUTORIAL_STEPS = [
+  {
+    id: 'welcome',
+    title: 'Bem-vindo ao Simulador de Fluxo de Pagamento',
+    content: 'Este guia irá ajudá-lo a entender como utilizar o simulador para calcular as condições de financiamento do seu imóvel.'
+  },
+  {
+    id: 'property',
+    title: 'Seleção do Empreendimento',
+    content: 'Primeiro, selecione o empreendimento desejado na lista de opções disponíveis.'
+  },
+  {
+    id: 'unit',
+    title: 'Escolha da Unidade',
+    content: 'Após selecionar o empreendimento, clique no botão de seleção para escolher uma unidade específica.'
+  },
+  {
+    id: 'values',
+    title: 'Preenchimento dos Valores',
+    content: 'Informe os valores de avaliação, venda, renda bruta mensal e o valor da parcela desejada.'
+  },
+  {
+    id: 'payments',
+    title: 'Configuração dos Pagamentos',
+    content: 'Adicione e configure os pagamentos, como sinal, pró-soluto, financiamento, etc.'
+  },
+  {
+    id: 'conditions',
+    title: 'Condições de Pagamento',
+    content: 'Defina as condições de pagamento, como o número de parcelas e o tipo de condição (padrão ou especial).'
+  },
+  {
+    id: 'calculate',
+    title: 'Cálculo da Simulação',
+    content: 'Clique no botão "Calcular" para processar a simulação e visualizar os resultados.'
+  },
+  {
+    id: 'results',
+    title: 'Análise dos Resultados',
+    content: 'Analise os resultados da simulação, incluindo valor financiado, parcela mensal, taxa de juros e comprometimento de renda.'
+  },
+  {
+    id: 'pdf',
+    title: 'Geração de PDF',
+    content: 'Exporte os resultados da simulação em formato PDF para compartilhamento ou análise posterior.'
+  }
+];
 
 export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinalCampaignLimitPercent, isTutorialOpen, setIsTutorialOpen }: PaymentFlowCalculatorProps) {
   const { toast } = useToast();
@@ -2298,735 +2350,814 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   }, [results, selectedProperty, toast, form, brokerData, properties]);
 
   return (
-    <div className="space-y-4 sm:space-y-6 px-2 sm:px-0" onPaste={handlePaste}>
-      <Card className="relative">
-        <CardHeader className="pb-3 sm:pb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-                <Calculator className="h-5 w-5 sm:h-6 sm:w-6" />
-                Simulador de Fluxo de Pagamento
-              </CardTitle>
-              <CardDescription className="text-sm">
-                Preencha os dados abaixo para simular as condições de pagamento do imóvel.
-              </CardDescription>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="automated-simulation"
-                checked={isAutomatedSimulationEnabled}
-                onCheckedChange={setIsAutomatedSimulationEnabled}
+    <div className="w-full">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-apple dark:shadow-apple-dark overflow-hidden">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Simulador de Fluxo de Pagamento</h2>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsTutorialOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <Grid3X3 className="h-4 w-4" />
+                Tutorial
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2"
+              >
+                <Upload className="h-4 w-4" />
+                Upload PDF
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf"
+                onChange={handleFileChange}
+                className="hidden"
               />
-              <Label htmlFor="automated-simulation" className="text-sm font-medium">
-                Simulação Automatizada
-              </Label>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="p-3 sm:p-6">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
-              {isAutomatedSimulationEnabled && (
-                <Card className="border-blue-200 dark:border-blue-800">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                      <ShieldCheck className="h-5 w-5 text-blue-600" />
-                      Dados do Cliente
-                    </CardTitle>
-                    <CardDescription className="text-sm">
-                      Preencha os dados para simular o financiamento com a Caixa.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                      <div className="space-y-2">
-                        <Label htmlFor="caixa-renda">Renda Bruta Mensal</Label>
-                        <div className="relative">
-                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
+          
+          <Tabs defaultValue="input" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="input" className="flex items-center gap-2">
+                <Calculator className="h-4 w-4" />
+                Dados de Entrada
+              </TabsTrigger>
+              <TabsTrigger value="results" className="flex items-center gap-2" disabled={!results}>
+                <FileText className="h-4 w-4" />
+                Resultados
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="input" className="space-y-6 mt-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Simulação Automatizada</h3>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="automated-simulation"
+                      checked={isAutomatedSimulationEnabled}
+                      onCheckedChange={setIsAutomatedSimulationEnabled}
+                    />
+                    <Label htmlFor="automated-simulation" className="text-sm font-medium">
+                      Habilitar
+                    </Label>
+                  </div>
+                </div>
+                
+                {isAutomatedSimulationEnabled && (
+                  <Card className="border-blue-200 dark:border-blue-800">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                        <ShieldCheck className="h-5 w-5 text-blue-600" />
+                        Dados do Cliente
+                      </CardTitle>
+                      <CardDescription className="text-sm">
+                        Preencha os dados para simular o financiamento com a Caixa.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                        <div className="space-y-2">
+                          <Label htmlFor="caixa-renda">Renda Bruta Mensal</Label>
+                          <div className="relative">
+                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
+                            <Input 
+                              id="caixa-renda" 
+                              name="renda" 
+                              type="text"
+                              value={valoresFormatados.renda}
+                              onChange={handleCaixaDataChange}
+                              onFocus={() => handleCaixaMonetaryFocus('renda')}
+                              onBlur={() => handleCaixaMonetaryBlur('renda')}
+                              placeholder="R$ 0,00"
+                              className="pl-10 h-10 sm:h-11"
+                              required 
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="caixa-data-nascimento">Data de Nascimento</Label>
                           <Input 
-                            id="caixa-renda" 
-                            name="renda" 
-                            type="text"
-                            value={valoresFormatados.renda}
-                            onChange={handleCaixaDataChange}
-                            onFocus={() => handleCaixaMonetaryFocus('renda')}
-                            onBlur={() => handleCaixaMonetaryBlur('renda')}
-                            placeholder="R$ 0,00"
-                            className="pl-10 h-10 sm:h-11"
+                            id="caixa-data-nascimento" 
+                            name="dataNascimento" 
+                            type="date" 
+                            value={customerData.dataNascimento} 
+                            onChange={handleCaixaDataChange} 
+                            className="h-10 sm:h-11"
                             required 
                           />
                         </div>
                       </div>
                       
                       <div className="space-y-2">
-                        <Label htmlFor="caixa-data-nascimento">Data de Nascimento</Label>
-                        <Input 
-                          id="caixa-data-nascimento" 
-                          name="dataNascimento" 
-                          type="date" 
-                          value={customerData.dataNascimento} 
-                          onChange={handleCaixaDataChange} 
-                          className="h-10 sm:h-11"
-                          required 
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="caixa-sistema-amortizacao">Sistema de Amortização</Label>
-                      <Select 
-                        value={customerData.sistemaAmortizacao} 
-                        onValueChange={(value) => setCustomerData(prev => ({ ...prev, sistemaAmortizacao: value }))}
-                      >
-                        <SelectTrigger className="h-10 sm:h-11">
-                          <SelectValue placeholder="Selecione o sistema" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="PRICE TR">PRICE</SelectItem>
-                          <SelectItem value="SAC TR">SAC</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <Button 
-                      type="button" 
-                      onClick={handleSimulateCaixaFinancing}
-                      disabled={isSimulatingCaixa || !selectedProperty || !watchedAppraisalValue}
-                      className="w-full h-10 sm:h-11"
-                    >
-                      {isSimulatingCaixa && <FaSpinner className="mr-2 h-4 w-4 animate-spin" />}
-                      {isSimulatingCaixa ? "Simulando..." : "Simular Financiamento"}
-                    </Button>
-                    
-                    {caixaSimulationResult && (
-                      <Card className="mt-4">
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-base">Resultados da Simulação Caixa</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="border rounded-lg p-3">
-                              <p className="font-semibold text-sm text-muted-foreground">Prazo:</p>
-                              <p className="text-lg font-bold">{caixaSimulationResult.Prazo || 'N/A'}</p>
-                            </div>
-                            <div className="border rounded-lg p-3">
-                              <p className="font-semibold text-sm text-muted-foreground">Valor Total Financiado:</p>
-                              <p className="text-lg font-bold text-green-600">
-                                {corrigirFormatoValor(caixaSimulationResult.Valor_Total_Financiado || 'N/A')}
-                              </p>
-                            </div>
-                            <div className="border rounded-lg p-3">
-                              <p className="font-semibold text-sm text-muted-foreground">Primeira Prestação:</p>
-                              <p className="text-lg font-bold text-blue-600">
-                                {corrigirFormatoValor(caixaSimulationResult.Primeira_Prestacao || 'N/A')}
-                              </p>
-                            </div>
-                            <div className="border rounded-lg p-3">
-                              <p className="font-semibold text-sm text-muted-foreground">Juros Efetivos:</p>
-                              <p className="text-lg font-bold text-purple-600">
-                                {corrigirFormatoValor(caixaSimulationResult.Juros_Efetivos || 'N/A')}
-                              </p>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-              <FormField
-              control={form.control}
-              name="propertyId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-medium">Empreendimento</FormLabel>
-                  <Select 
-                    value={field.value || ""}
-                    onValueChange={(value) => {
-                      field.onChange(value);
-                      handlePropertyChange(value, properties, form, setResults, setIsSaleValueLocked, setAllUnits, toast);
-                    }}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="h-10 sm:h-11">
-                        <SelectValue placeholder="Selecione um empreendimento" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {filteredProperties.map((property) => (
-                        <SelectItem key={property.id} value={property.id}>
-                          {property.enterpriseName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-                <FormField
-                  control={form.control}
-                  name="selectedUnit"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium">Unidade Selecionada</FormLabel>
-                      <div className="flex gap-2">
-                        <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="Selecione uma unidade"
-                            readOnly
-                            className={cn(
-                              "h-10 sm:h-11 border transition-all duration-200 text-sm",
-                              isSaleValueLocked 
-                                ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100 font-medium" 
-                                : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100"
-                            )}
-                          />
-                        </FormControl>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setIsUnitSelectorOpen(true)}
-                          disabled={!selectedProperty}
-                          className="h-10 sm:h-11 px-2 sm:px-3"
+                        <Label htmlFor="caixa-sistema-amortizacao">Sistema de Amortização</Label>
+                        <Select 
+                          value={customerData.sistemaAmortizacao} 
+                          onValueChange={(value) => setCustomerData(prev => ({ ...prev, sistemaAmortizacao: value }))}
                         >
-                          <Building className="h-4 w-4" />
-                        </Button>
-                        {isSaleValueLocked && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleClearUnitSelection}
-                            className="h-10 sm:h-11 px-2 sm:px-3"
-                          >
-                            <XCircle className="h-4 w-4" />
-                          </Button>
-                        )}
+                          <SelectTrigger className="h-10 sm:h-11">
+                            <SelectValue placeholder="Selecione o sistema" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="PRICE TR">PRICE</SelectItem>
+                            <SelectItem value="SAC TR">SAC</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                <CurrencyFormField
-                  name="appraisalValue"
-                  label="Valor de Avaliação"
-                  control={form.control}
-                  id="appraisal-value-input"
-                />
-                <CurrencyFormField
-                  name="saleValue"
-                  label="Valor de Venda"
-                  control={form.control}
-                  readOnly={isSaleValueLocked}
-                  id="sale-value-input"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                <CurrencyFormField
-                  name="grossIncome"
-                  label="Renda Bruta Mensal"
-                  control={form.control}
-                  readOnly={isAutomatedSimulationEnabled && caixaSimulationResult !== null}
-                />
-                <CurrencyFormField
-                  name="simulationInstallmentValue"
-                  label="Valor da Parcela Simulação"
-                  control={form.control}
-                  readOnly={isAutomatedSimulationEnabled && caixaSimulationResult !== null}
-                />
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-                  <h3 className="text-base sm:text-lg font-semibold">Pagamentos</h3>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const availableField = availablePaymentFields[0];
-                      if (availableField) {
-                        append({
-                          type: availableField.value,
-                          value: 0,
-                          date: new Date(),
-                        });
-                      }
-                    }}
-                    disabled={availablePaymentFields.length === 0}
-                    className="w-full sm:w-auto"
-                  >
-                    <PlusCircle className="h-4 w-4 mr-2" />
-                    Adicionar Pagamento
-                  </Button>
-                </div>
-
-                <div className="space-y-3 sm:space-y-4">
-                  {fields.map((field, index) => (
-                    <div key={field.id} className="flex flex-col sm:flex-row gap-2 sm:gap-4 items-start sm:items-end">
-                      <FormField
-                        control={form.control}
-                        name={`payments.${index}.type`}
-                        render={({ field }) => (
-                          <FormItem className="flex-1 w-full">
-                            <FormLabel className="text-sm">Tipo</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger className="h-10 sm:h-11">
-                                  <SelectValue placeholder="Selecione o tipo" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {paymentFieldOptions.map((option) => {
-                                  // Se a opção for "Bônus de Campanha" ou "Bônus Adimplência" e não for o tipo atual, não a mostre.
-                                  if (["bonusAdimplencia", "bonusCampanha"].includes(option.value) && option.value !== field.value) {
-                                    return null;
-                                  }
-                                  return (
-                                    <SelectItem key={option.value} value={option.value}>
-                                      {option.label}
-                                    </SelectItem>
-                                  );
-                                })}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name={`payments.${index}.value`}
-                        render={({ field }) => (
-                          <FormItem className="flex-1 w-full">
-                            <FormLabel className="text-sm">Valor</FormLabel>
-                            <FormControl>
-                              <CurrencyInput
-                                  value={field.value * 100}
-                                  onValueChange={(cents) => field.onChange(cents === null ? 0 : cents / 100)}
-                                  className="h-10 sm:h-11"
-                                  readOnly={isAutomatedSimulationEnabled && watchedPayments[index]?.type === 'financiamento' && caixaSimulationResult !== null}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name={`payments.${index}.date`}
-                        render={({ field }) => (
-                          <FormItem className="flex-1 w-full">
-                            <FormLabel className="text-sm">Data</FormLabel>
-                            <FormControl>
-                              <DatePicker
-                                  value={field.value?.toISOString()}
-                                  onChange={field.onChange}
-                                  disabled={isDateLocked(watchedPayments[index]?.type)}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => remove(index)}
-                        className="h-10 sm:h-11 px-2 sm:px-3 mt-6 sm:mt-0"
-                        disabled={isAutomatedSimulationEnabled && watchedPayments[index]?.type === 'financiamento' && caixaSimulationResult !== null}
+                      
+                      <Button 
+                        type="button" 
+                        onClick={handleSimulateCaixaFinancing}
+                        disabled={isSimulatingCaixa || !selectedProperty || !watchedAppraisalValue}
+                        className="w-full h-10 sm:h-11"
                       >
-                        <XCircle className="h-4 w-4" />
+                        {isSimulatingCaixa && <FaSpinner className="mr-2 h-4 w-4 animate-spin" />}
+                        {isSimulatingCaixa ? "Simulando..." : "Simular Financiamento"}
                       </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                <FormField
-                  control={form.control}
-                  name="conditionType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium">Condição</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger className="h-10 sm:h-11">
-                            <SelectValue placeholder="Selecione a condição" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="padrao">Padrão (Limite Pró-Soluto: 14,99%)</SelectItem>
-                          <SelectItem value="especial">Especial (Limite Pró-Soluto: 17,99%)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="installments"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium">Número de Parcelas</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          value={field.value || ''} // Garante que o input mostre vazio se o valor for undefined
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            // Se o input estiver vazio, define como undefined. Caso contrário, converte para número.
-                            field.onChange(value === '' ? undefined : Number(value));
-                          }}
-                          className="h-10 sm:h-11"
-                          placeholder={installmentsPlaceholder}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="financingParticipants"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium">Participantes no Financiamento</FormLabel>
-                      <Select onValueChange={(value) => field.onChange(parseInt(value))} defaultValue={field.value.toString()}>
-                        <FormControl>
-                          <SelectTrigger className="h-10 sm:h-11">
-                            <SelectValue placeholder="Selecione o número" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {[1, 2, 3, 4].map((num) => (
-                            <SelectItem key={num} value={num.toString()}>
-                              {num}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                <CurrencyFormField
-                  name="notaryFees"
-                  label="Taxas Cartorárias"
-                  control={form.control}
-                  readOnly
-                />
-
-                <FormField
-                  control={form.control}
-                  name="notaryPaymentMethod"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium">Método de Pagamento Cartório</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger className="h-10 sm:h-11">
-                            <SelectValue placeholder="Selecione o método" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="creditCard">Cartão de Crédito</SelectItem>
-                          <SelectItem value="bankSlip">Boleto</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="notaryInstallments"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium">Parcelas Cartório</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          value={field.value || ''} // Garante que o input mostre vazio se o valor for undefined
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            // Se o input estiver vazio, define como undefined. Caso contrário, converte para número.
-                            field.onChange(value === '' ? undefined : Number(value));
-                          }}
-                          className="h-10 sm:h-11"
-                          placeholder={watchedNotaryPaymentMethod === 'creditCard' ? '1-12' : '36 ou 40'}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
-                <Button type="submit" className="w-full sm:flex-1 h-10 sm:h-11">
-                  <Calculator className="h-4 w-4 mr-2" />
-                  Calcular
-                </Button>
-                
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleApplyMinimumCondition}
-                  disabled={!selectedProperty || !deliveryDateObj || !form.getValues('saleValue')}
-                  className="w-full sm:w-auto h-10 sm:h-11"
-                >
-                  <ShieldCheck className="h-4 w-4 mr-2" />
-                  <span className="hidden sm:inline">Condição Mínima</span>
-                  <span className="sm:hidden">Mínima</span>
-                </Button>
-                
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isExtracting}
-                  className="w-full sm:w-auto h-10 sm:h-11"
-                >
-                  {isExtracting ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4 mr-2" />
-                  )}
-                  <span className="hidden sm:inline">Upload PDF</span>
-                  <span className="sm:hidden">Upload</span>
-                </Button>
-                
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={handleClearAll}
-                  className="w-full sm:w-auto h-10 sm:h-11"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  <span className="hidden sm:inline">Limpar</span>
-                  <span className="sm:hidden">Limpar</span>
-                </Button>
-                
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </div>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-
-      {results && (
-        <Card ref={resultsRef} className="w-full">
-          <CardHeader className="pb-3 sm:pb-6">
-            <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-              <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6" />
-              Resultados da Simulação
-            </CardTitle>
-            <CardDescription className="text-sm">
-              Confira abaixo os detalhes da simulação realizada.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-3 sm:p-6">
-            <div className="space-y-4 sm:space-y-6">
-              <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 xs:gap-4">
-                <Card>
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex items-center gap-2">
-                      <Wallet className="h-4 w-4 text-blue-600" />
-                      <span className="text-xs sm:text-sm font-medium">Valor Financiado</span>
-                    </div>
-                    <p className="text-lg sm:text-2xl font-bold text-blue-600 break-words">
-                      {centsToBrl((results.financedAmount || 0) * 100)}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex items-center gap-2">
-                      <CreditCard className="h-4 w-4 text-green-600" />
-                      <span className="text-xs sm:text-sm font-medium">Parcela Mensal</span>
-                    </div>
-                    <p className="text-lg sm:text-2xl font-bold text-green-600 break-words">
-                      {centsToBrl((results.monthlyInstallment || 0) * 100)}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-purple-600" />
-                      <span className="text-xs sm:text-sm font-medium">Taxa de Juros</span>
-                    </div>
-                    <p className="text-lg sm:text-2xl font-bold text-purple-600 break-words">
-                      {formatPercentage((results.averageInterestRate || 0) / 100)}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-orange-600" />
-                      <span className="text-xs sm:text-sm font-medium">Seguro Obra</span>
-                    </div>
-                    <p className="text-lg sm:text-2xl font-bold text-orange-600 break-words">
-                      {centsToBrl((results.totalConstructionInsurance || 0) * 100)}
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                <Card>
-                  <CardHeader className="pb-3 sm:pb-4">
-                    <CardTitle className="text-base sm:text-lg">Resumo de Custos</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm"><span>Entrada</span><span className="font-medium">{centsToBrl((results.totalEntryCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Pró-Soluto</span><span className="font-medium">{centsToBrl((results.totalProSolutoCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Financiamento</span><span className="font-medium">{centsToBrl((results.totalFinancedCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Taxas Cartorárias</span><span className="font-medium">{centsToBrl((results.totalNotaryCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Seguro Obra</span><span className="font-medium">{centsToBrl((results.totalInsuranceCost || 0) * 100)}</span></div>
-                      <Separator />
-                      <div className="flex justify-between font-bold text-sm"><span>Total</span><span>{centsToBrl((results.totalCost || 0) * 100)}</span></div>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-3 sm:pb-4">
-                    <CardTitle className="text-base sm:text-lg">Análise de Renda</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex justify-between mb-2 text-sm"><span className="text-sm">Comprometimento de Renda</span><span className="text-sm font-medium">{(results.incomeCommitmentPercentage || 0).toFixed(2)}%</span></div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2"><div className={`h-2 rounded-full ${results.incomeCommitmentPercentage > 50 ? 'bg-red-500' : results.incomeCommitmentPercentage > 30 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.incomeCommitmentPercentage || 0, 100)}%` }} /></div>
-                      </div>
-                      <div>
-                        <div className="flex justify-between mb-2 text-sm"><span className="text-sm">Percentual Pró-Soluto</span><span className="text-sm font-medium">{(results.proSolutoCommitmentPercentage || 0).toFixed(2)}%</span></div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2"><div className={`h-2 rounded-full ${results.proSolutoCommitmentPercentage > 100 ? 'bg-red-500' : results.proSolutoCommitmentPercentage > 50 ? 'bg-red-500' : results.proSolutoCommitmentPercentage > 50 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.proSolutoCommitmentPercentage || 0, 100)}%` }} /></div>
-                      </div>
-                      {results.incomeError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.incomeError}</AlertDescription></Alert>}
-                      {results.proSolutoError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.proSolutoError}</AlertDescription></Alert>}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="text-base sm:text-lg font-semibold">Cronograma de Pagamentos</h3>
-                <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0 scrollbar-thin scrollbar-thumb-gray-300">
-                  <div className="min-w-full">
-                    <PaymentTimeline results={results} formValues={form.getValues()} />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <h3 className="text-base sm:text-lg font-semibold">Detalhamento do Seguro de Obras</h3>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowInsuranceDetails(!showInsuranceDetails)}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 h-10 sm:h-11"
-                  >
-                    {showInsuranceDetails ? (
-                      <>
-                        <ChevronUp className="h-4 w-4" />
-                        <span className="hidden sm:inline">Ocultar Detalhes</span>
-                        <span className="sm:hidden">Ocultar</span>
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="h-4 w-4" />
-                        <span className="hidden sm:inline">Exibir Detalhes</span>
-                        <span className="sm:hidden">Exibir</span>
-                      </>
-                    )}
-                  </Button>
-                </div>
-                
-                {showInsuranceDetails && (
-                  <Card>
-                    <CardContent className="p-3 sm:p-4">
-                      <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0 scrollbar-thin scrollbar-thumb-gray-300">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="text-xs sm:text-sm">Mês</TableHead>
-                              <TableHead className="text-xs sm:text-sm">Valor</TableHead>
-                              <TableHead className="text-xs sm:text-sm">Progresso</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredInsuranceBreakdown.map((item, index) => (
-                              <TableRow key={index}>
-                                <TableCell className="text-xs sm:text-sm">{item.month}</TableCell>
-                                <TableCell className="text-xs sm:text-sm">{centsToBrl(item.value * 100)}</TableCell>
-                                <TableCell className="text-xs sm:text-sm">{(item.progressRate * 100).toFixed(1)}%</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
+                      
+                      {caixaSimulationResult && (
+                        <Card className="mt-4">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base">Resultados da Simulação Caixa</CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div className="border rounded-lg p-3">
+                                <p className="font-semibold text-sm text-muted-foreground">Prazo:</p>
+                                <p className="text-lg font-bold">{caixaSimulationResult.Prazo || 'N/A'}</p>
+                              </div>
+                              <div className="border rounded-lg p-3">
+                                <p className="font-semibold text-sm text-muted-foreground">Valor Total Financiado:</p>
+                                <p className="text-lg font-bold text-green-600">
+                                  {corrigirFormatoValor(caixaSimulationResult.Valor_Total_Financiado || 'N/A')}
+                                </p>
+                              </div>
+                              <div className="border rounded-lg p-3">
+                                <p className="font-semibold text-sm text-muted-foreground">Primeira Prestação:</p>
+                                <p className="text-lg font-bold text-blue-600">
+                                  {corrigirFormatoValor(caixaSimulationResult.Primeira_Prestacao || 'N/A')}
+                                </p>
+                              </div>
+                              <div className="border rounded-lg p-3">
+                                <p className="font-semibold text-sm text-muted-foreground">Juros Efetivos:</p>
+                                <p className="text-lg font-bold text-purple-600">
+                                  {corrigirFormatoValor(caixaSimulationResult.Juros_Efetivos || 'N/A')}
+                                </p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
                     </CardContent>
                   </Card>
                 )}
               </div>
               
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
-                <Button onClick={handleGeneratePdf} disabled={isGeneratingPdf} className="w-full sm:flex-1 h-10 sm:h-11">
-                  {isGeneratingPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                  Gerar PDF
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="propertyId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Empreendimento</FormLabel>
+                          <Select 
+                            value={field.value || ""}
+                            onValueChange={(value) => {
+                              field.onChange(value);
+                              handlePropertyChange(value, properties, form, setResults, setIsSaleValueLocked, setAllUnits, toast);
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione um empreendimento" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {filteredProperties.map((property) => (
+                                <SelectItem key={property.id} value={property.id}>
+                                  {property.enterpriseName}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="selectedUnit"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Unidade</FormLabel>
+                          <div className="flex gap-2">
+                            <Select
+                              value={field.value}
+                              onValueChange={(value) => {
+                                const unit = allUnits.find(u => `${u.block} - Unidade ${u.unitNumber}` === value);
+                                if (unit) {
+                                  handleUnitSelect(unit);
+                                }
+                              }}
+                              disabled={!selectedProperty}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione uma unidade" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {allUnits.map((unit) => (
+                                  <SelectItem key={unit.unitId} value={`${unit.block} - Unidade ${unit.unitNumber}`}>
+                                    {unit.block} - Unidade {unit.unitNumber}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setIsUnitSelectorOpen(true)}
+                              disabled={!selectedProperty}
+                            >
+                              <Building className="h-4 w-4" />
+                            </Button>
+                            {isSaleValueLocked && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={handleClearUnitSelection}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="appraisalValue"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Valor de Avaliação</FormLabel>
+                          <CurrencyInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="R$ 0,00"
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="saleValue"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Valor de Venda</FormLabel>
+                          <CurrencyInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="R$ 0,00"
+                            readOnly={isSaleValueLocked}
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="grossIncome"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Renda Bruta Mensal</FormLabel>
+                          <CurrencyInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="R$ 0,00"
+                            readOnly={isAutomatedSimulationEnabled && caixaSimulationResult !== null}
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="simulationInstallmentValue"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Valor da Parcela</FormLabel>
+                          <CurrencyInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="R$ 0,00"
+                            readOnly={isAutomatedSimulationEnabled && caixaSimulationResult !== null}
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  <FormField
+                    control={form.control}
+                    name="financingParticipants"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Número de Participantes no Financiamento</FormLabel>
+                        <Select
+                          value={field.value}
+                          onValueChange={(value) => field.onChange(parseInt(value))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o número" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={1}>1 Participante</SelectItem>
+                            <SelectItem value={2}>2 Participantes</SelectItem>
+                            <SelectItem value={3}>3 Participantes</SelectItem>
+                            <SelectItem value={4}>4 Participantes</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold">Pagamentos</h3>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const availableField = availablePaymentFields[0];
+                          if (availableField) {
+                            append({
+                              type: availableField.value,
+                              value: 0,
+                              date: new Date(),
+                            });
+                          }
+                        }}
+                        disabled={availablePaymentFields.length === 0}
+                        className="flex items-center gap-2"
+                      >
+                        <PlusCircle className="h-4 w-4" />
+                        Adicionar Pagamento
+                      </Button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {watchedPayments.map((payment, index) => (
+                        <Card key={index} className="p-4">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+                                {payment.type === 'sinalAto' && <Wallet className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                                {payment.type === 'sinal1' && <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                                {payment.type === 'sinal2' && <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                                {payment.type === 'sinal3' && <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                                {payment.type === 'proSoluto' && <ShieldCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                                {payment.type === 'bonusAdimplencia' && <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                                {payment.type === 'desconto' && <XCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                                {payment.type === 'bonusCampanha' && <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                                {payment.type === 'fgts' && <CreditCard className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                                {payment.type === 'financiamento' && <Calculator className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                              </div>
+                              <span className="text-sm font-medium">
+                                {paymentFieldOptions.find(option => option.value === payment.type)?.label || payment.type}
+                              </span>
+                            </div>
+                            
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => remove(index)}
+                              className="text-red-500 hover:text-red-700"
+                              disabled={isAutomatedSimulationEnabled && payment.type === 'financiamento' && caixaSimulationResult !== null}
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor={`payment-type-${index}`}>Tipo</Label>
+                              <Select
+                                value={payment.type}
+                                onValueChange={(value) => setValue(`payments.${index}.type`, value)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione o tipo" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {paymentFieldOptions.map((option) => {
+                                    // Se a opção for "Bônus de Campanha" ou "Bônus Adimplência" e não for o tipo atual, não a mostre.
+                                    if (["bonusAdimplencia", "bonusCampanha"].includes(option.value) && option.value !== payment.type) {
+                                      return null;
+                                    }
+                                    return (
+                                      <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                      </SelectItem>
+                                    );
+                                  })}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label htmlFor={`payment-value-${index}`}>Valor</Label>
+                              <CurrencyInput
+                                id={`payment-value-${index}`}
+                                value={payment.value}
+                                onChange={(value) => setValue(`payments.${index}.value`, value)}
+                                placeholder="R$ 0,00"
+                                readOnly={isAutomatedSimulationEnabled && payment.type === 'financiamento' && caixaSimulationResult !== null}
+                              />
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label htmlFor={`payment-date-${index}`}>Data</Label>
+                              <DatePicker
+                                id={`payment-date-${index}`}
+                                value={payment.date}
+                                onChange={(date) => setValue(`payments.${index}.date`, date)}
+                                disabled={isDateLocked(payment.type)}
+                              />
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="conditionType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Condição</FormLabel>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione a condição" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="padrao">Padrão (Limite Pró-Soluto: 14,99%)</SelectItem>
+                              <SelectItem value="especial">Especial (Limite Pró-Soluto: 17,99%)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="installments"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Número de Parcelas</FormLabel>
+                          <Input
+                            type="number"
+                            value={field.value || ''}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              field.onChange(value === '' ? undefined : Number(value));
+                            }}
+                            placeholder={installmentsPlaceholder}
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="notaryPaymentMethod"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Método de Pagamento Cartório</FormLabel>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o método" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="creditCard">Cartão de Crédito</SelectItem>
+                              <SelectItem value="bankSlip">Boleto</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="notaryFees"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Taxas Cartorárias</FormLabel>
+                          <CurrencyInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="R$ 0,00"
+                            readOnly
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="notaryInstallments"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Parcelas Cartório</FormLabel>
+                          <Input
+                            type="number"
+                            value={field.value || ''}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              field.onChange(value === '' ? undefined : Number(value));
+                            }}
+                            placeholder={watchedNotaryPaymentMethod === 'creditCard' ? '1-12' : '36 ou 40'}
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  {isSinalCampaignActive && (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5" />
+                        <div>
+                          <h4 className="font-medium text-blue-800 dark:text-blue-400">
+                            Campanha de Sinal Ativa
+                          </h4>
+                          <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                            {sinalCampaignLimitPercent 
+                              ? `Entrada mínima reduzida para ${sinalCampaignLimitPercent}% do valor do imóvel.`
+                              : "Condições especiais para entrada reduzida disponíveis."
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+                    <Button type="submit" className="w-full sm:flex-1">
+                      <Calculator className="h-4 w-4 mr-2" />
+                      Calcular
+                    </Button>
+                    
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleApplyMinimumCondition}
+                      disabled={!selectedProperty || !deliveryDateObj || !form.getValues('saleValue')}
+                      className="w-full sm:w-auto"
+                    >
+                      <ShieldCheck className="h-4 w-4 mr-2" />
+                      Condição Mínima
+                    </Button>
+                    
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isExtracting}
+                      className="w-full sm:w-auto"
+                    >
+                      {isExtracting ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                      )}
+                      Upload PDF
+                    </Button>
+                    
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={handleClearAll}
+                      className="w-full sm:w-auto"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Limpar
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </TabsContent>
+            
+            <TabsContent value="results" className="space-y-6 mt-6">
+              {results && (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                          Valor Financiado
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {centsToBrl((results.totalFinancedCost || 0) * 100)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                          Parcela Mensal
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {centsToBrl((results.monthlyInstallment || 0) * 100)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                          Total de Juros
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {centsToBrl((results.totalCost || 0) * 100)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark">
+                      <CardHeader>
+                        <CardTitle>Gráfico de Amortização</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <PaymentTimeline 
+                          results={results} 
+                          formValues={getValues()} 
+                        />
+                      </CardContent>
+                    </Card>
+                    
+                    <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark">
+                      <CardHeader>
+                        <CardTitle>Resumo do Financiamento</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            Valor do Imóvel
+                          </span>
+                          <span className="font-medium">
+                            {centsToBrl((results.appraisalValue || 0) * 100)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            Valor de Venda
+                          </span>
+                          <span className="font-medium">
+                            {centsToBrl((results.saleValue || 0) * 100)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            Valor Financiado
+                          </span>
+                          <span className="font-medium">
+                            {centsToBrl((results.totalFinancedCost || 0) * 100)}
+                          </span>
+                        </div>
+                        
+                        <Separator />
+                        
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            Taxa de Juros
+                          </span>
+                          <span className="font-medium">
+                            {formatPercentage((results.averageInterestRate || 0) / 100)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            Prazo
+                          </span>
+                          <span className="font-medium">
+                            {results.installments} meses
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            Parcela Mensal
+                          </span>
+                          <span className="font-medium">
+                            {centsToBrl((results.monthlyInstallment || 0) * 100)}
+                          </span>
+                        </div>
+                        
+                        <Separator />
+                        
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            Total Pago
+                          </span>
+                          <span className="font-medium">
+                            {centsToBrl((results.totalCost || 0) * 100)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            Total de Juros
+                          </span>
+                          <span className="font-medium">
+                            {centsToBrl((results.totalCost || 0) * 100)}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  <div className="flex justify-center gap-4 mt-6">
+                    <Button
+                      onClick={handleGeneratePdf}
+                      disabled={isGeneratingPdf}
+                      className="flex items-center gap-2"
+                    >
+                      {isGeneratingPdf ? (
+                        <>
+                          <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                          Gerando PDF...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4" />
+                          Gerar PDF
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+      
+      {/* Diálogo de Seleção de Unidade */}
       <Dialog open={isUnitSelectorOpen} onOpenChange={setIsUnitSelectorOpen}>
-        <DialogContent className="max-w-[95vw] md:max-w-4xl lg:max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-lg md:text-xl">
-              Selecione uma Unidade do Empreendimento {selectedProperty?.enterpriseName || ''}
-            </DialogTitle>
-            <DialogDescription className="text-sm md:text-base">
-              Escolha uma unidade disponível no empreendimento selecionado.
+            <DialogTitle>Selecionar Unidade</DialogTitle>
+            <DialogDescription>
+              Escolha uma unidade do empreendimento selecionado
             </DialogDescription>
           </DialogHeader>
+          
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
               <div>
@@ -3110,6 +3241,50 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* Tutorial Interativo */}
+      {isTutorialOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-apple dark:shadow-apple-dark max-w-4xl max-h-[80vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                Tutorial Interativo
+              </h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsTutorialOpen(false)}
+              >
+                <XCircle className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            <div className="space-y-4">
+              {TUTORIAL_STEPS.map((step, index) => (
+                <div key={step.id} className="flex items-start gap-4 p-4 border-l-4 border-blue-500">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold">
+                    {index + 1}
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-gray-900 dark:text-white">
+                      {step.title}
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      {step.content}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex justify-end mt-6">
+              <Button onClick={() => setIsTutorialOpen(false)}>
+                Fechar Tutorial
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

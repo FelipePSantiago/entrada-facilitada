@@ -1,121 +1,281 @@
+// src/lib/utils.ts
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 
-import { PaymentFieldType } from "@/types";
-import { isSameMonth, startOfMonth, isAfter } from 'date-fns';
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/**
- * Safely retrieves a value from a record-like object using multiple possible keys.
- * This function is case-insensitive.
- *
- * @param item - The object to retrieve the value from.
- * @param keys - An array of possible keys to try.
- * @returns The value found for the first matching key, or undefined if no key is matched.
- */
-export const getValue = (item: Record<string, unknown>, keys: string[]): unknown => {
-    if (!item) {
-        return undefined;
-    }
+// Format currency
+export function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
+}
 
-    const itemKeys = Object.keys(item).reduce((acc, key) => {
-        acc[key.toLowerCase()] = item[key];
-        return acc;
-    }, {} as Record<string, unknown>);
+// Format date
+export function formatDate(date: Date | string): string {
+  const dateObj = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("pt-BR").format(dateObj);
+}
 
-    for (const key of keys) {
-        if (itemKeys[key.toLowerCase()] !== undefined) {
-            return itemKeys[key.toLowerCase()];
-        }
-    }
-    return undefined;
+// Format date with options
+export function formatDateWithOptions(
+  date: Date | string, 
+  options: Intl.DateTimeFormatOptions = {}
+): string {
+  const dateObj = typeof date === "string" ? new Date(date) : date;
+  const defaultOptions: Intl.DateTimeFormatOptions = {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    ...options,
   };
+  return new Intl.DateTimeFormat("pt-BR", defaultOptions).format(dateObj);
+}
 
-/**
- * Safely extracts an error message from an unknown type.
- * This function is robust and handles various error formats that can occur
- * on both client and server environments.
- * @param error The error object, which can be of any type.
- * @returns A string containing a descriptive error message.
- */
-export const getErrorMessage = (error: unknown): string => {
-  let message: string;
+// Format percentage
+export function formatPercentage(value: number, decimals: number = 2): string {
+  return `${value.toFixed(decimals)}%`;
+}
 
-  if (error instanceof Error) {
-    // Standard Error object (e.g., new Error('...'))
-    message = error.message;
-  } else if (typeof error === 'string') {
-    // A simple string error message
-    message = error;
-  } else if (error && typeof error === 'object') {
-    // Check for a 'message' property, a common pattern in error-like objects
-    if ('message' in error && typeof (error as { message: unknown }).message === 'string') {
-      message = (error as { message: string }).message;
-    } 
-    // Handle specific Firebase/Firestore error format
-    else if ('code' in error && typeof (error as { code: unknown }).code === 'string') {
-        message = `Error Code: ${(error as { code: string }).code}`;
-    }
-    // Fallback for other object shapes by attempting to serialize them
-    else {
-      try {
-        message = JSON.stringify(error);
-      } catch {
-        message = 'Ocorreu um erro com um objeto não serializável.';
-      }
-    }
-  } else {
-    // Fallback for other primitive types (null, undefined, number, etc.)
-    message = 'Ocorreu um erro desconhecido.';
+// Generate random ID
+export function generateId(): string {
+  return Math.random().toString(36).substring(2, 15) + 
+         Math.random().toString(36).substring(2, 15);
+}
+
+// Debounce function
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
+
+// Validate email
+export function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+// Validate phone number (Brazil)
+export function isValidPhoneNumber(phone: string): boolean {
+  const phoneRegex = /^\(?[1-9]{2}\)? ?(?:[2-8]|9[1-9])[0-9]{3}-?[0-9]{4}$/;
+  return phoneRegex.test(phone);
+}
+
+// Format phone number (Brazil)
+export function formatPhoneNumber(phone: string): string {
+  // Remove all non-numeric characters
+  const cleaned = phone.replace(/\D/g, "");
+  
+  // Check if it has 10 or 11 digits
+  if (cleaned.length === 10) {
+    return cleaned.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
+  } else if (cleaned.length === 11) {
+    return cleaned.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
   }
+  
+  return phone;
+}
 
-  return message;
-};
+// Format CPF (Brazil)
+export function formatCPF(cpf: string): string {
+  // Remove all non-numeric characters
+  const cleaned = cpf.replace(/\D/g, "");
+  
+  // Check if it has 11 digits
+  if (cleaned.length === 11) {
+    return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  }
+  
+  return cpf;
+}
 
+// Validate CPF (Brazil)
+export function isValidCPF(cpf: string): boolean {
+  // Remove all non-numeric characters
+  const cleaned = cpf.replace(/\D/g, "");
+  
+  // Check if it has 11 digits
+  if (cleaned.length !== 11) return false;
+  
+  // Check if all digits are the same
+  if (/^(\d)\1{10}$/.test(cleaned)) return false;
+  
+  // Validate CPF digits
+  let sum = 0;
+  let remainder;
+  
+  // Validate first digit
+  for (let i = 1; i <= 9; i++) {
+    sum += parseInt(cleaned.substring(i - 1, i)) * (11 - i);
+  }
+  
+  remainder = (sum * 10) % 11;
+  if (remainder === 10 || remainder === 11) remainder = 0;
+  if (remainder !== parseInt(cleaned.substring(9, 10))) return false;
+  
+  // Validate second digit
+  sum = 0;
+  for (let i = 1; i <= 10; i++) {
+    sum += parseInt(cleaned.substring(i - 1, i)) * (12 - i);
+  }
+  
+  remainder = (sum * 10) % 11;
+  if (remainder === 10 || remainder === 11) remainder = 0;
+  if (remainder !== parseInt(cleaned.substring(10, 11))) return false;
+  
+  return true;
+}
 
-/**
- * Checks if the code is running on the server side.
- * @returns True if the environment is Node.js (or similar), false otherwise.
- */
-export const isServer = () => typeof window === 'undefined';
+// Calculate age from birth date
+export function calculateAge(birthDate: Date | string): number {
+  const date = typeof birthDate === "string" ? new Date(birthDate) : birthDate;
+  const today = new Date();
+  let age = today.getFullYear() - date.getFullYear();
+  const monthDifference = today.getMonth() - date.getMonth();
+  
+  if (monthDifference < 0 || 
+      (monthDifference === 0 && today.getDate() < date.getDate())) {
+    age--;
+  }
+  
+  return age;
+}
 
-/**
- * Checks if the code is running on the client side.
- * @returns True if the environment is a browser, false otherwise.
- */
-export const isClient = () => !isServer();
+// Get file extension
+export function getFileExtension(filename: string): string {
+  return filename.slice((filename.lastIndexOf(".") - 1 >>> 0) + 2);
+}
 
-/**
- * Returns a function that checks if a given date is "locked" (not allowed) for a specific payment type.
- * This is used to disable certain dates in the date picker based on the payment type.
- * @param type The type of the payment field.
- * @returns A function that takes a Date and returns a boolean (true if locked, false if allowed).
- */
-export const isDateLocked = (type: PaymentFieldType) => {
-  return (date: Date): boolean => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+// Format file size
+export function formatFileSize(bytes: number): string {
+  if (bytes === 0) return "0 Bytes";
+  
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
 
-    switch (type) {
-      case "sinalAto":
-      case "sinal1":
-      case "sinal2":
-      case "sinal3":
-      case "bonusAdimplencia":
-        // Dates before today are locked
-        return isAfter(today, date);
-      case "proSoluto":
-        return !isSameMonth(date, startOfMonth(today)) && isAfter(today, date);
-      default:
-        return false; // Other types are not locked
-    }
-  };
-};
+// Truncate text
+export function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + "...";
+}
 
-export const centsToBrl = (cents: number | null | undefined): string => {
-  if (cents === null || cents === undefined) return "R$ 0,00";
-  const reais = cents / 100;
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(reais);
-};
+// Capitalize first letter
+export function capitalizeFirstLetter(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// Convert string to slug
+export function toSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w ]+/g, "")
+    .replace(/ +/g, "-");
+}
+
+// Generate color from string
+export function stringToColor(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  let color = "#";
+  for (let i = 0; i < 3; i++) {
+    const value = (hash >> (i * 8)) & 0xff;
+    color += ("00" + value.toString(16)).substr(-2);
+  }
+  
+  return color;
+}
+
+// Check if color is light
+export function isLightColor(color: string): boolean {
+  const hex = color.replace("#", "");
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  const brightness = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+  return brightness > 155;
+}
+
+// Get contrast color (black or white) based on background color
+export function getContrastColor(backgroundColor: string): string {
+  return isLightColor(backgroundColor) ? "#000000" : "#ffffff";
+}
+
+// Calculate monthly payment
+export function calculateMonthlyPayment(
+  principal: number,
+  annualRate: number,
+  months: number
+): number {
+  const monthlyRate = annualRate / 100 / 12;
+  
+  if (monthlyRate === 0) {
+    return principal / months;
+  }
+  
+  return (
+    principal *
+    (monthlyRate * Math.pow(1 + monthlyRate, months)) /
+    (Math.pow(1 + monthlyRate, months) - 1)
+  );
+}
+
+// Calculate total interest
+export function calculateTotalInterest(
+  principal: number,
+  annualRate: number,
+  months: number
+): number {
+  const monthlyPayment = calculateMonthlyPayment(principal, annualRate, months);
+  const totalPaid = monthlyPayment * months;
+  return totalPaid - principal;
+}
+
+// Calculate amortization schedule
+export function calculateAmortizationSchedule(
+  principal: number,
+  annualRate: number,
+  months: number
+): Array<{
+  month: number;
+  payment: number;
+  principal: number;
+  interest: number;
+  balance: number;
+}> {
+  const monthlyRate = annualRate / 100 / 12;
+  const monthlyPayment = calculateMonthlyPayment(principal, annualRate, months);
+  let balance = principal;
+  const schedule = [];
+  
+  for (let month = 1; month <= months; month++) {
+    const interestPayment = balance * monthlyRate;
+    const principalPayment = monthlyPayment - interestPayment;
+    balance -= principalPayment;
+    
+    schedule.push({
+      month,
+      payment: monthlyPayment,
+      principal: principalPayment,
+      interest: interestPayment,
+      balance: Math.max(0, balance),
+    });
+  }
+  
+  return schedule;
+}
