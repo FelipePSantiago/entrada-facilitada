@@ -83,6 +83,7 @@ const ClientOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 function SimulatorInterface() {
   const { properties } = useAuth();
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
+  const [isSinalCampaignActive, setIsSinalCampaignActive] = useState(false);
 
   const methods = useForm<z.infer<typeof simulatorFormSchema>>({
     resolver: zodResolver(simulatorFormSchema),
@@ -121,7 +122,10 @@ function SimulatorInterface() {
           />
 
           <div className="flex flex-wrap items-center justify-start md:justify-end gap-4">
-            <SinalCampaignToggle />
+            <SinalCampaignToggle 
+              isActive={isSinalCampaignActive}
+              setIsActive={setIsSinalCampaignActive}
+            />
             <Button asChild variant="outline">
               <a
                 href="https://www.portaldeempreendimentos.caixa.gov.br/simulador/"
@@ -142,6 +146,7 @@ function SimulatorInterface() {
           <div style={{ display: activeCalculator === "linear" ? "block" : "none" }}>
             <PaymentFlowCalculator
               properties={properties}
+              isSinalCampaignActive={isSinalCampaignActive}
               isTutorialOpen={isTutorialOpen}
               setIsTutorialOpen={setIsTutorialOpen}
             />
@@ -149,6 +154,7 @@ function SimulatorInterface() {
           <div style={{ display: activeCalculator === "stepped" ? "block" : "none" }}>
             <SteppedPaymentFlowCalculator
               properties={properties}
+              isSinalCampaignActive={isSinalCampaignActive}
               isTutorialOpen={isTutorialOpen}
               setIsTutorialOpen={setIsTutorialOpen}
             />

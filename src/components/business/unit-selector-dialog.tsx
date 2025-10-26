@@ -3,6 +3,13 @@
 import React, { useMemo, useRef, useState, useEffect, memo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -29,9 +36,11 @@ import {
   Filter,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import type { CombinedUnit, UnitStatus } from "@/types";
+import type { CombinedUnit, UnitStatus, Property } from "@/types";
 import { cn } from "@/lib/utils";
 import { centsToBrl } from "@/lib/business/formatters";
+
+// --- Internal Components ---
 
 interface VirtualRow {
   index: number;
@@ -57,7 +66,6 @@ const getStatusBadgeClass = (status: UnitStatus) => {
 
 const useResponsiveColumns = () => {
     const [columns, setColumns] = useState(1);
-
     useEffect(() => {
         const getColumns = (width: number) => {
             if (width < 640) return 1; 
@@ -66,29 +74,16 @@ const useResponsiveColumns = () => {
             if (width < 1280) return 4;
             return 5;
         };
-
-        const handleResize = () => {
-            setColumns(getColumns(window.innerWidth));
-        };
-
+        const handleResize = () => setColumns(getColumns(window.innerWidth));
         window.addEventListener('resize', handleResize);
-        handleResize(); 
-
+        handleResize();
         return () => window.removeEventListener('resize', handleResize);
     }, []);
-
     return columns;
 };
 
-interface UnitCardProps {
-    unit: CombinedUnit;
-    isReservaParque: boolean;
-    onUnitSelect: (unit: CombinedUnit) => void;
-}
-
-const UnitCard = memo(({ unit, isReservaParque, onUnitSelect }: UnitCardProps) => {
+const UnitCard = memo(({ unit, isReservaParque, onUnitSelect }: { unit: CombinedUnit; isReservaParque: boolean; onUnitSelect: (unit: CombinedUnit) => void; }) => {
     const unitDisplay = isReservaParque ? `Torre ${unit.block}` : `Bloco ${unit.block}`;
-    
     const handleClick = () => {
         if (unit.status === 'Disponível') {
             onUnitSelect(unit);
@@ -112,7 +107,7 @@ const UnitCard = memo(({ unit, isReservaParque, onUnitSelect }: UnitCardProps) =
                         <p className="text-xs text-muted-foreground">{unit.floor}</p>
                     </div>
                     <div className={cn("text-xs font-bold px-2 py-1 rounded-full", getStatusBadgeClass(unit.status).replace(/hover:[a-z-]+/g, ''))}>
-                    {unit.status}
+                        {unit.status}
                     </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-2 text-xs space-y-1.5 flex-grow">
@@ -141,7 +136,7 @@ const UnitCard = memo(({ unit, isReservaParque, onUnitSelect }: UnitCardProps) =
                         <Tag className="h-4 w-4 text-primary/70"/> 
                         <strong className="text-card-foreground/80">Avaliação:</strong> {centsToBrl(unit.appraisalValue)}
                     </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
+                     <div className="flex items-center gap-2 text-muted-foreground">
                         <Tag className="h-4 w-4 text-primary/70"/> 
                         <strong className="text-card-foreground/80">Bônus:</strong> {centsToBrl(unit.complianceBonus)}
                     </div>
@@ -191,13 +186,7 @@ export const UnitSelectorDialogContent = ({
       else if (unit.status === 'Reservado') acc.reservado++;
       else if (unit.status === 'Indisponível') acc.indisponivel++;
       return acc;
-    }, { 
-      total: 0, 
-      disponivel: 0, 
-      vendido: 0, 
-      reservado: 0, 
-      indisponivel: 0 
-    });
+    }, { total: 0, disponivel: 0, vendido: 0, reservado: 0, indisponivel: 0 });
   }, [allUnits]);
 
   const rowVirtualizer = useVirtualizer({
@@ -209,7 +198,6 @@ export const UnitSelectorDialogContent = ({
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Header fixo - SEM botão de fechar */}
       <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4">
         <div className="flex items-center justify-between">
           <div>
@@ -218,11 +206,9 @@ export const UnitSelectorDialogContent = ({
               Use os filtros para encontrar a unidade desejada e clique para selecioná-la.
             </p>
           </div>
-          {/* Removido o botão de fechar personalizado */}
         </div>
       </div>
 
-      {/* Filtros */}
       <div className="flex-shrink-0 border-b p-4">
         <Accordion type="single" collapsible defaultValue="filters" className="w-full">
           <AccordionItem value="filters" className="border-none">
@@ -234,13 +220,8 @@ export const UnitSelectorDialogContent = ({
             </AccordionTrigger>
             <AccordionContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-1">
-                <Select 
-                  value={filters.status} 
-                  onValueChange={(v) => filters.setStatus(v as UnitStatus | 'Todos')}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
+                <Select value={filters.status} onValueChange={(v) => filters.setStatus(v as UnitStatus | 'Todos')}>
+                  <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Todos">Todos os Status</SelectItem>
                     <SelectItem value="Disponível">Disponível</SelectItem>
@@ -249,70 +230,35 @@ export const UnitSelectorDialogContent = ({
                     <SelectItem value="Indisponível">Indisponível</SelectItem>
                   </SelectContent>
                 </Select>
-                
-                <Select 
-                  value={filters.floor} 
-                  onValueChange={filters.setFloor}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Andar" />
-                  </SelectTrigger>
+                <Select value={filters.floor} onValueChange={filters.setFloor}>
+                  <SelectTrigger><SelectValue placeholder="Andar" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Todos">Todos os Andares</SelectItem>
-                    {filterOptions.floors.map(f => (
-                      <SelectItem key={f} value={f}>{f}</SelectItem>
-                    ))}
+                    {filterOptions.floors.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                
-                <Select 
-                  value={filters.typology} 
-                  onValueChange={filters.setTypology}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tipologia" />
-                  </SelectTrigger>
+                <Select value={filters.typology} onValueChange={filters.setTypology}>
+                  <SelectTrigger><SelectValue placeholder="Tipologia" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Todos">Todas as Tipologias</SelectItem>
-                    {filterOptions.typologies.map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
+                    {filterOptions.typologies.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                
-                <Select 
-                  value={filters.sunPosition} 
-                  onValueChange={filters.setSunPosition}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Posição Solar" />
-                  </SelectTrigger>
+                <Select value={filters.sunPosition} onValueChange={filters.setSunPosition}>
+                  <SelectTrigger><SelectValue placeholder="Posição Solar" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Todos">Todas as Posições</SelectItem>
-                    {filterOptions.sunPositions.map(s => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
+                    {filterOptions.sunPositions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              
               <Card className="p-3 mt-4">
                 <div className="grid grid-cols-2 sm:grid-cols-5 text-center text-xs gap-2">
-                  <div className="font-bold">
-                    Total: <span className="text-primary">{unitCounts.total}</span>
-                  </div>
-                  <div className="font-bold">
-                    Disponíveis: <span className="text-green-600">{unitCounts.disponivel}</span>
-                  </div>
-                  <div className="font-bold">
-                    Vendidos: <span className="text-red-600">{unitCounts.vendido}</span>
-                  </div>
-                  <div className="font-bold">
-                    Reservados: <span className="text-yellow-600">{unitCounts.reservado}</span>
-                  </div>
-                  <div className="font-bold">
-                    Indisponíveis: <span className="text-gray-600">{unitCounts.indisponivel}</span>
-                  </div>
+                  <div className="font-bold">Total: <span className="text-primary">{unitCounts.total}</span></div>
+                  <div className="font-bold">Disponíveis: <span className="text-green-600">{unitCounts.disponivel}</span></div>
+                  <div className="font-bold">Vendidos: <span className="text-red-600">{unitCounts.vendido}</span></div>
+                  <div className="font-bold">Reservados: <span className="text-yellow-600">{unitCounts.reservado}</span></div>
+                  <div className="font-bold">Indisponíveis: <span className="text-gray-600">{unitCounts.indisponivel}</span></div>
                 </div>
               </Card>
             </AccordionContent>
@@ -320,53 +266,20 @@ export const UnitSelectorDialogContent = ({
         </Accordion>
       </div>
 
-      {/* Grid de unidades com scroll */}
-      <div 
-        ref={parentRef} 
-        className="flex-grow overflow-y-auto p-4"
-        style={{ 
-          height: 'calc(100vh - 200px)',
-          minHeight: '400px'
-        }}
-      >
-        <div
-          style={{
-            height: `${rowVirtualizer.getTotalSize()}px`,
-            width: '100%',
-            position: 'relative',
-          }}
-        >
+      <div ref={parentRef} className="flex-grow overflow-y-auto p-4" style={{ height: 'calc(100vh - 200px)', minHeight: '400px' }}>
+        <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
           {rowVirtualizer.getVirtualItems().map((virtualRow: VirtualRow) => {
-            const rowIndex = virtualRow.index;
-            const unitsInRow = filteredUnits.slice(
-              rowIndex * columns, 
-              rowIndex * columns + columns
-            );
-
+            const unitsInRow = filteredUnits.slice(virtualRow.index * columns, (virtualRow.index * columns) + columns);
             return (
               <div
                 key={virtualRow.key}
                 style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: `${virtualRow.size}px`,
-                  transform: `translateY(${virtualRow.start}px)`,
-                  display: 'grid',
-                  gridTemplateColumns: `repeat(${columns}, 1fr)`,
-                  gap: '1rem',
-                  paddingBottom: '1rem'
+                  position: 'absolute', top: 0, left: 0, width: '100%',
+                  height: `${virtualRow.size}px`, transform: `translateY(${virtualRow.start}px)`,
+                  display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: '1rem', paddingBottom: '1rem'
                 }}
               >
-                {unitsInRow.map((unit) => (
-                  <UnitCard 
-                    key={unit.unitId} 
-                    unit={unit} 
-                    isReservaParque={isReservaParque} 
-                    onUnitSelect={onUnitSelect}
-                  />
-                ))}
+                {unitsInRow.map((unit) => <UnitCard key={unit.unitId} unit={unit} isReservaParque={isReservaParque} onUnitSelect={onUnitSelect}/>)}
               </div>
             );
           })}
@@ -375,15 +288,79 @@ export const UnitSelectorDialogContent = ({
         {filteredUnits.length === 0 && (
           <div className="text-center py-10 text-muted-foreground">
             <p className="text-lg font-medium mb-2">Nenhuma unidade encontrada</p>
-            <p className="text-sm">
-              Não foram encontradas unidades com os filtros selecionados.
-            </p>
-            <p className="text-xs mt-1">
-              Verifique se as tabelas de disponibilidade e preços foram carregadas corretamente.
-            </p>
+            <p className="text-sm">Não foram encontradas unidades com os filtros selecionados.</p>
           </div>
         )}
       </div>
     </div>
   );
 };
+
+// --- Main Exported Component ---
+
+interface UnitSelectorDialogProps {
+  isOpen: boolean;
+  onOpenChange: (isOpen: boolean) => void;
+  units: CombinedUnit[];
+  onUnitSelect: (unit: CombinedUnit) => void;
+  selectedProperty: Property | null;
+}
+
+export function UnitSelectorDialog({ isOpen, onOpenChange, units, onUnitSelect, selectedProperty }: UnitSelectorDialogProps) {
+  // Filter states
+  const [status, setStatus] = useState<UnitStatus | 'Todos'>('Disponível');
+  const [floor, setFloor] = useState('Todos');
+  const [typology, setTypology] = useState('Todos');
+  const [sunPosition, setSunPosition] = useState('Todos');
+
+  const isReservaParque = useMemo(() => selectedProperty?.brand === 'Reserva Parque', [selectedProperty]);
+
+  // Reset filters when dialog is opened or units change
+  useEffect(() => {
+    if (isOpen) {
+      setStatus('Disponível');
+      setFloor('Todos');
+      setTypology('Todos');
+      setSunPosition('Todos');
+    }
+  }, [isOpen, units]);
+
+  // Memoized filter options
+  const filterOptions = useMemo(() => {
+    const floors = [...new Set(units.map(u => u.floor))].sort((a, b) => a.localeCompare(b));
+    const typologies = [...new Set(units.map(u => u.typology))].sort();
+    const sunPositions = [...new Set(units.map(u => u.sunPosition))].sort();
+    return { floors, typologies, sunPositions };
+  }, [units]);
+
+  // Memoized filtered units
+  const filteredUnits = useMemo(() => {
+    return units.filter(unit => {
+      if (status !== 'Todos' && unit.status !== status) return false;
+      if (floor !== 'Todos' && unit.floor !== floor) return false;
+      if (typology !== 'Todos' && unit.typology !== typology) return false;
+      if (sunPosition !== 'Todos' && unit.sunPosition !== sunPosition) return false;
+      return true;
+    });
+  }, [units, status, floor, typology, sunPosition]);
+
+  const handleUnitSelectAndClose = (unit: CombinedUnit) => {
+    onUnitSelect(unit);
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-7xl h-[90vh] flex flex-col p-0">
+        <UnitSelectorDialogContent
+          allUnits={units}
+          filteredUnits={filteredUnits}
+          isReservaParque={isReservaParque}
+          onUnitSelect={handleUnitSelectAndClose}
+          filters={{ status, setStatus, floor, setFloor, typology, setTypology, sunPosition, setSunPosition }}
+          filterOptions={filterOptions}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -10,6 +10,7 @@ export interface AppUser {
     emailLower?: string;
     isAdmin?: boolean;
     twoFactorURI?: string;
+    twoFactorEnabled?: boolean; // Propriedade adicionada
     twoFactorResetToken?: string;
     twoFactorResetExpires?: FieldValue | Timestamp;
 }

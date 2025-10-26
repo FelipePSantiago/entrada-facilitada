@@ -1,14 +1,12 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { addMonths, differenceInMonths, format, isValid, parseISO, startOfMonth } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { useToast } from '@/components/ui/use-toast';
+import { parseISO } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 import { getNotaryFee } from '@/lib/business/notary-fees';
-import type { Property, CombinedUnit, PaymentField, Results, FormValues, PaymentFieldType, UnitStatus } from "@/types";
+import type { Property, CombinedUnit, PaymentField, Results, FormValues, PaymentFieldType } from "@/types";
 
-// --- Zod Schemas ---
 const paymentFieldSchema = z.object({
   type: z.enum(["sinalAto", "sinal1", "sinal2", "sinal3", "proSoluto", "bonusAdimplencia", "desconto", "bonusCampanha", "fgts", "financiamento"]),
   value: z.coerce.number().min(0, { message: "O valor deve ser positivo." }),
@@ -29,21 +27,9 @@ const formSchema = z.object({
   notaryFees: z.coerce.number().optional(),
   notaryPaymentMethod: z.enum(["creditCard", "bankSlip"]),
   notaryInstallments: z.coerce.number().int().optional(),
-}).refine(data => data.notaryPaymentMethod === 'creditCard' ? !data.notaryInstallments || (data.notaryInstallments >= 1 && data.notaryInstallments <= 12) : true, {
-  message: "Para cartão de crédito, o parcelamento é de 1 a 12 vezes.",
-  path: ["notaryInstallments"],
-}).refine(data => data.notaryPaymentMethod === 'bankSlip' ? !data.notaryInstallments || [36, 40].includes(data.notaryInstallments) : true, {
-  message: "Para boleto, o parcelamento é de 36 ou 40 vezes.",
-  path: ["notaryInstallments"],
 });
 
-// Business Logic
-const calculatePriceInstallment = (principal: number, installments: number, deliveryDate: Date, payments: PaymentField[]) => {
-    // Implementation... 
-    return { installment: 0, total: 0 };
-};
-
-export const usePaymentFlowCalculator = (properties: Property[], isSinalCampaignActive: boolean, sinalCampaignLimitPercent = 0, resultsRef: React.RefObject<HTMLDivElement>) => {
+export const usePaymentFlowCalculator = (properties: Property[], isSinalCampaignActive: boolean, sinalCampaignLimitPercent: number | undefined, resultsRef: React.RefObject<HTMLDivElement>) => {
     const { toast } = useToast();
     const [results, setResults] = useState<Results | null>(null);
     const [isSaleValueLocked, setIsSaleValueLocked] = useState(false);
@@ -61,11 +47,8 @@ export const usePaymentFlowCalculator = (properties: Property[], isSinalCampaign
 
     const watchedPropertyId = form.watch('propertyId');
     const watchedSaleValue = form.watch('saleValue');
-    const watchedAppraisalValue = form.watch('appraisalValue');
 
     const selectedProperty = useMemo(() => properties.find(p => p.id === watchedPropertyId) || null, [properties, watchedPropertyId]);
-    const deliveryDateObj = useMemo(() => selectedProperty?.deliveryDate ? parseISO(selectedProperty.deliveryDate) : null, [selectedProperty]);
-    const constructionStartDateObj = useMemo(() => selectedProperty?.constructionStartDate ? parseISO(selectedProperty.constructionStartDate) : null, [selectedProperty]);
 
     useEffect(() => {
         const fee = getNotaryFee(watchedSaleValue);
@@ -79,9 +62,7 @@ export const usePaymentFlowCalculator = (properties: Property[], isSinalCampaign
         const property = properties.find(p => p.id === id);
         if (!property) return;
         form.setValue("propertyId", id, { shouldValidate: true });
-        const combinedUnits = property.blocks.flatMap(block => 
-            block.units.map(unit => ({ ...unit, block: block.name }))
-        );
+        const combinedUnits = property.blocks.flatMap(block => block.units);
         setAllUnits(combinedUnits);
     }, [form, properties]);
 
@@ -110,14 +91,13 @@ export const usePaymentFlowCalculator = (properties: Property[], isSinalCampaign
     }, [form, toast]);
 
     const onSubmit = (values: FormValues) => {
-        // Full calculation logic from original component here
         if (resultsRef.current) {
             resultsRef.current.scrollIntoView({ behavior: "smooth" });
         }
     };
 
     const handleApplyMinimumCondition = () => {
-        // Full logic from original component here
+        // Logic to be implemented
     };
 
     const paymentFieldOptions: { value: PaymentFieldType; label: string }[] = [

@@ -5,9 +5,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Wallet, PiggyBank, CreditCard, ShieldCheck, AlertCircle } from "lucide-react";
 import { centsToBrl } from "@/lib/utils";
 import dynamic from "next/dynamic";
-import type { Results, FormValues } from "@/types";
+import type { Results, FormValues, ChartData, ChartDataCategory } from "@/types";
 import { PaymentTimeline } from "./payment-timeline";
-import type { ChartData } from "./result-chart";
 
 const ResultChart = dynamic(() => import('@/components/business/result-chart').then(mod => mod.ResultChart), { ssr: false });
 
@@ -32,15 +31,27 @@ const SummaryCard = ({ icon, title, value, colorClass }: { icon: React.ReactNode
     </Card>
 );
 
+const FILLS: Record<ChartDataCategory, string> = {
+  "Entrada": "hsl(var(--chart-1))",
+  "Pró-Soluto": "hsl(var(--chart-2))",
+  "Financiamento": "hsl(var(--chart-3))",
+  "Cartório": "hsl(var(--chart-4))",
+  "Seguro Obra": "hsl(var(--chart-5))",
+};
+
 export const ResultsDisplay = ({ results, brokerData, setBrokerData, formValues }: ResultsDisplayProps) => {
   if (!results) return null;
 
   const chartData: ChartData[] = [
-    { name: "Entrada", value: results.totalEntryCost || 0 },
-    { name: "Pró-Soluto", value: results.totalProSolutoCost || 0 },
-    { name: "Cartório", value: results.totalNotaryCost || 0 },
-    { name: "Seguro", value: results.totalInsuranceCost || 0 }
-  ].filter(item => item.value > 0);
+    { name: "Entrada" as const, value: results.totalEntryCost || 0 },
+    { name: "Pró-Soluto" as const, value: results.totalProSolutoCost || 0 },
+    { name: "Financiamento" as const, value: results.financedAmount || 0 },
+    { name: "Cartório" as const, value: results.totalNotaryCost || 0 },
+    { name: "Seguro Obra" as const, value: results.totalInsuranceCost || 0 },
+  ]
+  .filter(item => item.value > 0)
+  .map(item => ({ ...item, fill: FILLS[item.name] }));
+
 
   return (
     <div className="space-y-6 pt-6">

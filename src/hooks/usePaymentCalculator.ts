@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { FormValues, Results } from '@/types';
 import { getNotaryFee } from '@/lib/business/notary-fees';
@@ -26,22 +25,28 @@ export const usePaymentCalculator = () => {
 
     const totalPaid = proSolutoValue + sinalCampaignBonus;
     const remainingBalance = data.saleValue - totalPaid;
-
     const notaryFee = getNotaryFee(data.saleValue);
 
+    // Correctly populate the Results object with all required fields
     setResults({
       summary: {
         remaining: remainingBalance,
         okTotal: remainingBalance >= 0,
       },
-      financedAmount: 0, // Placeholder, will be calculated elsewhere
-      totalWithInterest: 0, // Placeholder
-      totalConstructionInsurance: 0, // Placeholder
-      monthlyInsuranceBreakdown: [], // Placeholder
-      incomeCommitmentPercentage: 0, // Placeholder
+      financedAmount: 0, 
+      totalWithInterest: 0,
+      totalConstructionInsurance: 0,
+      monthlyInsuranceBreakdown: [],
+      incomeCommitmentPercentage: 0,
       proSolutoCommitmentPercentage: proSolutoValue,
-      averageInterestRate: 0, // Placeholder
-      notaryInstallmentValue: notaryFee, // Used the notaryFee variable
+      averageInterestRate: 0,
+      notaryInstallmentValue: notaryFee,
+      // Add missing required fields
+      totalCost: data.saleValue + notaryFee, // Example calculation
+      totalEntryCost: totalPaid, // Example calculation
+      totalProSolutoCost: proSolutoValue,
+      totalNotaryCost: notaryFee,
+      totalInsuranceCost: 0, // Placeholder
     });
   };
 

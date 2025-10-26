@@ -2,7 +2,6 @@ import { z } from 'zod';
 import type { jsPDF } from 'jspdf';
 import type { UserOptions } from 'jspdf-autotable';
 import type { FieldValue, Timestamp } from 'firebase/firestore';
-// CORREÇÃO 1: Importar os tipos necessários do react-hook-form
 import { type UseFormReturn, type Control } from 'react-hook-form';
 
 // #region User & Auth Types
@@ -22,10 +21,9 @@ export interface TwoFactorSecret {
 // #endregion
 
 // #region Property & Unit Types
-export type PropertyBrand = "Riva" | "Direcional";
+export type PropertyBrand = "Riva" | "Direcional" | "Reserva Parque";
 export type UnitStatus = "Disponível" | "Vendido" | "Reservado" | "Indisponível";
 
-// Base Unit interface (minimal fields needed for availability structures)
 export interface Unit {
   unitId: string;
   unitNumber: string; 
@@ -34,41 +32,36 @@ export interface Unit {
   floor: string;
 }
 
-export interface AvailabilityData {
-    unitId: string;
-    status: UnitStatus;
-    floor: string;
-    block: string;
-}
-
 export interface UnitPricing {
   typology: string;
   privateArea: number;
   sunPosition: string;
   parkingSpaces: number;
-  totalArea?: number; // Making totalArea optional as it wasn't in original Unit
+  totalArea?: number;
   appraisalValue: number; // in cents
   complianceBonus: number; // in cents
   saleValue: number; // in cents
 }
 
-// Combined type used in the calculator, extending base Unit with pricing and potentially other fields
 export interface CombinedUnit extends Unit, UnitPricing {}
 
-// Structure representing a floor within a tower
+export interface Block {
+    name: string;
+    units: CombinedUnit[];
+}
+
 export interface Floor {
   floor: string;
   units: Unit[]; 
 }
 
-// Structure representing a tower within the availability data
 export interface Tower {
-  tower: string; // Name or identifier of the tower
+  tower: string;
   floors: Floor[];
 }
 
-export interface VersionSettings {
-    latest: string;
+export interface Availability {
+  towers: Tower[];
 }
 
 export interface Property {
@@ -77,13 +70,11 @@ export interface Property {
     deliveryDate: string; 
     constructionStartDate: string;
     brand: PropertyBrand;
-    availability?: Availability | null; // Reference to Availability
+    blocks: Block[];
+    // Optional legacy fields for admin compatibility
+    pricing?: CombinedUnit[] | null; 
+    availability?: Availability | null;
     lastPriceUpdate?: Timestamp | null;
-    pricing?: CombinedUnit[] | null; // Reference to Pricing
-}
-
-export interface Availability {
-  towers: Tower[];
 }
 // #endregion
 
@@ -115,25 +106,8 @@ export const formSchema = z.object({
   notaryInstallments: z.coerce.number().int().optional(),
 });
 
-export const propertyFormSchema = z.object({
-  id: z.string().min(1, { message: "O ID é obrigatório." }).regex(/^[a-z0-9-]+$/, { message: "ID deve conter apenas letras minúsculas, números e hífens."}),
-  enterpriseName: z.string().min(1, { message: "O nome é obrigatório." }),
-  brand: z.enum(["Riva", "Direcional"]),
-  constructionStartDate: z.string().optional(),
-  deliveryDate: z.string().optional(),
-});
-
 export type FormValues = z.infer<typeof formSchema>;
 export type PaymentField = z.infer<typeof paymentFieldSchema>;
-export type PropertyFormValues = z.infer<typeof propertyFormSchema>;
-
-export interface MonthlyInsurance {
-  month: string;
-  value: number;
-  date: Date;
-  isPayable: boolean;
-  progressRate: number;
-}
 
 export interface Results {
   summary: { remaining: number; okTotal: boolean };
@@ -150,194 +124,69 @@ export interface Results {
   notaryInstallmentValue?: number;
   incomeError?: string;
   proSolutoError?: string;
-  paymentValidation?: {
-    isValid: boolean;
-    difference: number;
-    expected: number;
-    actual: number;
-    businessLogicViolation?: string;
-  };
+  paymentValidation?: { isValid: boolean; difference: number; expected: number; actual: number; businessLogicViolation?: string; };
+  totalCost: number;
+  totalEntryCost: number;
+  totalProSolutoCost: number;
+  totalNotaryCost: number;
+  totalInsuranceCost: number;
 }
 
-export interface ExtractFinancialDataInput {
-    fileDataUri: string;
-    description?: string;
+export interface MonthlyInsurance {
+  month: string;
+  value: number;
+  date: Date;
+  isPayable: boolean;
+  progressRate: number;
 }
 
-export interface ExtractPricingOutput {
-    appraisalValue: number;
-    grossIncome: number;
-    simulationInstallmentValue: number;
-    financingValue: number;
-}
+// Zod schema for admin property form - now includes all brands
+export const propertyFormSchema = z.object({
+  id: z.string().min(1, { message: "O ID é obrigatório." }).regex(/^[a-z0-9-]+$/, { message: "ID deve conter apenas letras minúsculas, números e hífens."}),
+  enterpriseName: z.string().min(1, { message: "O nome é obrigatório." }),
+  brand: z.enum(["Riva", "Direcional", "Reserva Parque"]),
+  constructionStartDate: z.string().optional(),
+  deliveryDate: z.string().optional(),
+});
+
+export type PropertyFormValues = z.infer<typeof propertyFormSchema>;
 // #endregion
 
-// #region PDF & Generic Types
+// #region PDF & Charting Types
 
-// CORREÇÃO: Remover a propriedade 'results' pois ela é passada separadamente
-export interface PdfFormValues extends Omit<FormValues, 'results'> {
-  brokerName: string;
-  brokerCreci: string;
-}
-
+// Aliases for PDF generation to decouple from main form types if needed
+export type PdfFormValues = FormValues & { brokerName: string; brokerCreci: string; };
 export type PdfResults = Results;
 
 export interface PDFPageData extends UserOptions {
   pageNumber: number;
   pageCount: number;
   doc: jsPDF;
-  cursor?: {
-    y: number;
-    x: number;
-  } | null;
+  cursor?: { y: number; x: number; } | null;
 }
 
-// CORREÇÃO: Interface REAL do PaymentTimeline baseada no componente analisado
-export interface PaymentTimelineProps {
-  results: Results;
-  formValues: FormValues;
-}
+export type ChartDataCategory = "Entrada" | "Pró-Soluto" | "Financiamento" | "Cartório" | "Seguro Obra";
 
 export interface ChartData {
-  name: string;
+  name: ChartDataCategory;
   value: number;
   fill: string;
 }
 
-// CORREÇÃO: Interface REAL do ResultChart baseada no componente analisado
-export interface ResultChartProps {
-  data: ChartData[];
-  value: number;
-}
+// #endregion
 
-// CORREÇÃO: Atualizar interface para incluir allUnits e filteredUnits
-export interface UnitSelectorDialogContentProps {
-  allUnits: CombinedUnit[];
-  filteredUnits: CombinedUnit[];
-  filters: {
-    status: UnitStatus | "Todos";
-    setStatus: (status: UnitStatus | "Todos") => void;
-    floor: string;
-    setFloor: (floor: string) => void;
-    typology: string;
-    setTypology: (typology: string) => void;
-    sunPosition: string;
-    setSunPosition: (sunPosition: string) => void;
-  };
-  filterOptions: {
-    floors: string[];
-    typologies: string[];
-    sunPositions: string[];
-  };
-  onUnitSelect: (unit: CombinedUnit) => void;
-  isReservaParque: boolean;
-}
-
-// CORREÇÃO: Atualizar interface Step para usar content e target em vez de description e targetId
-export interface Step {
-  id: string;
-  title: string;
-  content: string | React.ReactNode;
-  target: string;
-  isCompleted?: () => boolean;
-}
-
-// CORREÇÃO: Permitir results ser null e usar o tipo correto para 'form'
-export interface InteractiveTutorialProps {
-  isOpen: boolean;
-  onClose: () => void;
-  // CORREÇÃO 2: Substituir 'any' pelo tipo específico do react-hook-form
-  form: UseFormReturn<FormValues>;
-  results: Results | null;
-  steps: Step[];
-}
-
-export type GenericObject<T = unknown> = Record<string, T>;
-export type ApiResponse<T> = {
-  data: T;
-  error?: string;
-};
-
-// #region Component Props Types
-export interface DatePickerProps {
-  value?: string;
-  onChange?: (dateString: string | undefined) => void;
-  disabled?: boolean;
-  disabledDates?: (date: Date) => boolean;
-  placeholder?: string;
-}
-
-// CORREÇÃO: Interface REAL do PaymentTimelineComponent baseada no componente analisado
-export interface PaymentTimelineComponentProps {
-  results: Results;
-  formValues: FormValues;
-}
-
-// CORREÇÃO: Interface REAL do ResultChartComponent baseada no componente analisado
-export interface ResultChartComponentProps {
-  data: ChartData[];
-  value: number;
-}
-
-// NOVA INTERFACE: Para a função generatePdf
-export interface GeneratePdfFunction {
-  (formValues: PdfFormValues, results: PdfResults, selectedProperty: Property): Promise<void>;
-}
-
-// Interface para dados extraídos
-export interface ExtractedData extends Partial<ExtractPricingOutput> {
-  grossIncome?: number;
-  simulationInstallmentValue?: number;
-}
-
-// Interface estendida para Results com paymentValidation
-export interface ExtendedResults extends Results {
-  paymentValidation?: {
-    isValid: boolean;
-    difference: number;
-    expected: number;
-    actual: number;
-    businessLogicViolation?: string;
-  };
-}
-
-// Interface para propriedades do PaymentFlowCalculator
+// #region Component Props
 export interface PaymentFlowCalculatorProps {
   properties: Property[];
   isSinalCampaignActive: boolean;
-  sinalCampaignLimitPercent?: number;
   isTutorialOpen: boolean;
   setIsTutorialOpen: (isOpen: boolean) => void;
 }
 
-// Interface para UnitCard
-export interface UnitCardProps {
-  unit: CombinedUnit;
-  isReservaParque: boolean;
-  onUnitSelect: (unit: CombinedUnit) => void;
-  style?: React.CSSProperties;
-}
+export interface SteppedPaymentFlowCalculatorProps extends PaymentFlowCalculatorProps {}
 
-// Interface para CurrencyFormField
-export interface CurrencyFormFieldProps {
-  name: keyof FormValues;
-  label: string;
-  // CORREÇÃO 3: Substituir 'any' pelo tipo específico do react-hook-form
-  control: Control<FormValues>;
-  readOnly?: boolean;
-  placeholder?: string;
-  id?: string;
-}
-
-// Interface para o componente PaymentTimeline (alias para compatibilidade)
-export interface PaymentTimelineComponentProps {
+export interface ResultsDisplayProps {
   results: Results;
   formValues: FormValues;
-}
-
-// Interface para o componente ResultChart (alias para compatibilidade)
-export interface ResultChartComponentProps {
-  data: ChartData[];
-  value: number;
 }
 // #endregion

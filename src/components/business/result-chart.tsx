@@ -3,22 +3,11 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { formatPercentage } from '@/lib/business/formatters';
-
-const CHART_COLORS = {
-  entrada: '#8884d8',      // Lilás
-  proSoluto: '#82ca9d',    // Verde claro
-  cartorio: '#ffc658',     // Amarelo
-  seguro: '#ff7c7c',        // Vermelho claro
-};
-
-export interface ChartData {
-  name: 'Entrada' | 'Pró-Soluto' | 'Cartório' | 'Seguro';
-  value: number;
-}
+import type { ChartData } from '@/types'; // Use the centralized type
 
 interface ResultChartProps {
   data: ChartData[];
-  value: number;
+  value: number; // This likely represents the total value or a percentage to display in the center
 }
 
 export function ResultChart({ data, value }: ResultChartProps) {
@@ -32,20 +21,23 @@ export function ResultChart({ data, value }: ResultChartProps) {
             nameKey="name"
             cx="50%"
             cy="50%"
-            innerRadius={45} // Ajustado para um visual mais "Apple-like"
-            outerRadius={65} // Ajustado para um visual mais "Apple-like"
+            innerRadius={45}
+            outerRadius={65}
             startAngle={90}
             endAngle={450}
             paddingAngle={2}
             stroke="none"
           >
             {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={CHART_COLORS[entry.name.toLowerCase().replace('-', '') as keyof typeof CHART_COLORS] || '#cccccc'} />
+              <Cell key={`cell-${index}`} fill={entry.fill} /> // Use the fill property from the data
             ))}
           </Pie>
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        {/* Assuming 'value' is the total cost, not a percentage. Formatting it as a percentage seems odd without context. */}
+        {/* If it's a percentage, formatPercentage is correct. If it's the total cost, it should be formatted as currency. */}
+        {/* Let's keep formatPercentage for now as per the original code's apparent intent. */}
         <span className="text-2xl font-bold tracking-tighter text-gray-800 dark:text-gray-200">{formatPercentage(value)}</span>
         <span className="text-xs text-gray-500 dark:text-gray-400">Custo Total</span>
       </div>
