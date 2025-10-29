@@ -21,7 +21,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
       // In non-production environments, set the debug token.
       if (process.env.NODE_ENV !== 'production') {
-        (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = "a5864223-9b38-489e-817b-c14ca8009e41";
+        (window as Window & { FIREBASE_APPCHECK_DEBUG_TOKEN?: string }).FIREBASE_APPCHECK_DEBUG_TOKEN = "a5864223-9b38-489e-817b-c14ca8009e41";
       }
 
       // The App Check SDK requires a provider instance to be created.

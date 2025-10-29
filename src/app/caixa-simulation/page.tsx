@@ -1,6 +1,6 @@
 "use client";
 
-import { getFunctions, httpsCallable, HttpsCallableResult } from "firebase/functions";
+import { httpsCallable, type HttpsCallableResult } from "firebase/functions";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";

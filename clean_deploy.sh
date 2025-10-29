@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e # Exit immediately if a command exits with a non-zero status.
 
+# Increment version first
+bash increment_version.sh
+
 echo "Starting clean deployment process..."
 
 # Determine the script's directory to use absolute paths

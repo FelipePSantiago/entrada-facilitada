@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { jsPDF } from 'jspdf';
 import type { UserOptions } from 'jspdf-autotable';
 import type { FieldValue, Timestamp } from 'firebase/firestore';
-import { type UseFormReturn, type Control } from 'react-hook-form';
+import { type UseFormReturn } from 'react-hook-form';
 
 // #region User & Auth Types
 export interface AppUser {
@@ -128,8 +128,11 @@ export interface Results {
   totalCost: number;
   totalEntryCost: number;
   totalProSolutoCost: number;
+  totalFinancedCost: number;
   totalNotaryCost: number;
   totalInsuranceCost: number;
+  bonusAdimplenciaValue?: number;
+  effectiveSaleValue?: number;
 }
 
 export interface MonthlyInsurance {
@@ -188,5 +191,35 @@ export interface SteppedPaymentFlowCalculatorProps extends PaymentFlowCalculator
 export interface ResultsDisplayProps {
   results: Results;
   formValues: FormValues;
+}
+// #endregion
+
+// #region PDF Extraction Types
+export interface ExtractFinancialDataInput {
+  fileDataUri: string;
+}
+
+export interface ExtractPricingOutput {
+  appraisalValue?: number;
+  grossIncome?: number;
+  simulationInstallmentValue?: number;
+  financingValue?: number;
+}
+// #endregion
+
+// #region Tutorial Types
+export interface Step {
+  id: string;
+  title: string;
+  content: string;
+  target: string;
+}
+
+export interface InteractiveTutorialProps {
+  isOpen: boolean;
+  onClose: () => void;
+  steps: Step[];
+  form: UseFormReturn<FormValues>;
+  results: Results | null;
 }
 // #endregion

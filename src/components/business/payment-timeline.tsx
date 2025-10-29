@@ -3,7 +3,7 @@ import { ptBR } from 'date-fns/locale';
 import type { PaymentField, Results, FormValues } from '@/types';
 import { cn } from '@/lib/utils';
 import { centsToBrl } from '@/lib/business/formatters';
-import { HandCoins, CalendarCheck, Flag, Tag, Gift, Landmark, Building } from 'lucide-react';
+import { HandCoins, CalendarCheck, Flag, Tag, Gift, Landmark } from 'lucide-react';
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 

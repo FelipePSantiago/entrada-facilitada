@@ -55,7 +55,6 @@ function Verify2FAPageContent() {
         });
         localStorage.setItem(`2fa-verified-${user.uid}`, "true");
         setIsFullyAuthenticated(true);
-        router.push("/simulator");
       } else {
         throw new Error("Código inválido. Tente novamente.");
       }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CreditCard, ArrowLeft } from "lucide-react";
+import { Check, CreditCard } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,

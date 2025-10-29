@@ -27,6 +27,11 @@ export const usePaymentCalculator = () => {
     const remainingBalance = data.saleValue - totalPaid;
     const notaryFee = getNotaryFee(data.saleValue);
 
+    // Calculate totalFinancedCost
+    const totalFinancedCost = data.payments
+      .filter(p => ['financiamento', 'fgts'].includes(p.type))
+      .reduce((sum, p) => sum + p.value, 0);
+
     // Correctly populate the Results object with all required fields
     setResults({
       summary: {
@@ -42,11 +47,12 @@ export const usePaymentCalculator = () => {
       averageInterestRate: 0,
       notaryInstallmentValue: notaryFee,
       // Add missing required fields
-      totalCost: data.saleValue + notaryFee, // Example calculation
-      totalEntryCost: totalPaid, // Example calculation
+      totalCost: data.saleValue + notaryFee,
+      totalEntryCost: totalPaid,
       totalProSolutoCost: proSolutoValue,
+      totalFinancedCost: totalFinancedCost, // ← CORRIGIDO: adicionado
       totalNotaryCost: notaryFee,
-      totalInsuranceCost: 0, // Placeholder
+      totalInsuranceCost: 0,
     });
   };
 

@@ -8,6 +8,7 @@ import { AuthContext } from '@/contexts/AuthContext';
 import type { Property, AppUser } from '@/types';
 import { auth, app, db } from '@/lib/firebase/clientApp';
 import { getFunctions, type Functions, httpsCallable } from 'firebase/functions';
+import { AppleLoader } from '@/components/ui/apple-loader';
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -15,6 +16,14 @@ interface ProvidersProps {
 
 const PUBLIC_PATHS = ['/login', '/signup', '/plans', '/pix-payment', '/forgot-password', '/', '/sumup-payment', '/sumup-payment/success', '/api/sumup/payment'];
 const AUTH_ONLY_PATHS = ['/setup-2fa', '/verify-2fa'];
+
+function LoadingScreen() {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <AppleLoader />
+      </div> 
+    );
+}
 
 export function ClientProviders({ children }: ProvidersProps) {
   const router = useRouter();
@@ -25,7 +34,9 @@ export function ClientProviders({ children }: ProvidersProps) {
   const [isPageLoading, setIsPageLoading] = useState(false);
   const [isFullyAuthenticated, setIsFullyAuthenticated] = useState(false);
   const [has2FA, setHas2FA] = useState<boolean | undefined>(undefined);
+  const [is2FAVerified, setIs2FAVerified] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [twoFAReady, setTwoFAReady] = useState(false);
   const [propertiesLoading, setPropertiesLoading] = useState(true);
   const [functions, setFunctions] = useState<Functions | null>(null);
 
@@ -36,6 +47,7 @@ export function ClientProviders({ children }: ProvidersProps) {
     const unsubscribeAuth = onAuthStateChanged(auth, (newUser) => {
       if (newUser) {
         setUser(newUser);
+        setIs2FAVerified(localStorage.getItem(`2fa-verified-${newUser.uid}`) === 'true');
       } else {
         setUser(null);
         setAppUser(null);
@@ -47,14 +59,14 @@ export function ClientProviders({ children }: ProvidersProps) {
             localStorage.removeItem(key);
           }
         });
+        setTwoFAReady(false);
+        setIs2FAVerified(false);
       }
     });
 
     return () => unsubscribeAuth();
   }, []);
 
-  // ... (o resto do arquivo permanece o mesmo) ...
-  
   useEffect(() => {
     setIsPageLoading(false);
   }, [pathname]);
@@ -76,6 +88,7 @@ export function ClientProviders({ children }: ProvidersProps) {
   }, [user]);
 
   useEffect(() => {
+    if (twoFAReady) return;
     if (appUser === undefined || !user || !functions) return;
     setAuthLoading(true);
 
@@ -88,11 +101,15 @@ export function ClientProviders({ children }: ProvidersProps) {
         const hasTwoFactor = !!secret;
         setHas2FA(hasTwoFactor);
 
-        // Define isFullyAuthenticated com base no status do 2FA no backend e se o usuário não é admin
-        if (!hasTwoFactor && !appUser?.isAdmin) {
-          setIsFullyAuthenticated(appUser?.isAdmin || false);
-        }
+        setTwoFAReady(true);
 
+        if (!hasTwoFactor) {
+          setIsFullyAuthenticated(true);
+        } else if (hasTwoFactor && is2FAVerified) {
+          setIsFullyAuthenticated(true);
+        } else {
+          setIsFullyAuthenticated(false);
+        }
       } catch (e) {
         console.error("Falha ao verificar o status do 2FA:", e);
         setHas2FA(false);
@@ -110,7 +127,7 @@ export function ClientProviders({ children }: ProvidersProps) {
       setAuthLoading(false);
     }
 
-  }, [appUser, user, functions, setIsFullyAuthenticated, setHas2FA, setAuthLoading]);
+  }, [appUser, user, functions, setIsFullyAuthenticated, setHas2FA, setAuthLoading, twoFAReady, is2FAVerified]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -125,28 +142,27 @@ export function ClientProviders({ children }: ProvidersProps) {
 
     const targetPath = appUser?.isAdmin ? '/admin/properties' : '/simulator';
 
+    if (has2FA) {
     if (isFullyAuthenticated) {
-      if (AUTH_ONLY_PATHS.includes(pathname) || pathname === '/login') {
-         router.replace(targetPath);
-         setIsPageLoading(true);
+      if (pathname !== targetPath && AUTH_ONLY_PATHS.includes(pathname) || pathname === '/login') {
+        router.replace(targetPath);
+        setIsPageLoading(true);
       }
       return;
     }
-    
-    if (AUTH_ONLY_PATHS.includes(pathname)) {
-      return;
-    }
 
-    if (has2FA === undefined) return;
-
-    if (has2FA) {
-      router.replace('/verify-2fa');
+      if (!is2FAVerified) {
+        router.replace('/verify-2fa');
+      } else {
+        router.replace(targetPath);
+      }
     } else {
-      router.replace('/setup-2fa');
+      if (pathname !== '/setup-2fa') {
+        router.replace('/setup-2fa');
+        setIsPageLoading(true);
+      }
     }
-    setIsPageLoading(true);
-
-  }, [authLoading, user, appUser, isFullyAuthenticated, has2FA, pathname, router]);
+  }, [authLoading, user, appUser, isFullyAuthenticated, has2FA, pathname, router, is2FAVerified]);
 
   useEffect(() => {
     if (!isFullyAuthenticated) {
@@ -175,12 +191,6 @@ export function ClientProviders({ children }: ProvidersProps) {
   const isAdmin = appUser?.isAdmin ?? false;
   const showLoader = authLoading || (user && appUser === undefined) || (router && isPageLoading);
 
-  if (showLoader) {
-    return (
-      <div>Carregando...</div> 
-    );
-  }
-
   return (
     <AuthContext.Provider value={{ 
         user, 
@@ -189,13 +199,14 @@ export function ClientProviders({ children }: ProvidersProps) {
         isFullyAuthenticated, 
         setIsFullyAuthenticated, 
         has2FA, 
+        is2FAVerified, 
         properties, 
         propertiesLoading,
         isPageLoading,
         setIsPageLoading,
         functions
     }}>
-      {children}
+      {showLoader ? <LoadingScreen /> : children}
     </AuthContext.Provider>
   );
 }

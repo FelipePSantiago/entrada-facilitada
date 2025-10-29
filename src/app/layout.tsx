@@ -7,6 +7,7 @@ import Header from "@/components/common/Header";
 import { Providers } from "@/components/providers";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
+import { VersionCheckHandler } from "@/components/common/version-check-handler";
 
 export const metadata: Metadata = {
   title: "Entrada Facilitada",
@@ -29,6 +30,7 @@ export default function RootLayout({
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="app-version" content="0.1.13" />
       </head>
       <body className="font-sans antialiased">
         <ThemeProvider
@@ -40,6 +42,7 @@ export default function RootLayout({
           <ErrorBoundary>
             <Providers>
               <ChunkErrorHandler />
+              <VersionCheckHandler />
               <Header />
               <main className="flex w-full flex-col items-center justify-center pt-24">
                 {children}

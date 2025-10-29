@@ -5,9 +5,6 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
