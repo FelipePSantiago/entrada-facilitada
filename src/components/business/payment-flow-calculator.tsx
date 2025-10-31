@@ -91,6 +91,19 @@ const formatDate = (date: Date): string => {
   return format(date, "dd/MM/yyyy", { locale: ptBR });
 };
 
+// Função para formatar valor monetário no padrão brasileiro
+const formatCurrencyBRL = (value: number | string): string => {
+  const numValue = typeof value === 'string' ? parseFloat(value.replace(/[^\d,-]/g, '').replace(',', '.')) : value;
+  if (isNaN(numValue)) return 'R$ 0,00';
+  
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(numValue);
+};
+
 const generatePdf = async (pdfValues: ExtendedPdfFormValues, results: ExtendedResults, selectedProperty: Property) => {
   try {
     const { jsPDF } = await import('jspdf');
@@ -118,28 +131,69 @@ const generatePdf = async (pdfValues: ExtendedPdfFormValues, results: ExtendedRe
     const orangeColor = [255, 193, 7]; // Laranja #FFC107
     const redColor = [220, 53, 69]; // Vermelho #DC3545
 
+    // Carregar a logo da Quadraimob da URL
+    let logoData: string | null = null;
+    try {
+      const logoResponse = await fetch('https://i.ibb.co/XqPsv3x/Quadraimob-logo.png');
+      if (logoResponse.ok) {
+        const blob = await logoResponse.blob();
+        logoData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }
+    } catch (error) {
+      console.warn('Não foi possível carregar a logo da Quadraimob:', error);
+    }
+
     // Função para adicionar rodapé em todas as páginas
     const addFooter = () => {
       const pageCount = pdf.getNumberOfPages();
       for (let i = 1; i <= pageCount; i++) {
         pdf.setPage(i);
+        
+        // Adicionar linha separadora no rodapé
+        pdf.setDrawColor(grayLight[0], grayLight[1], grayLight[2]);
+        pdf.setLineWidth(0.5);
+        pdf.line(margin, pageHeight - 25, pageWidth - margin, pageHeight - 25);
+        
+        // Adicionar logo da Quadraimob (se disponível)
+        if (logoData) {
+          try {
+            // Logo no canto esquerdo - ajustado para formato webp
+            pdf.addImage(logoData, 'WEBP', margin, pageHeight - 20, 35, 8);
+          } catch (error) {
+            console.warn('Erro ao adicionar a logo no rodapé:', error);
+            // Fallback: texto simples se a imagem não carregar
+            pdf.setFont('Helvetica', 'bold');
+            pdf.setFontSize(10);
+            pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            pdf.text('Quadraimob', margin, pageHeight - 15);
+          }
+        } else {
+          // Fallback: texto simples se não houver logo
+          pdf.setFont('Helvetica', 'bold');
+          pdf.setFontSize(10);
+          pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+          pdf.text('Quadraimob', margin, pageHeight - 15);
+        }
+        
+        // Paginação (canto inferior direito)
         pdf.setFont('Helvetica', 'normal');
         pdf.setFontSize(8);
         pdf.setTextColor(grayMedium[0], grayMedium[1], grayMedium[2]);
-        
-        // Informações da empresa (canto inferior esquerdo)
-        pdf.text('Imobiliária Exemplo • contato@exemplo.com • (11) 9999-9999', margin, pageHeight - 15);
-        
-        // Paginação (canto inferior direito)
         const paginationText = `Página ${i} de ${pageCount}`;
         const textWidth = pdf.getTextWidth(paginationText);
         pdf.text(paginationText, pageWidth - margin - textWidth, pageHeight - 15);
+        
       }
     };
 
     // Função para verificar e adicionar nova página se necessário
     const checkNewPage = (spaceNeeded: number = 10) => {
-      if (yPosition + spaceNeeded > pageHeight - margin) {
+      if (yPosition + spaceNeeded > pageHeight - margin - 30) { // Ajustado para considerar o rodapé
         pdf.addPage();
         yPosition = margin;
         currentPage++;
@@ -160,7 +214,7 @@ const generatePdf = async (pdfValues: ExtendedPdfFormValues, results: ExtendedRe
     };
 
     // Função para adicionar linha de informação
-    const addInfoLine = (label: string, value: string | number, isBold: boolean = false, color?: number[]) => {
+    const addInfoLine = (label: string, value: string | number, isBold: boolean = false, color?: number[], isCurrency: boolean = false) => {
       checkNewPage(6);
       pdf.setFont('Helvetica', 'bold');
       pdf.setFontSize(10);
@@ -174,11 +228,42 @@ const generatePdf = async (pdfValues: ExtendedPdfFormValues, results: ExtendedRe
         pdf.setTextColor(0, 0, 0);
       }
       
-      const valueText = typeof value === 'number' ? centsToBrl(value * 100) : value;
+      let valueText: string;
+      if (typeof value === 'number') {
+        if (isCurrency) {
+          valueText = formatCurrencyBRL(value);
+        } else {
+          valueText = value.toString();
+        }
+      } else {
+        valueText = value;
+      }
+      
       const valueWidth = pdf.getTextWidth(valueText);
       pdf.text(valueText, pageWidth - margin - valueWidth, yPosition);
       
       yPosition += 5;
+    };
+
+    // Função para adicionar linha destacada
+    const addHighlightedLine = (label: string, value: number, bgColor: number[], textColor: number[], isCurrency: boolean = true) => {
+      checkNewPage(10);
+      
+      // Adicionar fundo destacado
+      pdf.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
+      pdf.rect(margin, yPosition - 4, pageWidth - 2 * margin, 8, 'F');
+      
+      // Adicionar texto
+      pdf.setFont('Helvetica', 'bold');
+      pdf.setFontSize(10);
+      pdf.setTextColor(textColor[0], textColor[1], textColor[2]);
+      pdf.text(label + ':', margin, yPosition);
+      
+      const valueText = isCurrency ? formatCurrencyBRL(value) : value.toString();
+      const valueWidth = pdf.getTextWidth(valueText);
+      pdf.text(valueText, pageWidth - margin - valueWidth, yPosition);
+      
+      yPosition += 8;
     };
 
     // ===== CABEÇALHO DO DOCUMENTO =====
@@ -192,113 +277,142 @@ const generatePdf = async (pdfValues: ExtendedPdfFormValues, results: ExtendedRe
     pdf.setTextColor(grayDark[0], grayDark[1], grayDark[2]);
     pdf.text(`Data: ${formatDate(new Date())}`, pageWidth / 2, 28, { align: 'center' });
 
-    // Informações do corretor
-    if (pdfValues.brokerName || pdfValues.brokerCreci) {
-      const brokerInfo = [];
-      if (pdfValues.brokerName) brokerInfo.push(`Corretor(a): ${pdfValues.brokerName}`);
-      if (pdfValues.brokerCreci) brokerInfo.push(`CRECI: ${pdfValues.brokerCreci}`);
-      
-      pdf.setFont('Helvetica', 'normal');
-      pdf.setFontSize(9);
-      const brokerText = brokerInfo.join(' • ');
-      const brokerWidth = pdf.getTextWidth(brokerText);
-      pdf.text(brokerText, pageWidth - margin - brokerWidth, 28);
-    }
-
     yPosition = 45;
 
-    // ===== DETALHES DO IMÓVEL =====
-    addSection('Detalhes do Imóvel', 16);
+    // ===== DADOS INICIAIS =====
+    addSection('Dados Iniciais', 16);
 
-    pdf.setFont('Helvetica', 'bold');
-    pdf.setFontSize(11);
-    pdf.setTextColor(grayDark[0], grayDark[1], grayDark[2]);
-    pdf.text('Empreendimento', margin, yPosition);
-    pdf.setFont('Helvetica', 'normal');
-    pdf.setTextColor(0, 0, 0);
-    pdf.text(selectedProperty.enterpriseName || 'Não informado', margin, yPosition + 5);
-    yPosition += 12;
-
-    // Dados da unidade - usando dados disponíveis do selectedProperty
-    const unitData = selectedProperty.pricing?.[0] || selectedProperty.blocks?.[0]?.units?.[0];
+    addInfoLine('Nome do(a) corretor(a)', pdfValues.brokerName || 'Não informado');
     
-    const infoLines = [
-      { label: 'Unidade', value: pdfValues.selectedUnit || 'Não informada' },
-      { label: 'Tipologia', value: unitData?.typology || 'Não informada' },
-      { label: 'Área Privativa', value: unitData?.privateArea ? `${unitData.privateArea} m²` : 'Não informada' },
-      { label: 'Andar', value: unitData?.floor || 'Não informado' },
-      { label: 'Posição Solar', value: unitData?.sunPosition || 'Não informada' },
-      { label: 'Vagas', value: unitData?.parkingSpaces ? unitData.parkingSpaces.toString() : 'Não informada' },
-    ];
-
-    infoLines.forEach(info => {
-      checkNewPage(6);
-      pdf.setFont('Helvetica', 'bold');
-      pdf.setFontSize(10);
-      pdf.setTextColor(grayDark[0], grayDark[1], grayDark[2]);
-      pdf.text(info.label + ':', margin, yPosition);
-      
-      pdf.setFont('Helvetica', 'normal');
-      pdf.setTextColor(0, 0, 0);
-      pdf.text(info.value, margin + 30, yPosition);
-      
-      yPosition += 5;
-    });
+    // Adicionar CRECI apenas se informado
+    if (pdfValues.brokerCreci) {
+      addInfoLine('CRECI', pdfValues.brokerCreci);
+    }
+    
+    addInfoLine('Empreendimento', selectedProperty.enterpriseName || 'Não informado');
+    
+    // Obter data de entrega
+    const deliveryDate = selectedProperty.deliveryDate ? 
+      (typeof selectedProperty.deliveryDate === 'string' ? parseISO(selectedProperty.deliveryDate) : selectedProperty.deliveryDate) : 
+      null;
+    addInfoLine('Data de entrega', deliveryDate ? formatDate(deliveryDate) : 'Não informada');
+    addInfoLine('Data da simulação', formatDate(new Date()));
 
     yPosition += 10;
 
-    // ===== VALORES DO IMÓVEL =====
-    addSection('Valores da Negociação', 16);
+    // ===== DADOS DO IMÓVEL =====
+    addSection('Dados do Imóvel', 16);
 
-    // Valores básicos
-    addInfoLine('Valor de Avaliação', pdfValues.appraisalValue || 0);
-    addInfoLine('Valor de Venda', pdfValues.saleValue || 0);
-
-    // Bônus adimplência
+    // Dados da unidade
+    const unitData = selectedProperty.pricing?.[0] || selectedProperty.blocks?.[0]?.units?.[0];
+    
+    addInfoLine('Unidade escolhida', pdfValues.selectedUnit || 'Não informada');
+    addInfoLine('Valor de avaliação', pdfValues.appraisalValue || 0, false, undefined, true);
+    
+    // Bônus da construtora - Destaque elegante
     const bonusAdimplenciaValue = results.bonusAdimplenciaValue || 
                                  pdfValues.payments?.find(p => p.type === 'bonusAdimplencia')?.value || 0;
     if (bonusAdimplenciaValue > 0) {
-      addInfoLine('Bônus Adimplência', bonusAdimplenciaValue, true, greenColor);
+      addHighlightedLine(
+        'Bônus da construtora', 
+        bonusAdimplenciaValue, 
+        [240, 248, 255], // Fundo azul muito claro
+        [51, 102, 153],  // Azul escuro
+        true
+      );
     }
-
-    // Desconto aplicado
+    
+    // Desconto - Destaque elegante
     const descontoValue = pdfValues.payments?.find(p => p.type === 'desconto')?.value || 0;
     if (descontoValue > 0) {
-      addInfoLine('Desconto Aplicado', descontoValue, true, orangeColor);
+      addHighlightedLine(
+        'Desconto', 
+        descontoValue, 
+        [255, 248, 240], // Fundo laranja muito claro
+        [204, 102, 0],   // Laranja escuro
+        true
+      );
     }
-
-    // Valor final da unidade
-    const effectiveSaleValue = (pdfValues.saleValue || 0) - descontoValue + bonusAdimplenciaValue;
+    
+    addInfoLine('Valor de venda', pdfValues.saleValue || 0, false, undefined, true);
+    
+    // Valor final com desconto - Destaque elegante
+    const effectiveSaleValue = (pdfValues.saleValue || 0) - descontoValue;
     if (effectiveSaleValue !== pdfValues.saleValue) {
-      checkNewPage(8);
-      pdf.setFont('Helvetica', 'bold');
-      pdf.setFontSize(12);
-      pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-      pdf.text('Valor Final da Unidade:', margin, yPosition);
-      const finalValueText = centsToBrl(effectiveSaleValue * 100);
-      const finalValueWidth = pdf.getTextWidth(finalValueText);
-      pdf.text(finalValueText, pageWidth - margin - finalValueWidth, yPosition);
-      yPosition += 8;
+      addHighlightedLine(
+        'Valor final com desconto', 
+        effectiveSaleValue, 
+        [240, 255, 240], // Fundo verde muito claro
+        [0, 102, 51],    // Verde escuro
+        true
+      );
     }
-
-    // Renda bruta
-    addInfoLine('Renda Bruta Mensal', pdfValues.grossIncome || 0);
 
     yPosition += 10;
 
-    // ===== RESUMO FINANCEIRO =====
-    addSection('Resumo Financeiro', 16);
+    // ===== SIMULAÇÃO DE FINANCIAMENTO CAIXA =====
+    addSection('Simulação de Financiamento Caixa', 16);
 
-    const costItems = [
-      { label: 'Entrada', value: results.totalEntryCost || 0 },
+    // Verificar se há dados da simulação da Caixa
+    const caixaSimulation = results.caixaSimulation;
+    if (caixaSimulation && caixaSimulation.sucesso && caixaSimulation.dados) {
+      // CORREÇÃO: Usar o valor do financiamento do formulário (já convertido para número)
+      const financiamentoPayment = pdfValues.payments?.find(p => p.type === 'financiamento');
+      const financiamentoValue = financiamentoPayment?.value || 0;
+      addInfoLine('Valor de financiamento', financiamentoValue, false, undefined, true);
+
+      
+      // Correção: Prazo total = prazo do financiamento da simulação automatizada
+      addInfoLine('Prazo total', caixaSimulation.dados.Prazo || 'Não informado');
+      
+      // Correção: Juros efetivos = taxa da simulação automatizada (formato 0%-15%)
+      const jurosEfetivos = caixaSimulation.dados.Juros_Efetivos || 'Não informado';
+      // Garantir formato correto (0%-15%)
+      const jurosFormatado = typeof jurosEfetivos === 'string' && jurosEfetivos.includes('%') 
+        ? jurosEfetivos 
+        : `${jurosEfetivos}%`;
+      addInfoLine('Juros efetivos', jurosFormatado);
+    } else {
+      addInfoLine('Valor de financiamento', results.totalFinancedCost || 0, false, undefined, true);
+      addInfoLine('Prazo total', `${pdfValues.installments || 0} meses`);
+      addInfoLine('Juros efetivos', `${(results.averageInterestRate * 100).toFixed(2)}%`);
+    }
+
+    yPosition += 10;
+
+    // ===== DADOS DE PARCELAMENTO DA CONSTRUTORA =====
+    addSection('Dados de Parcelamento da Construtora', 16);
+
+    // Correção: Total parcelado = valor do pró-soluto
+    const proSolutoPayment = pdfValues.payments?.find(p => p.type === 'proSoluto');
+    const proSolutoValue = proSolutoPayment?.value || 0;
+    addInfoLine('Total parcelado', proSolutoValue, false, undefined, true);
+    
+    // Correção: Número de parcelas = número de parcelas do pró-soluto
+    const proSolutoInstallments = pdfValues.installments || 0;
+    addInfoLine('Número de parcelas', proSolutoInstallments);
+    
+    // Correção: Valor da parcela = Parcela Mensal do pró-soluto
+    const proSolutoInstallmentValue = results.monthlyInstallment || 0;
+    addInfoLine('Valor da parcela', proSolutoInstallmentValue, false, undefined, true);
+
+    yPosition += 10;
+
+    // ===== FLUXO DE PAGAMENTO =====
+    addSection('Fluxo de Pagamento', 16);
+
+    // Resumo de todos os pagamentos
+    const paymentSummary = [
+      // Correção: "Entrada" deve ser substituído por "Sinal Ato"
+      { label: 'Sinal Ato', value: results.totalEntryCost || 0 },
       { label: 'Pró-Soluto', value: results.totalProSolutoCost || 0 },
       { label: 'Financiamento', value: results.totalFinancedCost || 0 },
       { label: 'Taxas Cartorárias', value: results.totalNotaryCost || 0 },
       { label: 'Seguro de Obras', value: results.totalInsuranceCost || 0 },
     ];
 
-    costItems.forEach(item => {
-      addInfoLine(item.label, item.value);
+    paymentSummary.forEach(item => {
+      addInfoLine(item.label, item.value, false, undefined, true);
     });
 
     // Linha separadora
@@ -312,53 +426,24 @@ const generatePdf = async (pdfValues: ExtendedPdfFormValues, results: ExtendedRe
     pdf.setFontSize(14);
     pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     pdf.text('Custo Total:', margin, yPosition);
-    const totalText = centsToBrl(results.totalCost * 100);
+    const totalText = formatCurrencyBRL(results.totalCost);
     const totalWidth = pdf.getTextWidth(totalText);
     pdf.text(totalText, pageWidth - margin - totalWidth, yPosition);
     yPosition += 10;
 
-    // ===== ANÁLISE DE VIABILIDADE =====
-    addSection('Análise de Viabilidade', 16);
+    yPosition += 10;
 
-    // Comprometimento de renda
-    const incomeCommitment = results.incomeCommitmentPercentage || 0;
-    pdf.setFont('Helvetica', 'bold');
-    pdf.setFontSize(10);
-    pdf.setTextColor(grayDark[0], grayDark[1], grayDark[2]);
-    pdf.text('Comprometimento de Renda:', margin, yPosition);
+    // ===== TAXAS CARTORÁRIAS =====
+    addSection('Taxas Cartorárias', 16);
+
+    addInfoLine('Total', results.totalNotaryCost || 0, false, undefined, true);
+    addInfoLine('Tipo de parcelamento', pdfValues.notaryPaymentMethod === 'creditCard' ? 'Cartão de Crédito' : 'Boleto');
+    // Número de parcelas não é um campo monetário
+    addInfoLine('Número de parcelas', pdfValues.notaryInstallments || 0);
     
-    pdf.setFont('Helvetica', 'normal');
-    if (incomeCommitment > 50) {
-      pdf.setTextColor(redColor[0], redColor[1], redColor[2]);
+    if (results.notaryInstallmentValue) {
+      addInfoLine('Valor da parcela', results.notaryInstallmentValue, false, undefined, true);
     }
-    pdf.text(`${incomeCommitment.toFixed(2)}%`, pageWidth - margin - 20, yPosition);
-    yPosition += 6;
-
-    // Barra de progresso visual
-    pdf.setDrawColor(grayLight[0], grayLight[1], grayLight[2]);
-    pdf.rect(margin, yPosition, pageWidth - 2 * margin, 4, 'S');
-    if (incomeCommitment > 0) {
-      const barWidth = Math.min((pageWidth - 2 * margin) * (incomeCommitment / 100), pageWidth - 2 * margin);
-      const barColor = incomeCommitment > 50 ? redColor : incomeCommitment > 30 ? orangeColor : greenColor;
-      pdf.setFillColor(barColor[0], barColor[1], barColor[2]);
-      pdf.rect(margin, yPosition, barWidth, 4, 'F');
-    }
-    yPosition += 8;
-
-    // Comprometimento do pró-soluto
-    const proSolutoCommitment = results.proSolutoCommitmentPercentage || 0;
-    pdf.setFont('Helvetica', 'bold');
-    pdf.setTextColor(grayDark[0], grayDark[1], grayDark[2]);
-    pdf.text('Comprometimento Pró-Soluto:', margin, yPosition);
-    
-    pdf.setFont('Helvetica', 'normal');
-    pdf.setTextColor(0, 0, 0);
-    pdf.text(`${proSolutoCommitment.toFixed(2)}%`, pageWidth - margin - 20, yPosition);
-    yPosition += 6;
-
-    // Taxa de juros
-    const interestRate = results.averageInterestRate || 0;
-    addInfoLine('Taxa de Juros Efetiva', interestRate);
 
     yPosition += 10;
 
@@ -386,11 +471,21 @@ const generatePdf = async (pdfValues: ExtendedPdfFormValues, results: ExtendedRe
           case 'sinal2': typeLabel = 'Sinal 2'; break;
           case 'sinal3': typeLabel = 'Sinal 3'; break;
           case 'proSoluto': 
-            typeLabel = 'Pró-Soluto'; 
-            if (results.steppedInstallments) {
-              typeLabel += ' (Escalonado)';
+            // Adicionar parcelas do pró-soluto mês a mês
+            if (deliveryDate && payment.value > 0 && pdfValues.installments) {
+              for (let i = 1; i <= pdfValues.installments; i++) {
+                const installmentDate = addMonths(new Date(), i);
+                // Verificar se a parcela está dentro do período de construção
+                if (installmentDate <= deliveryDate) {
+                  paymentEvents.push({
+                    type: `Pró-Soluto - Parcela ${i}`,
+                    date: installmentDate,
+                    value: results.monthlyInstallment || 0,
+                  });
+                }
+              }
             }
-            break;
+            return; // Não adicionar o pró-soluto como valor total
           case 'bonusAdimplencia': typeLabel = 'Bônus Adimplência'; break;
           case 'desconto': typeLabel = 'Desconto'; break;
           case 'bonusCampanha': typeLabel = 'Bônus de Campanha'; break;
@@ -398,11 +493,15 @@ const generatePdf = async (pdfValues: ExtendedPdfFormValues, results: ExtendedRe
           case 'financiamento': typeLabel = 'Financiamento'; break;
           default: typeLabel = payment.type;
         }
-        paymentEvents.push({
-          type: typeLabel,
-          date: payment.date,
-          value: payment.value,
-        });
+        
+        // Adicionar outros pagamentos (exceto pró-soluto que já foi tratado)
+        if (!["proSoluto"].includes(payment.type)) {
+          paymentEvents.push({
+            type: typeLabel,
+            date: payment.date,
+            value: payment.value,
+          });
+        }
       });
     }
 
@@ -473,7 +572,7 @@ const generatePdf = async (pdfValues: ExtendedPdfFormValues, results: ExtendedRe
       
       // Valor
       pdf.setFont('Helvetica', 'bold');
-      const valueText = centsToBrl(event.value * 100);
+      const valueText = formatCurrencyBRL(event.value);
       const valueWidth = pdf.getTextWidth(valueText);
       pdf.text(valueText, pageWidth - margin - 5 - valueWidth, yPosition + 4);
       pdf.setFont('Helvetica', 'normal');
@@ -488,6 +587,41 @@ const generatePdf = async (pdfValues: ExtendedPdfFormValues, results: ExtendedRe
       }
       
       yPosition += 6;
+    });
+
+    yPosition += 10;
+
+    // ===== OBSERVAÇÕES =====
+    addSection('Observações', 16);
+
+    const observations = [
+      'O saldo devedor do financiamento com a Caixa não sofre correção durante o período de obras;',
+      'O saldo devedor financiado com a Caixa Econômica Federal começará a ser pago somente após a emissão do habite-se;',
+      'O seguro de obras é pago à Caixa Econômica Federal somente até a emissão do habite-se (que normalmente coincide com a entrega do empreendimento, podendo ser adiantada);',
+      'As parcelas do seguro de obras possuem correção da taxa referencial (TR), o que pode fazer divergir do valor base apresentado na simulação;',
+      'As parcelas do pró-soluto (parte da entrada parcelada com a construtora) podem ser amortizadas, podendo o cliente fazê-lo diretamente pelo aplicativo Pode Morar ou entrando em contato com a central de atendimento da Direcional;'
+    ];
+
+    pdf.setFont('Helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.setTextColor(grayDark[0], grayDark[1], grayDark[2]);
+
+    observations.forEach(observation => {
+      checkNewPage(8);
+      
+      // Adicionar marcador de lista
+      pdf.setFont('Helvetica', 'bold');
+      pdf.text('•', margin, yPosition + 3);
+      
+      // Adicionar texto da observação
+      pdf.setFont('Helvetica', 'normal');
+      const lines = pdf.splitTextToSize(observation, pageWidth - 2 * margin - 5);
+      lines.forEach((line: string) => {
+        pdf.text(line, margin + 5, yPosition + 3);
+        yPosition += 5;
+      });
+      
+      yPosition += 3;
     });
 
     // ===== FINALIZAR =====
@@ -574,6 +708,8 @@ const paymentFieldSchema = z.object({
 const formSchema = z.object({
   propertyId: z.string().min(1, { message: "Selecione um imóvel." }),
   selectedUnit: z.string().optional(),
+  brokerName: z.string().optional(),
+  brokerCreci: z.string().optional(),
   appraisalValue: z.coerce.number().positive({ message: "O valor de avaliação é obrigatório."}),
   saleValue: z.coerce.number().positive({ message: "O valor de venda é obrigatório."}),
   grossIncome: z.coerce.number().positive({ message: "A renda bruta é obrigatória."}),
@@ -652,6 +788,7 @@ interface ExtendedResults extends Omit<Results, 'totalEntryCost' | 'totalProSolu
   notaryFees?: number;
   notaryPaymentMethod?: string;
   notaryInstallments?: number;
+  caixaSimulation?: CaixaSimulationResult;
 }
 
 interface ExtendedPdfFormValues extends PdfFormValues {
@@ -1533,6 +1670,8 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     defaultValues: {
       propertyId: "",
       selectedUnit: "",
+      brokerName: "",
+      brokerCreci: "",  
       payments: [],
       appraisalValue: 0,
       saleValue: 0,
@@ -2520,6 +2659,10 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       values.simulationInstallmentValue
     );
   
+    // CORREÇÃO: Calcular o valor do Sinal Ato
+    const sinalAtoPayment = finalPayments.find(p => p.type === 'sinalAto');
+    const sinalAtoValue = sinalAtoPayment ? sinalAtoPayment.value : 0;
+    
     const totalEntryCost = finalPayments
       .filter(p => ['sinalAto', 'sinal1', 'sinal2', 'sinal3', 'desconto', 'bonusCampanha'].includes(p.type))
       .reduce((sum, p) => sum + p.value, 0);
@@ -2601,6 +2744,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       notaryFees: values.notaryFees,
       notaryPaymentMethod: values.notaryPaymentMethod,
       notaryInstallments: values.notaryInstallments,
+      caixaSimulation: caixaSimulationResult ? { sucesso: true, dados: caixaSimulationResult } : undefined,
     };
       
     setResults(newResults);
@@ -2624,7 +2768,8 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     results, 
     ensureCorrectDates,
     replace,
-    applyMinimumCondition
+    applyMinimumCondition,
+    caixaSimulationResult
   ]);
 
   const handleApplyMinimumCondition = useCallback(() => {
@@ -3020,6 +3165,16 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       toast({
         title: "Erro",
         description: "Não há resultados para gerar o PDF.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Verificar se o nome do corretor foi informado
+    if (!brokerData.name) {
+      toast({
+        title: "Campo Obrigatório",
+        description: "Por favor, informe o nome do(a) corretor(a) antes de gerar o PDF.",
         variant: "destructive",
       });
       return;
@@ -3571,6 +3726,54 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                 </CardContent>
               </Card>
 
+              <Card>
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg">6. Dados do Corretor</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="brokerName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium">Nome do(a) Corretor(a)</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              placeholder="Informe o nome do(a) corretor(a)"
+                              className="h-11"
+                              value={brokerData.name}
+                              onChange={(e) => setBrokerData(prev => ({ ...prev, name: e.target.value }))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="brokerCreci"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium">CRECI</FormLabel>
+                          <FormControl>
+                            <Input 
+                              {...field}
+                              placeholder="Número do CRECI" 
+                              value={brokerData.creci}
+                              onChange={(e) => setBrokerData(prev => ({ ...prev, creci: e.target.value }))}
+                              className="h-11"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button type="submit" className="w-full sm:flex-1 h-11">
                   <Calculator className="h-4 w-4 mr-2" />
@@ -3647,7 +3850,8 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   <CardContent className="p-4">
                     <div className="flex items-center gap-2">
                       <Wallet className="h-4 w-4 text-blue-600" />
-                      <span className="text-sm font-medium">Valor Financiado</span>
+                      {/* CORREÇÃO: Substituir "Valor Financiado" por "Pró-Soluto" */}
+                      <span className="text-sm font-medium">Pró-Soluto</span>
                     </div>
                     <p className="text-2xl font-bold text-blue-600 break-words">
                       {centsToBrl((results.financedAmount || 0) * 100)}
@@ -3696,13 +3900,34 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <div className="flex justify-between text-sm"><span>Entrada</span><span className="font-medium">{centsToBrl((results.totalEntryCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Pró-Soluto</span><span className="font-medium">{centsToBrl((results.totalProSolutoCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Financiamento</span><span className="font-medium">{centsToBrl((results.totalFinancedCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Taxas Cartorárias</span><span className="font-medium">{centsToBrl((results.totalNotaryCost || 0) * 100)}</span></div>
-                      <div className="flex justify-between text-sm"><span>Seguro Obra</span><span className="font-medium">{centsToBrl((results.totalInsuranceCost || 0) * 100)}</span></div>
+                      {/* CORREÇÃO: Substituir "Entrada" por "Sinal Ato" */}
+                      <div className="flex justify-between text-sm">
+                        <span>Sinal Ato</span>
+                        <span className="font-medium">
+                          {centsToBrl((results.paymentFields?.find(p => p.type === 'sinalAto')?.value || 0) * 100)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Pró-Soluto</span>
+                        <span className="font-medium">{centsToBrl((results.totalProSolutoCost || 0) * 100)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Financiamento</span>
+                        <span className="font-medium">{centsToBrl((results.totalFinancedCost || 0) * 100)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Taxas Cartorárias</span>
+                        <span className="font-medium">{centsToBrl((results.totalNotaryCost || 0) * 100)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Seguro Obra</span>
+                        <span className="font-medium">{centsToBrl((results.totalInsuranceCost || 0) * 100)}</span>
+                      </div>
                       <Separator />
-                      <div className="flex justify-between font-bold text-sm"><span>Total</span><span>{centsToBrl((results.totalCost || 0) * 100)}</span></div>
+                      <div className="flex justify-between font-bold text-sm">
+                        <span>Total</span>
+                        <span>{centsToBrl((results.totalCost || 0) * 100)}</span>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -3713,15 +3938,57 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                   <CardContent>
                     <div className="space-y-4">
                       <div>
-                        <div className="flex justify-between mb-2 text-sm"><span className="text-sm">Comprometimento de Renda</span><span className="text-sm font-medium">{(results.incomeCommitmentPercentage || 0).toFixed(2)}%</span></div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2"><div className={`h-2 rounded-full ${results.incomeCommitmentPercentage > 50 ? 'bg-red-500' : results.incomeCommitmentPercentage > 30 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.incomeCommitmentPercentage || 0, 100)}%` }} /></div>
+                        <div className="flex justify-between mb-2 text-sm">
+                          <span className="text-sm">Comprometimento de Renda</span>
+                          <span className="text-sm font-medium">{(results.incomeCommitmentPercentage || 0).toFixed(2)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${
+                              results.incomeCommitmentPercentage > 50 
+                                ? 'bg-red-500' 
+                                : results.incomeCommitmentPercentage > 30 
+                                  ? 'bg-yellow-500' 
+                                  : 'bg-green-500'
+                            }`} 
+                            style={{ width: `${Math.min(results.incomeCommitmentPercentage || 0, 100)}%` }} 
+                          />
+                        </div>
                       </div>
                       <div>
-                        <div className="flex justify-between mb-2 text-sm"><span className="text-sm">Percentual Pró-Soluto</span><span className="text-sm font-medium">{(results.proSolutoCommitmentPercentage || 0).toFixed(2)}%</span></div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2"><div className={`h-2 rounded-full ${results.proSolutoCommitmentPercentage > 100 ? 'bg-red-500' : results.proSolutoCommitmentPercentage > 50 ? 'bg-red-500' : results.proSolutoCommitmentPercentage > 50 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${Math.min(results.proSolutoCommitmentPercentage || 0, 100)}%` }} /></div>
+                        <div className="flex justify-between mb-2 text-sm">
+                          <span className="text-sm">Percentual Pró-Soluto</span>
+                          <span className="text-sm font-medium">{(results.proSolutoCommitmentPercentage || 0).toFixed(2)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${
+                              results.proSolutoCommitmentPercentage > 100 
+                                ? 'bg-red-500' 
+                                : results.proSolutoCommitmentPercentage > 50 
+                                  ? 'bg-red-500' 
+                                  : results.proSolutoCommitmentPercentage > 50 
+                                    ? 'bg-yellow-500' 
+                                    : 'bg-green-500'
+                            }`} 
+                            style={{ width: `${Math.min(results.proSolutoCommitmentPercentage || 0, 100)}%` }} 
+                          />
+                        </div>
                       </div>
-                      {results.incomeError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.incomeError}</AlertDescription></Alert>}
-                      {results.proSolutoError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Atenção</AlertTitle><AlertDescription>{results.proSolutoError}</AlertDescription></Alert>}
+                      {results.incomeError && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertTitle>Atenção</AlertTitle>
+                          <AlertDescription>{results.incomeError}</AlertDescription>
+                        </Alert>
+                      )}
+                      {results.proSolutoError && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertTitle>Atenção</AlertTitle>
+                          <AlertDescription>{results.proSolutoError}</AlertDescription>
+                        </Alert>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

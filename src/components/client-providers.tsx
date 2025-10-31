@@ -1,4 +1,5 @@
-"use client";
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { onAuthStateChanged, type User } from 'firebase/auth';
@@ -36,7 +37,6 @@ export function ClientProviders({ children }: ProvidersProps) {
   const [has2FA, setHas2FA] = useState<boolean | undefined>(undefined);
   const [is2FAVerified, setIs2FAVerified] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
-  const [twoFAReady, setTwoFAReady] = useState(false);
   const [propertiesLoading, setPropertiesLoading] = useState(true);
   const [functions, setFunctions] = useState<Functions | null>(null);
 
@@ -47,20 +47,20 @@ export function ClientProviders({ children }: ProvidersProps) {
     const unsubscribeAuth = onAuthStateChanged(auth, (newUser) => {
       if (newUser) {
         setUser(newUser);
-        setIs2FAVerified(localStorage.getItem(`2fa-verified-${newUser.uid}`) === 'true');
+        const verified = localStorage.getItem(`2fa-verified-${newUser.uid}`) === 'true';
+        setIs2FAVerified(verified);
       } else {
         setUser(null);
         setAppUser(null);
         setHas2FA(undefined);
         setIsFullyAuthenticated(false);
+        setIs2FAVerified(false);
         setAuthLoading(false);
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith('2fa-verified-')) {
             localStorage.removeItem(key);
           }
         });
-        setTwoFAReady(false);
-        setIs2FAVerified(false);
       }
     });
 
@@ -78,38 +78,37 @@ export function ClientProviders({ children }: ProvidersProps) {
       return;
     }
 
-    const db = getFirestore(app);
     const userDocRef = doc(db, 'users', user.uid);
     const unsubscribeUser = onSnapshot(userDocRef, (userDoc) => {
-      setAppUser(userDoc.exists() ? (userDoc.data() as AppUser) : null);
+      const userData = userDoc.exists() ? (userDoc.data() as AppUser) : null;
+      setAppUser(userData);
+      
+      if (userData?.isAdmin) {
+        setHas2FA(true); 
+        setIsFullyAuthenticated(true);
+        setAuthLoading(false);
+      }
     });
 
     return () => unsubscribeUser();
   }, [user]);
 
   useEffect(() => {
-    if (twoFAReady) return;
-    if (appUser === undefined || !user || !functions) return;
-    setAuthLoading(true);
+    if (!user || appUser === undefined || appUser?.isAdmin) {
+      return;
+    }
 
+    setAuthLoading(true);
     const checkTwoFactor = async () => {
       try {
-        const getTwoFactorSecret = httpsCallable(functions, 'getTwoFactorSecretAction');
+        const getTwoFactorSecret = httpsCallable(functions!, 'getTwoFactorSecretAction');
         const result = await getTwoFactorSecret();
-        const secret = result.data as string | null;
-        
-        const hasTwoFactor = !!secret;
+        const hasTwoFactor = !!(result.data as string | null);
         setHas2FA(hasTwoFactor);
 
-        setTwoFAReady(true);
+        const canAccessApp = hasTwoFactor && is2FAVerified;
+        setIsFullyAuthenticated(canAccessApp);
 
-        if (!hasTwoFactor) {
-          setIsFullyAuthenticated(true);
-        } else if (hasTwoFactor && is2FAVerified) {
-          setIsFullyAuthenticated(true);
-        } else {
-          setIsFullyAuthenticated(false);
-        }
       } catch (e) {
         console.error("Falha ao verificar o status do 2FA:", e);
         setHas2FA(false);
@@ -119,42 +118,38 @@ export function ClientProviders({ children }: ProvidersProps) {
       }
     };
     
-    if (appUser === null || !appUser.isAdmin) {
-      checkTwoFactor();
-    } else if (appUser.isAdmin) {
-      setHas2FA(true); 
-      setIsFullyAuthenticated(true);
-      setAuthLoading(false);
-    }
+    checkTwoFactor();
 
-  }, [appUser, user, functions, setIsFullyAuthenticated, setHas2FA, setAuthLoading, twoFAReady, is2FAVerified]);
+  }, [appUser, user, functions, is2FAVerified]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || (user && has2FA === undefined)) {
+      return;
+    }
+
+    const isPublicPath = PUBLIC_PATHS.includes(pathname);
+    const isAuthFlowPath = AUTH_ONLY_PATHS.includes(pathname);
+    const targetPath = appUser?.isAdmin ? '/admin/properties' : '/simulator';
 
     if (!user) {
-      if (pathname && !PUBLIC_PATHS.includes(pathname)) {
+      if (!isPublicPath) {
         router.replace('/login');
         setIsPageLoading(true);
       }
       return;
     }
 
-    const targetPath = appUser?.isAdmin ? '/admin/properties' : '/simulator';
-
     if (has2FA) {
-    if (isFullyAuthenticated) {
-      if (pathname !== targetPath && AUTH_ONLY_PATHS.includes(pathname) || pathname === '/login') {
-        router.replace(targetPath);
-        setIsPageLoading(true);
-      }
-      return;
-    }
-
-      if (!is2FAVerified) {
-        router.replace('/verify-2fa');
+      if (is2FAVerified) {
+        if (isAuthFlowPath || pathname === '/login') {
+          router.replace(targetPath);
+          setIsPageLoading(true);
+        }
       } else {
-        router.replace(targetPath);
+        if (pathname !== '/verify-2fa') {
+          router.replace('/verify-2fa');
+          setIsPageLoading(true);
+        }
       }
     } else {
       if (pathname !== '/setup-2fa') {
@@ -162,7 +157,8 @@ export function ClientProviders({ children }: ProvidersProps) {
         setIsPageLoading(true);
       }
     }
-  }, [authLoading, user, appUser, isFullyAuthenticated, has2FA, pathname, router, is2FAVerified]);
+  }, [authLoading, user, appUser, has2FA, is2FAVerified, pathname, router]);
+
 
   useEffect(() => {
     if (!isFullyAuthenticated) {
@@ -189,7 +185,7 @@ export function ClientProviders({ children }: ProvidersProps) {
   }, [isFullyAuthenticated]);
 
   const isAdmin = appUser?.isAdmin ?? false;
-  const showLoader = authLoading || (user && appUser === undefined) || (router && isPageLoading);
+  const showLoader = authLoading || (user && has2FA === undefined) || (router && isPageLoading);
 
   return (
     <AuthContext.Provider value={{ 
@@ -200,6 +196,7 @@ export function ClientProviders({ children }: ProvidersProps) {
         setIsFullyAuthenticated, 
         has2FA, 
         is2FAVerified, 
+        setIs2FAVerified, // Adicionado
         properties, 
         propertiesLoading,
         isPageLoading,

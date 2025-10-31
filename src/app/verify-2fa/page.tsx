@@ -1,33 +1,33 @@
-"use client";
+'use client';
 
-import { signOut } from "firebase/auth";
-import { httpsCallable } from "firebase/functions";
-import { ArrowLeft, KeyRound, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { signOut } from 'firebase/auth';
+import { httpsCallable } from 'firebase/functions';
+import { ArrowLeft, KeyRound, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 
-import { Button } from "@/components/ui/button";
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardFooter,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
-import { auth } from "@/lib/firebase/clientApp";
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import { auth } from '@/lib/firebase/clientApp';
 
 function Verify2FAPageContent() {
   const router = useRouter();
   const { toast } = useToast();
-  const { authLoading, functions, isFullyAuthenticated, setIsFullyAuthenticated, user } = useAuth();
+  const { authLoading, functions, setIs2FAVerified, user } = useAuth(); // Removido isFullyAuthenticated e setIsFullyAuthenticated
   const [token, setToken] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.replace("/login");
+      router.replace('/login');
     }
   }, [authLoading, user, router]);
 
@@ -51,10 +51,10 @@ function Verify2FAPageContent() {
       if (isValid) {
         toast({
           title: "Verificação bem-sucedida!",
-          description: "Você está autenticado.",
+          description: "Você será redirecionado em instantes.",
         });
         localStorage.setItem(`2fa-verified-${user.uid}`, "true");
-        setIsFullyAuthenticated(true);
+        setIs2FAVerified(true); // AQUI ESTÁ A MUDANÇA PRINCIPAL
       } else {
         throw new Error("Código inválido. Tente novamente.");
       }
@@ -83,11 +83,11 @@ function Verify2FAPageContent() {
     }
   };
 
-  if (authLoading || isFullyAuthenticated) {
+  if (authLoading) { // Simplificado
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-4 text-muted-foreground">Redirecionando...</p>
+        <p className="mt-4 text-muted-foreground">Carregando...</p>
       </div>
     );
   }

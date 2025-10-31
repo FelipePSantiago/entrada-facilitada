@@ -93,6 +93,8 @@ export type PaymentFieldType = z.infer<typeof paymentFieldSchema>['type'];
 export const formSchema = z.object({
   propertyId: z.string().min(1),
   selectedUnit: z.string().optional(),
+  brokerName: z.string().optional(),
+  brokerCreci: z.string().optional(),
   appraisalValue: z.coerce.number().positive(),
   saleValue: z.coerce.number().positive(),
   grossIncome: z.coerce.number().positive(),

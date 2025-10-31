@@ -1,4 +1,12 @@
 import TerserPlugin from 'terser-webpack-plugin';
+import withPWA from 'next-pwa';
+
+const pwaConfig = {
+  dest: 'public',
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === 'development',
+};
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -66,31 +74,31 @@ const nextConfig = {
           chunks: 'all',
           cacheGroups: {
             vendor: {
-              test: /[\\/]node_modules[\\/]/,
+              test: /'''[\\/]node_modules[\\/]'''/,
               name: 'vendors',
               chunks: 'all',
               priority: 10,
             },
             radix: {
-              test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
+              test: /'''[\\/]node_modules[\\/]@radix-ui[\\/]'''/,
               name: 'radix',
               chunks: 'all',
               priority: 20,
             },
             lucide: {
-              test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
+              test: /'''[\\/]node_modules[\\/]lucide-react[\\/]'''/,
               name: 'lucide',
               chunks: 'all',
               priority: 30,
             },
             firebase: {
-              test: /[\\/]node_modules[\\/]firebase[\\/]/,
+              test: /'''[\\/]node_modules[\\/]firebase[\\/]'''/,
               name: 'firebase',
               chunks: 'all',
               priority: 40,
             },
             datefns: {
-              test: /[\\/]node_modules[\\/]date-fns[\\/]/,
+              test: /'''[\\/]node_modules[\\/]date-fns[\\/]'''/,
               name: 'datefns',
               chunks: 'all',
               priority: 50,
@@ -192,4 +200,4 @@ const nextConfig = {
   poweredByHeader: false,
 };
 
-export default nextConfig;
+export default withPWA(pwaConfig)(nextConfig);

@@ -34,6 +34,12 @@ function Setup2FAPageContent() {
       router.replace("/login");
     }
   }, [authLoading, user, router]);
+  
+  useEffect(() => {
+    if (!authLoading && has2FA) {
+      router.replace("/simulator");
+    }
+  }, [authLoading, has2FA, router]);
 
   useEffect(() => {
     if (user && !authLoading && has2FA === false && functions) {
@@ -227,7 +233,7 @@ function Setup2FAPageContent() {
     );
   }
 
-  return renderLoading("Aguardando...");
+  return renderLoading("Redirecionando para a página principal...");
 }
 
 export default function Setup2FAPage() {

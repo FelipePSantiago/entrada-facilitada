@@ -18,6 +18,17 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: "https://i.ibb.co/WW6nrBnQ/Riva-LOGO.png",
+    apple: "https://i.ibb.co/WW6nrBnQ/Riva-LOGO.png",
+  },
+  manifest: "/manifest.json",
+  applicationName: "Entrada Facilitada",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Entrada Facilitada",
+  },
+  formatDetection: {
+    telephone: false,
   },
 };
 
@@ -30,7 +41,8 @@ export default function RootLayout({
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta name="app-version" content="0.1.13" />
+        <meta name="app-version" content="0.1.25" />
+        <meta name="theme-color" content="#0d6efd" />
       </head>
       <body className="font-sans antialiased">
         <ThemeProvider
