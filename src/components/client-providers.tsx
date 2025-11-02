@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { onSnapshot, doc, getFirestore, collection } from 'firebase/firestore';
+import { onSnapshot, doc, collection } from 'firebase/firestore';
 
 import { AuthContext } from '@/contexts/AuthContext';
 import type { Property, AppUser } from '@/types';
@@ -79,48 +79,59 @@ export function ClientProviders({ children }: ProvidersProps) {
     }
 
     const userDocRef = doc(db, 'users', user.uid);
-    const unsubscribeUser = onSnapshot(userDocRef, (userDoc) => {
-      const userData = userDoc.exists() ? (userDoc.data() as AppUser) : null;
-      setAppUser(userData);
-      
-      if (userData?.isAdmin) {
-        setHas2FA(true); 
-        setIsFullyAuthenticated(true);
+    const unsubscribeUser = onSnapshot(userDocRef, 
+      (userDoc) => {
+        const userData = userDoc.exists() ? (userDoc.data() as AppUser) : null;
+        setAppUser(userData);
+      },
+      (error) => {
+        console.error("Error fetching user document:", error);
+        setAppUser(null);
         setAuthLoading(false);
       }
-    });
+    );
 
     return () => unsubscribeUser();
   }, [user]);
 
   useEffect(() => {
-    if (!user || appUser === undefined || appUser?.isAdmin) {
-      return;
+    if (!user || appUser === undefined) {
+        return;
     }
-
+    
     setAuthLoading(true);
-    const checkTwoFactor = async () => {
-      try {
-        const getTwoFactorSecret = httpsCallable(functions!, 'getTwoFactorSecretAction');
-        const result = await getTwoFactorSecret();
-        const hasTwoFactor = !!(result.data as string | null);
-        setHas2FA(hasTwoFactor);
-
-        const canAccessApp = hasTwoFactor && is2FAVerified;
-        setIsFullyAuthenticated(canAccessApp);
-
-      } catch (e) {
-        console.error("Falha ao verificar o status do 2FA:", e);
+    if (appUser === null) { // User document doesn't exist or couldn't be read
         setHas2FA(false);
         setIsFullyAuthenticated(false);
-      } finally {
         setAuthLoading(false);
-      }
-    };
-    
-    checkTwoFactor();
+        return;
+    }
 
-  }, [appUser, user, functions, is2FAVerified]);
+    if (appUser.isAdmin) {
+        setHas2FA(true);
+        setIsFullyAuthenticated(true);
+        setAuthLoading(false);
+    } else {
+        const checkTwoFactor = async () => {
+            try {
+                const getTwoFactorSecret = httpsCallable(functions!, 'getTwoFactorSecretAction');
+                const result = await getTwoFactorSecret();
+                const hasTwoFactor = !!(result.data as string | null);
+                setHas2FA(hasTwoFactor);
+                const canAccessApp = hasTwoFactor && is2FAVerified;
+                setIsFullyAuthenticated(canAccessApp);
+            } catch (e) {
+                console.error("Falha ao verificar o status do 2FA:", e);
+                setHas2FA(false);
+                setIsFullyAuthenticated(false);
+            } finally {
+                setAuthLoading(false);
+            }
+        };
+        checkTwoFactor();
+    }
+}, [appUser, user, functions, is2FAVerified]);
+
 
   useEffect(() => {
     if (authLoading || (user && has2FA === undefined)) {

@@ -1,4 +1,7 @@
 {
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "functions": [
     {
       "source": "functions",
@@ -42,7 +45,7 @@
         "source": "**",
         "headers": [
           {
-            "key": "Cache-Control",
+            "key": "Cache-control",
             "value": "no-cache, no-store, must-revalidate"
           }
         ]
