@@ -74,31 +74,31 @@ const nextConfig = {
           chunks: 'all',
           cacheGroups: {
             vendor: {
-              test: /'''[\\/]node_modules[\\/]'''/,
+              test: /[\\/]node_modules[\\/]/,
               name: 'vendors',
               chunks: 'all',
               priority: 10,
             },
             radix: {
-              test: /'''[\\/]node_modules[\\/]@radix-ui[\\/]'''/,
+              test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
               name: 'radix',
               chunks: 'all',
               priority: 20,
             },
             lucide: {
-              test: /'''[\\/]node_modules[\\/]lucide-react[\\/]'''/,
+              test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
               name: 'lucide',
               chunks: 'all',
               priority: 30,
             },
             firebase: {
-              test: /'''[\\/]node_modules[\\/]firebase[\\/]'''/,
+              test: /[\\/]node_modules[\\/]firebase[\\/]/,
               name: 'firebase',
               chunks: 'all',
               priority: 40,
             },
             datefns: {
-              test: /'''[\\/]node_modules[\\/]date-fns[\\/]'''/,
+              test: /[\\/]node_modules[\\/]date-fns[\\/]/,
               name: 'datefns',
               chunks: 'all',
               priority: 50,
@@ -171,10 +171,41 @@ const nextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()',
           },
+          // Headers adicionais para controle de cache agressivo
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0',
+          },
+          {
+            key: 'Pragma',
+            value: 'no-cache',
+          },
+          {
+            key: 'Expires',
+            value: '0',
+          },
         ],
       },
       {
         source: '/static/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        source: '/version.json',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate, max-age=0',
+          },
+        ],
+      },
+      {
+        source: '/_next/static/(.*)',
         headers: [
           {
             key: 'Cache-Control',

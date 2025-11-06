@@ -14,11 +14,11 @@ export const metadata: Metadata = {
   description:
     "Calcule o fluxo de pagamento para o parcelamento da entrada de um financiamento imobiliário.",
   openGraph: {
-    images: ["https://i.ibb.co/WW6nrBnQ/Riva-LOGO.png"],
+    images: ["https://i.ibb.co/qMQW40pq/app-logo.png"],
   },
   icons: {
-    icon: "https://i.ibb.co/WW6nrBnQ/Riva-LOGO.png",
-    apple: "https://i.ibb.co/WW6nrBnQ/Riva-LOGO.png",
+    icon: "https://i.ibb.co/qMQW40pq/app-logo.png",
+    apple: "https://i.ibb.co/qMQW40pq/app-logo.png",
   },
   manifest: "/manifest.json",
   applicationName: "Entrada Facilitada",
@@ -41,8 +41,12 @@ export default function RootLayout({
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta name="app-version" content="0.1.32" />
+        <meta name="app-version" content="0.1.34" />
         <meta name="theme-color" content="#0d6efd" />
+        {/* Meta tags adicionais para controle de cache */}
+        <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+        <meta httpEquiv="Pragma" content="no-cache" />
+        <meta httpEquiv="Expires" content="0" />
       </head>
       <body className="font-sans antialiased">
         <ThemeProvider
