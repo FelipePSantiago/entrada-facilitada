@@ -41,7 +41,7 @@ export default function RootLayout({
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta name="app-version" content="0.1.31" />
+        <meta name="app-version" content="0.1.32" />
         <meta name="theme-color" content="#0d6efd" />
       </head>
       <body className="font-sans antialiased">

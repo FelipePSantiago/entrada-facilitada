@@ -1103,12 +1103,9 @@ const applyMinimumCondition = (
     return finalPayments;
   }
 
-  // CORREÇÃO: Verificar se precisamos criar campos pró-soluto e sinal ato proativamente
-  const hasProSoluto = newPayments.some(p => p.type === 'proSoluto');
-  const hasSinalAto = newPayments.some(p => p.type === 'sinalAto');
-  
-  // Se não existem os campos e temos valor restante, criar proativamente
-  if ((!hasProSoluto || !hasSinalAto) && remainingAmount > 0) {
+  // CORREÇÃO: Sempre executar a lógica quando há valor restante para distribuir
+  // Removida a verificação de existência dos campos para permitir ajustes
+  if (remainingAmount > 0) {
     // Determinar limites do pró-soluto
     const isReservaParque = propertyEnterpriseName.includes('Reserva Parque Clube');
     const proSolutoLimitPercent = isReservaParque ? 0.1799 : (conditionType === 'especial' ? 0.1799 : 0.1499);
@@ -1178,7 +1175,7 @@ const applyMinimumCondition = (
     proSolutoValue = Math.max(0, proSolutoValue);
 
     // Calcular sinal ato inicial (remainingAmount - pró-soluto)
-    const sinalMinimo = 0.05 * valorFinalImovel;
+    const sinalMinimo = 0.055 * valorFinalImovel;
     let sinalAtoValue = remainingAmount - proSolutoValue;
     
     // CORREÇÃO CRÍTICA: Garantir que sinal ato atenda ao mínimo
