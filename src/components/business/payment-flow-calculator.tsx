@@ -857,7 +857,7 @@ const validatePaymentSumWithBusinessLogic = (
   
   const sinalAto = payments.find(p => p.type === 'sinalAto');
   if (sinalAto) {
-    const sinalMinimo = 0.055 * valorFinalImovel;
+    const sinalMinimo = 0.05 * valorFinalImovel;
     if (sinalAto.value < sinalMinimo) {
       businessLogicViolation = `O Sinal Ato (${centsToBrl(sinalAto.value * 100)}) é menor que o mínimo de 5,5% do valor final da unidade (${centsToBrl(sinalMinimo * 100)}).`;
     }
@@ -866,7 +866,7 @@ const validatePaymentSumWithBusinessLogic = (
   const campaignBonus = payments.find(p => p.type === 'bonusCampanha');
   
   if (campaignBonus && sinalAto && isSinalCampaignActive) {
-    const sinalMinimo = 0.055 * valorFinalImovel;
+    const sinalMinimo = 0.05 * valorFinalImovel;
     if (sinalAto.value <= sinalMinimo) {
       businessLogicViolation = "Bônus de campanha não pode existir quando o sinal ato é igual ou inferior ao mínimo (5%).";
     }
@@ -1178,7 +1178,7 @@ const applyMinimumCondition = (
     proSolutoValue = Math.max(0, proSolutoValue);
 
     // Calcular sinal ato inicial (remainingAmount - pró-soluto)
-    const sinalMinimo = 0.055 * valorFinalImovel;
+    const sinalMinimo = 0.05 * valorFinalImovel;
     let sinalAtoValue = remainingAmount - proSolutoValue;
     
     // CORREÇÃO CRÍTICA: Garantir que sinal ato atenda ao mínimo
@@ -1881,7 +1881,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     } else if (sinalAtoIndex !== -1) {
       newPayments[sinalAtoIndex].value += difference;
       
-      const sinalMinimo = 0.055 * valorFinalImovel;
+      const sinalMinimo = 0.05 * valorFinalImovel;
       if (newPayments[sinalAtoIndex].value < sinalMinimo) {
         newPayments[sinalAtoIndex].value = sinalMinimo;
         
@@ -2333,7 +2333,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       const descontoPayment = payments.find(p => p.type === 'desconto');
       const descontoValue = descontoPayment?.value || 0;
       const valorFinalImovel = saleValue - descontoValue;
-      const sinalMinimo = 0.055 * valorFinalImovel;
+      const sinalMinimo = 0.05 * valorFinalImovel;
       
       if (sinalAto.value < sinalMinimo) {
         return {
@@ -2425,7 +2425,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     const descontoPayment = finalPayments.find(p => p.type === 'desconto');
     const descontoValue = descontoPayment?.value || 0;
     const valorFinalImovel = values.saleValue - descontoValue;
-    const sinalMinimo = 0.055 * valorFinalImovel;
+    const sinalMinimo = 0.05 * valorFinalImovel;
   
     if (sinalAto && sinalAto.value < sinalMinimo) {
       correctionMessages.push(`Sinal Ato (${centsToBrl(sinalAto.value * 100)}) abaixo do mínimo de 5,5% (${centsToBrl(sinalMinimo * 100)})`);

@@ -182,7 +182,7 @@ const SELECTORS_CORRIGIDOS = {
         submitButton: 'a[onclick*="document.getElementById(\'form\').submit();"]' 
     },
     pagina4: { 
-        opcaoEnquadramento: 'a[href="listaenquadramentos.modalidade/3074"]'
+        opcaoEnquadramento: 'a[href="listaenquadramentos.modalidade/1976"]'
     },
     pagina5: { 
         sistemaAmortizacao: '#rcrRge', 
@@ -301,7 +301,7 @@ withSecurity({
         ]);
         console.log(`[DEBUG] ✅ Etapa 3 concluída`);
 
-        // ETAPA 4 - Enquadramento (VERSÃO ROBUSTA COM MÚLTIPLAS ESTRATÉGIAS)
+        // ETAPA 4 - Enquadramento (VERSÃO ATUALIZADA - CÓDIGO 1976)
         console.log(`[DEBUG] ETAPA 4: Selecionando enquadramento...`);
 
         // Pausa para garantir carregamento completo
@@ -316,11 +316,48 @@ withSecurity({
             throw new Error(`Página incorreta: esperada listaenquadramentos, obtida: ${currentUrl}`);
         }
 
-        // Estratégia 1: Tentar seletor específico
+        // Estratégia 0: Buscar pelo texto completo do enquadramento (mais robusta)
         try {
-            console.log(`[DEBUG] Estratégia 1: Buscando seletor específico...`);
+            console.log(`[DEBUG] Estratégia 0: Buscando pelo texto completo...`);
             
-            await page.waitForSelector('a[href="listaenquadramentos.modalidade/3074"]', { 
+            const elementoTexto = await page.evaluate(() => {
+                const links = Array.from(document.querySelectorAll('a'));
+                const targetLink = links.find(link => 
+                    link.textContent?.includes('PRODUCAO IMOVEL - REC SBPE/SFH - AQ TER E CONSTRUCAO - POS FIXADA - PF - HH 122')
+                );
+                return targetLink ? targetLink.outerHTML : null;
+            });
+            
+            if (elementoTexto) {
+                console.log(`[DEBUG] ✅ Elemento encontrado pelo texto completo. Clique via JavaScript...`);
+                
+                await page.evaluate(() => {
+                    const links = Array.from(document.querySelectorAll('a'));
+                    const targetLink = links.find(link => 
+                        link.textContent?.includes('PRODUCAO IMOVEL - REC SBPE/SFH - AQ TER E CONSTRUCAO - POS FIXADA - PF - HH 122')
+                    ) as HTMLAnchorElement;
+                    if (targetLink) {
+                        targetLink.click();
+                    }
+                });
+                
+                // Aguardar navegação
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                console.log(`[DEBUG] ✅ Navegação via texto completo bem-sucedida`);
+                
+            } else {
+                console.log(`[DEBUG] Estratégia 0 falhou: texto completo não encontrado`);
+                throw new Error('Texto completo não encontrado');
+            }
+            
+        } catch (error0: any) {
+            console.log(`[DEBUG] Estratégia 0 falhou: ${error0.message}`);
+            
+            // Estratégia 1: Tentar seletor específico
+            try {
+              console.log(`[DEBUG] Estratégia 1: Buscando seletor específico...`);
+            
+            await page.waitForSelector('a[href="listaenquadramentos.modalidade/1976"]', { 
                 timeout: 10000 
             });
             
@@ -331,37 +368,37 @@ withSecurity({
                     waitUntil: 'networkidle2', 
                     timeout: NAVIGATION_TIMEOUT 
                 }),
-                page.click('a[href="listaenquadramentos.modalidade/3074"]')
+                page.click('a[href="listaenquadramentos.modalidade/1976"]')
             ]);
             
             console.log(`[DEBUG] ✅ Navegação via clique normal bem-sucedida`);
             
-        } catch (error: any) {
-            console.log(`[DEBUG] Estratégia 1 falhou: ${error.message}`);
-            
-            // Estratégia 2: Tentar seletor por texto ou conteúdo
-            try {
+            } catch (error: any) {
+                console.log(`[DEBUG] Estratégia 1 falhou: ${error.message}`);
+                
+                // Estratégia 2: Tentar seletor por texto ou conteúdo
+                try {
                 console.log(`[DEBUG] Estratégia 2: Buscando por conteúdo...`);
                 
-                // CORREÇÃO: Buscar elemento que contenha "3074" no texto usando evaluate
-                const elemento3074 = await page.evaluate(() => {
+                // CORREÇÃO: Buscar elemento que contenha "1976" no texto usando evaluate
+                const elemento1976 = await page.evaluate(() => {
                     const links = Array.from(document.querySelectorAll('a'));
                     const targetLink = links.find(link => 
-                        link.textContent?.includes('3074') || 
-                        link.getAttribute('href')?.includes('3074')
+                        link.textContent?.includes('1976') || 
+                        link.getAttribute('href')?.includes('1976')
                     );
                     return targetLink ? targetLink.outerHTML : null;
                 });
                 
-                if (elemento3074) {
+                if (elemento1976) {
                     console.log(`[DEBUG] ✅ Elemento encontrado por conteúdo. Clique via JavaScript...`);
                     
                     // Clique via evaluate para evitar problemas de tipo
                     await page.evaluate(() => {
                         const links = Array.from(document.querySelectorAll('a'));
                         const targetLink = links.find(link => 
-                            link.textContent?.includes('3074') || 
-                            link.getAttribute('href')?.includes('3074')
+                            link.textContent?.includes('1976') || 
+                            link.getAttribute('href')?.includes('1976')
                         ) as HTMLAnchorElement;
                         if (targetLink) {
                             targetLink.click();
@@ -385,17 +422,17 @@ withSecurity({
                     
                     // CORREÇÃO: Executar clique via evaluate
                     const cliqueExecutado = await page.evaluate(() => {
-                        const link = document.querySelector('a[href="listaenquadramentos.modalidade/3074"]') as HTMLAnchorElement;
+                        const link = document.querySelector('a[href="listaenquadramentos.modalidade/1976"]') as HTMLAnchorElement;
                         if (link) {
                             console.log(`[JS] Clicando no link: ${link.href}`);
                             link.click();
                             return true;
                         } else {
-                            // Fallback: procurar qualquer link com 3074
+                            // Fallback: procurar qualquer link com 1976
                             const allLinks = Array.from(document.querySelectorAll('a'));
                             const targetLink = allLinks.find(a => 
-                                a.getAttribute('href')?.includes('3074') || 
-                                a.textContent?.includes('3074')
+                                a.getAttribute('href')?.includes('1976') || 
+                                a.textContent?.includes('1976')
                             ) as HTMLAnchorElement;
                             if (targetLink) {
                                 console.log(`[JS] Clique fallback no link: ${targetLink.href}`);
@@ -413,7 +450,7 @@ withSecurity({
 
                         console.log(`[DEBUG] ✅ Navegação via JavaScript bem-sucedida`);
                     } else {
-                        throw new Error('Nenhum link com 3074 encontrado');
+                        throw new Error('Nenhum link com 1976 encontrado');
                     }
                     
                 } catch (error3: any) {
@@ -422,6 +459,7 @@ withSecurity({
                 }
             }
         }
+    }
 
         // VERIFICAÇÃO FINAL
         const finalUrl = page.url();
