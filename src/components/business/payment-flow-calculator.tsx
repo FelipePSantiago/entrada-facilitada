@@ -2193,7 +2193,8 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   };
 
   const handleCaixaMonetaryBlur = (name: 'renda') => {
-    if (!valoresFormatados[name] || valoresFormatados[name] === '') {
+    if (!valoresFormatados[name] ||
+    valoresFormatados[name] === '') {
       setValoresFormatados(prev => ({ ...prev, [name]: 'R$ 0,00' }));
       setCustomerData(prev => ({ ...prev, [name]: '0' }));
     }
@@ -2456,6 +2457,168 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
   }, [watchedPayments, deliveryDateObj, replace]);
 
   useEffect(() => {
+    if (!selectedProperty || !deliveryDateObj) return;
+    
+    // Lógica específica para o Bônus de Campanha
+    const campaignBonusPayment = watchedPayments.find(p => p.type === 'bonusCampanha');
+    const sinalAtoPayment = watchedPayments.find(p => p.type === 'sinalAto');
+    
+    // Só processar bônus de campanha se houver sinal ato definido
+    if (sinalAtoPayment && sinalAtoPayment.value > 0) {
+      const descontoPayment = watchedPayments.find(p => p.type === 'desconto');
+      const descontoValue = descontoPayment?.value || 0;
+      const valorFinalImovel = (watchedSaleValue || 0) - descontoValue;
+      const sinalMinimo = 0.05 * valorFinalImovel;
+      
+      if (isSinalCampaignActive && sinalCampaignLimitPercent !== undefined) {
+        if (sinalAtoPayment.value > sinalMinimo) {
+          const excedente = sinalAtoPayment.value - sinalMinimo;
+          const limiteMaximoBonus = valorFinalImovel * (sinalCampaignLimitPercent / 100);
+          const expectedBonusValue = Math.min(excedente, limiteMaximoBonus);
+          
+          if (expectedBonusValue > 0.01) { // Só criar bônus se for significativo
+            if (!campaignBonusPayment) {
+              // Adicionar novo bônus
+              append({
+                type: 'bonusCampanha',
+                value: expectedBonusValue,
+                date: deliveryDateObj,
+              });
+            } else if (Math.abs(campaignBonusPayment.value - expectedBonusValue) > 0.01) {
+              // Atualizar valor se for diferente
+              const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
+              if (bonusIndex !== -1) {
+                const newPayments = [...watchedPayments];
+                newPayments[bonusIndex] = {
+                  ...newPayments[bonusIndex],
+                  value: expectedBonusValue,
+                  date: deliveryDateObj,
+                };
+                replace(newPayments);
+              }
+            }
+          } else if (campaignBonusPayment) {
+            // Remover bônus se não houver mais excedente significativo
+            const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
+            if (bonusIndex !== -1) {
+              remove(bonusIndex);
+            }
+          }
+        } else if (campaignBonusPayment) {
+          // Remover bônus se sinal ato não tiver excedente
+          const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
+          if (bonusIndex !== -1) {
+            remove(bonusIndex);
+          }
+        }
+      } else if (campaignBonusPayment) {
+        // Remover bônus se a campanha não estiver ativa
+        const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
+        if (bonusIndex !== -1) {
+          remove(bonusIndex);
+        }
+      }
+    } else if (campaignBonusPayment) {
+      // Remover bônus se não houver sinal ato ou for zero
+      const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
+      if (bonusIndex !== -1) {
+        remove(bonusIndex);
+      }
+    }
+  }, [
+    watchedPayments, 
+    selectedProperty, 
+    deliveryDateObj, 
+    isSinalCampaignActive, 
+    sinalCampaignLimitPercent,
+    watchedSaleValue,
+    append,
+    remove,
+    replace,
+  ]);
+
+  useEffect(() => {
+    if (!selectedProperty || !deliveryDateObj) return;
+    
+    // Lógica específica para o Bônus de Campanha
+    const campaignBonusPayment = watchedPayments.find(p => p.type === 'bonusCampanha');
+    const sinalAtoPayment = watchedPayments.find(p => p.type === 'sinalAto');
+    
+    // Só processar bônus de campanha se houver sinal ato definido
+    if (sinalAtoPayment && sinalAtoPayment.value > 0) {
+      const descontoPayment = watchedPayments.find(p => p.type === 'desconto');
+      const descontoValue = descontoPayment?.value || 0;
+      const valorFinalImovel = (watchedSaleValue || 0) - descontoValue;
+      const sinalMinimo = 0.05 * valorFinalImovel;
+      
+      if (isSinalCampaignActive && sinalCampaignLimitPercent !== undefined) {
+        if (sinalAtoPayment.value > sinalMinimo) {
+          const excedente = sinalAtoPayment.value - sinalMinimo;
+          const limiteMaximoBonus = valorFinalImovel * (sinalCampaignLimitPercent / 100);
+          const expectedBonusValue = Math.min(excedente, limiteMaximoBonus);
+          
+          if (expectedBonusValue > 0.01) { // Só criar bônus se for significativo
+            if (!campaignBonusPayment) {
+              // Adicionar novo bônus
+              append({
+                type: 'bonusCampanha',
+                value: expectedBonusValue,
+                date: deliveryDateObj,
+              });
+            } else if (Math.abs(campaignBonusPayment.value - expectedBonusValue) > 0.01) {
+              // Atualizar valor se for diferente
+              const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
+              if (bonusIndex !== -1) {
+                const newPayments = [...watchedPayments];
+                newPayments[bonusIndex] = {
+                  ...newPayments[bonusIndex],
+                  value: expectedBonusValue,
+                  date: deliveryDateObj,
+                };
+                replace(newPayments);
+              }
+            }
+          } else if (campaignBonusPayment) {
+            // Remover bônus se não houver mais excedente significativo
+            const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
+            if (bonusIndex !== -1) {
+              remove(bonusIndex);
+            }
+          }
+        } else if (campaignBonusPayment) {
+          // Remover bônus se sinal ato não tiver excedente
+          const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
+          if (bonusIndex !== -1) {
+            remove(bonusIndex);
+          }
+        }
+      } else if (campaignBonusPayment) {
+        // Remover bônus se a campanha não estiver ativa
+        const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
+        if (bonusIndex !== -1) {
+          remove(bonusIndex);
+        }
+      }
+    } else if (campaignBonusPayment) {
+      // Remover bônus se não houver sinal ato ou for zero
+      const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
+      if (bonusIndex !== -1) {
+        remove(bonusIndex);
+      }
+    }
+  }, [
+    watchedPayments, 
+    selectedProperty, 
+    deliveryDateObj, 
+    isSinalCampaignActive, 
+    sinalCampaignLimitPercent,
+    watchedSaleValue,
+    append,
+    remove,
+    replace,
+  ]);
+
+  useEffect(() => {
     if (!selectedProperty) return;
     const baseFee = getNotaryFee(watchedAppraisalValue);
     const participants = watchedFinancingParticipants || 0;
@@ -2496,6 +2659,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     });
   }, [setValue, toast]);
 
+  // =============================================================================
+  // FUNÇÃO VALIDATEBUSINESSRULESAFTERMINIMUMCONDITION - DECLARADA ANTES DE ONSUBMIT
+  // =============================================================================
   const validateBusinessRulesAfterMinimumCondition = useCallback((
     payments: PaymentField[],
     appraisalValue: number,
@@ -2631,6 +2797,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     return { isValid: true };
   }, [calculatePriceInstallment, calculateConstructionInsuranceLocal, calculateCorrectedProSoluto]);
 
+  // =============================================================================
+  // FUNÇÃO ONSUBIT - MODIFICADA COM VARIÁVEIS CORRIGIDAS
+  // =============================================================================
   const onSubmit = useCallback((values: FormValues) => {
     clearErrors();
   
@@ -2656,15 +2825,15 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     // VERIFICAR SE PRECISA DE CORREÇÃO AUTOMÁTICA
     const needsAutoCorrection = !initialValidation.isValid || initialValidation.businessLogicViolation;
   
-    // DETECTAR VIOLAÇÕES ESPECÍFICAS
-    const sinalAto = finalPayments.find(p => p.type === 'sinalAto');
+    // DETECTAR VIOLAÇÕES ESPECÍFICAS - USANDO VARIÁVEIS COM NOMES DIFERENTES
+    const sinalAtoPaymentInitial = finalPayments.find(p => p.type === 'sinalAto');
     const descontoPayment = finalPayments.find(p => p.type === 'desconto');
     const descontoValue = descontoPayment?.value || 0;
     const valorFinalImovel = values.saleValue - descontoValue;
     const sinalMinimo = 0.05 * valorFinalImovel;
   
-    if (sinalAto && sinalAto.value < sinalMinimo) {
-      correctionMessages.push(`Sinal Ato (${centsToBrl(sinalAto.value * 100)}) abaixo do mínimo de 5,5% (${centsToBrl(sinalMinimo * 100)})`);
+    if (sinalAtoPaymentInitial && sinalAtoPaymentInitial.value < sinalMinimo) {
+      correctionMessages.push(`Sinal Ato (${centsToBrl(sinalAtoPaymentInitial.value * 100)}) abaixo do mínimo de 5,5% (${centsToBrl(sinalMinimo * 100)})`);
     }
   
     if (!initialValidation.isValid) {
@@ -2900,9 +3069,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       values.simulationInstallmentValue
     );
   
-    // Calcular o valor do Sinal Ato
-    const sinalAtoPayment = finalPayments.find(p => p.type === 'sinalAto');
-    const sinalAtoValue = sinalAtoPayment ? sinalAtoPayment.value : 0;
+    // Calcular o valor do Sinal Ato - USANDO VARIÁVEL COM NOME DIFERENTE
+    const sinalAtoPaymentFinal = finalPayments.find(p => p.type === 'sinalAto');
+    const sinalAtoValue = sinalAtoPaymentFinal ? sinalAtoPaymentFinal.value : 0;
     
     const totalEntryCost = finalPayments
       .filter(p => ['sinalAto', 'sinal1', 'sinal2', 'sinal3', 'desconto', 'bonusCampanha'].includes(p.type))
@@ -3013,6 +3182,9 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
     caixaSimulationResult
   ]);
 
+  // =============================================================================
+  // FUNÇÃO HANDLEAPPLYMINIMUMCONDITION - DECLARADA APÓS ONSUBMIT
+  // =============================================================================
   const handleApplyMinimumCondition = useCallback(() => {
     const values = form.getValues();
 
@@ -3118,7 +3290,21 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
             });
         }
     });
-  }, [form, selectedProperty, deliveryDateObj, toast, replace, isSinalCampaignActive, sinalCampaignLimitPercent, trigger, getValues, onSubmit, validateBusinessRulesAfterMinimumCondition, constructionStartDateObj, adjustPaymentsToMatchTarget]);
+  }, [
+    form, 
+    selectedProperty, 
+    deliveryDateObj, 
+    toast, 
+    replace, 
+    isSinalCampaignActive, 
+    sinalCampaignLimitPercent, 
+    trigger, 
+    getValues, 
+    onSubmit, 
+    validateBusinessRulesAfterMinimumCondition, 
+    constructionStartDateObj, 
+    adjustPaymentsToMatchTarget
+  ]);
 
   const handleClearAll = useCallback(() => {
     form.reset({
