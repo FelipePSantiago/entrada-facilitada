@@ -1,24 +1,24 @@
 
-/**
- * @fileOverview Firestore functions for managing users.
- */
-
 import {
   onSnapshot,
   Unsubscribe,
   doc,
+  type Firestore
 } from "firebase/firestore";
-import { db } from "./clientApp";
 import type { AppUser } from "@/types";
-
 
 /**
  * Subscribes to real-time updates for a single user's data.
+ * @param db The Firestore instance.
  * @param uid The user's unique ID.
  * @param callback The function to call with the user's data.
  * @returns An unsubscribe function.
  */
-export const onUserSnapshot = (uid: string, callback: (user: AppUser | null) => void): Unsubscribe => {
+export const onUserSnapshot = (
+    db: Firestore, // <<< db é recebido como parâmetro
+    uid: string, 
+    callback: (user: AppUser | null) => void
+): Unsubscribe => {
     const userRef = doc(db, "users", uid);
     return onSnapshot(userRef, (docSnap) => {
         if (docSnap.exists()) {
@@ -37,4 +37,3 @@ export const onUserSnapshot = (uid: string, callback: (user: AppUser | null) => 
         callback(null);
     });
 };
-    

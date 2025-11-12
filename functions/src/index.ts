@@ -51,7 +51,7 @@ export const extractPricing = onCall({ ...publicOptions, maxInstances: 10 },
   })
 );
 
-export const processSumupPaymentAction = onCall({ ...publicOptions, secrets: ["SUMUP_APIKEY"], maxInstances: 20 }, 
+export const processSumupPaymentAction = onCall({ ...publicOptions, secrets: ["SUMUP_APIKEY"], maxInstances: 10 }, 
   withSecurity({ requireAuth: false, rateLimitConfig: RATE_LIMIT_CONFIGS.API, allowedOrigins })
   ((request: CallableRequest) => processSumupPayment(request))
 );
@@ -101,7 +101,7 @@ export const getTwoFactorSecretAction = onCall({ ...publicOptions, maxInstances:
   ((request: CallableRequest) => actions.getTwoFactorSecretAction(ensureAuth(request)))
 );
 
-export const verifyTokenAction = onCall({ ...publicOptions, maxInstances: 20 }, 
+export const verifyTokenAction = onCall({ ...publicOptions, maxInstances: 10 }, 
   withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins })
   ((request: CallableRequest) => actions.verifyTokenAction({ uid: ensureAuth(request), token: request.data.token }, request))
 );
@@ -116,7 +116,7 @@ export const updatePropertyAvailabilityAction = onCall({ ...publicOptions, maxIn
   ((request: CallableRequest) => (ensureAuth(request), actions.updatePropertyAvailabilityAction(request.data)))
 );
 
-export const getPropertiesAction = onCall({ ...publicOptions, maxInstances: 20 }, 
+export const getPropertiesAction = onCall({ ...publicOptions, maxInstances: 10 }, 
   withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.API, allowedOrigins })
   (async (request: CallableRequest) => (ensureAuth(request), { properties: await actions.getPropertiesAction() }))
 );

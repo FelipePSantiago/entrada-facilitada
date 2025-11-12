@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/components/client-providers"; // CORREÇÃO
 import { useToast } from "@/hooks/use-toast";
 
 interface SimulationResult {

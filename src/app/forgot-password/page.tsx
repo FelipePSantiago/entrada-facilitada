@@ -13,17 +13,28 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/components/client-providers"; // CORREÇÃO
 import { useToast } from "@/hooks/use-toast";
-import { auth } from "@/lib/firebase/clientApp";
 
 export default function ForgotPasswordPage() {
   const { toast } = useToast();
+  const { auth } = useAuth(); // Get auth from context
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSent, setIsSent] = useState(false);
 
   const handleResetPassword = async (event: React.FormEvent) => {
     event.preventDefault();
+
+    if (!auth) { // Guard clause
+        toast({
+            variant: "destructive",
+            title: "Aguarde um momento",
+            description: "O serviço de autenticação ainda está carregando. Tente novamente.",
+        });
+        return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -71,7 +82,7 @@ export default function ForgotPasswordPage() {
               </div>
             </CardContent>
             <CardFooter>
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button type="submit" className="w-full" disabled={isLoading || !auth}>
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Enviar Link de Redefinição
               </Button>

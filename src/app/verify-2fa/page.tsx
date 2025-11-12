@@ -14,17 +14,16 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/components/client-providers'; // CORREÇÃO
 import { useToast } from '@/hooks/use-toast';
 import { useAppCheck } from '@/components/providers';
-import { auth } from '@/lib/firebase/clientApp';
 import { safeLocalStorage } from '@/lib/safe-storage';
 import { retryFirebaseFunction } from '@/lib/retry-logic';
 
 function Verify2FAPageContent() {
   const router = useRouter();
   const { toast } = useToast();
-  const { authLoading, functions, setIs2FAVerified, user } = useAuth();
+  const { authLoading, functions, setIs2FAVerified, user, auth } = useAuth(); // <<< auth OBTIDO AQUI
   const { isAppCheckAvailable, appCheckError } = useAppCheck();
   
   const [token, setToken] = useState("");
@@ -43,7 +42,7 @@ function Verify2FAPageContent() {
       toast({
         variant: "destructive",
         title: "Erro",
-        description: "Usuário não encontrado.",
+        description: "Usuário não autenticado ou funções indisponíveis.",
       });
       return;
     }
@@ -51,20 +50,7 @@ function Verify2FAPageContent() {
 
     try {
       const verifyToken = httpsCallable(functions, "verifyTokenAction");
-
-      // Usar retry logic para a verificação
-      const result = await retryFirebaseFunction(
-        () => verifyToken({ token }),
-        "verifyTokenAction",
-        {
-          maxRetries: 2,
-          initialDelay: 500,
-          onRetry: (attempt, error) => {
-            setRetryCount(attempt);
-            console.warn(`Retrying 2FA token verification (attempt ${attempt}):`, error);
-          },
-        }
-      );
+      const result = await retryFirebaseFunction(() => verifyToken({ token }));
 
       const isValid = result.data as boolean;
 
@@ -74,14 +60,10 @@ function Verify2FAPageContent() {
           description: "Você será redirecionado em instantes.",
         });
         
-        // Usar safe storage em vez de localStorage diretamente
         safeLocalStorage.setItem(`2fa-verified-${user.uid}`, "true");
         setIs2FAVerified(true);
-        
-        // Reset retry count on success
         setRetryCount(0);
         
-        // Redirecionar após um pequeno delay
         setTimeout(() => {
           router.push('/simulator');
         }, 1000);
@@ -95,17 +77,6 @@ function Verify2FAPageContent() {
       let errorMessage = err.message || "Não foi possível verificar o código.";
       let errorTitle = "Erro na Verificação";
 
-      if (err.message?.includes('403') || err.message?.includes('throttled')) {
-        errorTitle = "Serviço Temporariamente Indisponível";
-        errorMessage = "Tente novamente em alguns minutos.";
-      } else if (err.message?.includes('network')) {
-        errorTitle = "Erro de Conexão";
-        errorMessage = "Verifique sua conexão e tente novamente.";
-      } else if (!isAppCheckAvailable) {
-        errorTitle = "Problema de Segurança";
-        errorMessage = "Não foi possível verificar a segurança da conexão. Tente novamente.";
-      }
-
       toast({
         variant: "destructive",
         title: errorTitle,
@@ -117,9 +88,16 @@ function Verify2FAPageContent() {
   };
 
   const handleBackToLogin = async () => {
+    if (!auth) {
+        toast({
+            variant: "destructive",
+            title: "Erro",
+            description: "Serviço de autenticação não disponível.",
+        });
+        return;
+    }
     try {
       await signOut(auth);
-      // O gatilho `onAuthStateChanged` no `AuthContext` irá lidar com o redirecionamento para /login
     } catch {
       toast({
         variant: "destructive",
@@ -218,7 +196,7 @@ function Verify2FAPageContent() {
               className="w-full" 
               type="button" 
               onClick={handleBackToLogin}
-              disabled={isLoading}
+              disabled={isLoading || !auth}
             >
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Voltar para o Login

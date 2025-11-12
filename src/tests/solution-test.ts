@@ -42,14 +42,18 @@ async function testRetryLogic() {
       {
         maxRetries: 3,
         initialDelay: 100,
-        onRetry: (attempt, error) => {
-          console.log(`🔄 Retry attempt ${attempt}: ${error.message}`);
+        onRetry: (attempt, error, delay) => {
+          // Verificação de tipo para acessar a propriedade message
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.log(`🔄 Retry attempt ${attempt}: ${errorMessage}`);
         }
       }
     );
     console.log('✅ Retry Logic funcionou:', result === 'success');
   } catch (error) {
-    console.log('❌ Retry Logic falhou:', error);
+    // Também corrigir o catch para lidar com unknown
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.log('❌ Retry Logic falhou:', errorMessage);
   }
 }
 
@@ -89,7 +93,8 @@ async function testCircuitBreaker() {
   try {
     await circuitBreaker.execute(failingFunction);
   } catch (error) {
-    console.log('🔌 Circuit breaker bloqueou execução');
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.log('🔌 Circuit breaker bloqueou execução:', errorMessage);
   }
 }
 
@@ -100,16 +105,26 @@ function testStorageAvailability() {
   const isAvailable = safeLocalStorage.isStorageAvailable();
   console.log('✅ Storage availability check:', typeof isAvailable === 'boolean');
   
-  // Testar fallback
+  // Testar fallback - usar type assertion para evitar problemas de tipo
   const originalLocalStorage = window.localStorage;
-  delete (window as any).localStorage;
+  
+  // Temporariamente remover localStorage para testar fallback
+  Object.defineProperty(window, 'localStorage', {
+    value: undefined,
+    writable: true,
+    configurable: true
+  });
   
   safeLocalStorage.setItem('fallback-test', 'fallback-value');
   const fallbackValue = safeLocalStorage.getItem('fallback-test');
   console.log('✅ Fallback storage funcionou:', fallbackValue === 'fallback-value');
   
-  // Restaurar
-  (window as any).localStorage = originalLocalStorage;
+  // Restaurar localStorage original
+  Object.defineProperty(window, 'localStorage', {
+    value: originalLocalStorage,
+    writable: true,
+    configurable: true
+  });
 }
 
 // Executar todos os testes
@@ -124,7 +139,9 @@ export async function runAllTests() {
     
     console.log('✅ Todos os testes concluídos com sucesso!');
   } catch (error) {
-    console.error('❌ Erro nos testes:', error);
+    // Corrigir o tratamento de erro aqui também
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('❌ Erro nos testes:', errorMessage);
   }
 }
 

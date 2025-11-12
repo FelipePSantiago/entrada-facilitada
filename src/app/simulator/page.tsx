@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/components/client-providers"; // CORREÇÃO
 
 const PaymentFlowCalculator = dynamic(
   () =>

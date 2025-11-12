@@ -313,12 +313,6 @@ export const getTwoFactorSecretAction = async (uid: string): Promise<string | nu
             if (userDocSnapshot.exists) {
                 userDoc = userDocSnapshot.data() as AppUser;
             } else {
-                const userRecord = await adminAuth.getUser(uid);
-                if (!userRecord.email) throw new HttpsError('not-found', "E-mail do usuário não encontrado.");
-                const isAdmin = adminEmails.includes(userRecord.email);
-                userDoc = { uid, email: userRecord.email, isAdmin, twoFactorEnabled: false };
-                await userDocRef.set(userDoc, { merge: true });
-                UserCache.setUser(uid, userDoc);
                 return null;
             }
             UserCache.setUser(uid, userDoc);

@@ -1,4 +1,4 @@
-import { httpsCallable, type Functions, type HttpsCallableResult } from 'firebase/functions';
+import { httpsCallable, type Functions } from 'firebase/functions';
 import { useCallback, useState, useRef, useMemo } from 'react';
 import { useAppCheck } from '@/components/providers';
 import { safeLocalStorage, storageUtils } from '@/lib/safe-storage';
@@ -22,7 +22,7 @@ interface UseFirebaseOptions {
 interface FirebaseCallState {
   loading: boolean;
   error: string | null;
-  data: any;
+  data: unknown;
   attempts: number;
 }
 
@@ -45,10 +45,10 @@ export function useFirebase(options: UseFirebaseOptions = {}) {
     ...options.defaultRetryOptions,
   }), [options.defaultRetryOptions]);
 
-  const callFunction = useCallback(async <T = any>(
+  const callFunction = useCallback(async <T = unknown>(
     functionName: string,
     functions: Functions,
-    data?: any,
+    data?: unknown,
     customRetryOptions?: RetryOptions
   ): Promise<T> => {
     // Cancel any previous call
@@ -114,23 +114,23 @@ export function useFirebase(options: UseFirebaseOptions = {}) {
 
       return result;
 
-    } catch (error: any) {
-      let errorMessage = error.message || 'Ocorreu um erro inesperado.';
+    } catch (error: unknown) {
+      let errorMessage = 'Ocorreu um erro inesperado.';
       
       // Enhanced error messages based on App Check availability
       if (!isAppCheckAvailable && appCheckError) {
-        if (error.message?.includes('403') || error.message?.includes('permission-denied')) {
+        if (error instanceof Error && (error.message?.includes('403') || error.message?.includes('permission-denied'))) {
           errorMessage = 'Verificação de segurança indisponível. Recarregue a página e tente novamente.';
         }
       }
 
       // Network error handling
-      if (error.message?.includes('network') || error.message?.includes('fetch')) {
+      if (error instanceof Error && (error.message?.includes('network') || error.message?.includes('fetch'))) {
         errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente.';
       }
 
       // Rate limiting handling
-      if (error.message?.includes('throttled') || error.message?.includes('429')) {
+      if (error instanceof Error && (error.message?.includes('throttled') || error.message?.includes('429'))) {
         errorMessage = 'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.';
       }
 
@@ -188,13 +188,13 @@ export function useTwoFactorAuth(functions: Functions | null) {
   const generateSecret = useCallback(async (uid: string): Promise<string> => {
     if (!functions) throw new Error('Firebase Functions não disponível');
     
-    const result = await callFunction(
+    const result = await callFunction<string>(
       'generateTwoFactorSecretAction',
       functions,
       uid
     );
     
-    return result.data as string;
+    return result;
   }, [functions, callFunction]);
 
   const verifyAndEnable = useCallback(async (data: {
@@ -204,13 +204,13 @@ export function useTwoFactorAuth(functions: Functions | null) {
   }): Promise<boolean> => {
     if (!functions) throw new Error('Firebase Functions não disponível');
     
-    const result = await callFunction(
+    const result = await callFunction<boolean>(
       'verifyAndEnableTwoFactorAction',
       functions,
       data
     );
     
-    return result.data as boolean;
+    return result;
   }, [functions, callFunction]);
 
   const verifyToken = useCallback(async (data: {
@@ -219,13 +219,13 @@ export function useTwoFactorAuth(functions: Functions | null) {
   }): Promise<boolean> => {
     if (!functions) throw new Error('Firebase Functions não disponível');
     
-    const result = await callFunction(
+    const result = await callFunction<boolean>(
       'verifyTokenAction',
       functions,
       data
     );
     
-    return result.data as boolean;
+    return result;
   }, [functions, callFunction]);
 
   return {

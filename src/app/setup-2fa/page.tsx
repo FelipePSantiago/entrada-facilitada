@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/components/client-providers"; // CORREÇÃO
 import { useToast } from "@/hooks/use-toast";
 import { useAppCheck } from "@/components/providers";
 import { safeLocalStorage } from "@/lib/safe-storage";

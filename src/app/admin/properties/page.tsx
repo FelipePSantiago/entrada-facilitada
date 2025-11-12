@@ -51,7 +51,7 @@ import {
 import type { CombinedUnit, Property } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { centsToBrl, getValue } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/components/client-providers"; // CORREÇÃO: Importação ajustada
 import { Timestamp } from 'firebase/firestore';
 import { Skeleton } from "@/components/ui/skeleton";
 import { parseExcel } from "@/lib/parsers/excel-parser";
@@ -60,7 +60,7 @@ import { httpsCallable } from "firebase/functions"; // Moved isDateLocked here
 const AvailabilityManager = dynamic(() => 
     import('@/components/admin/availability-manager').then(mod => mod.AvailabilityManager), 
     { 
-        loading: () => <div className="p-4"><Skeleton className="h-40 w-full" /></div>,
+        loading: () => <div class="p-4"><Skeleton className="h-40 w-full" /></div>,
         ssr: false 
     }
 );
@@ -166,7 +166,7 @@ export default function AdminPropertiesPage() {
                   throw new Error("Nenhum dado encontrado na planilha.");
               }
 
-              const property = properties.find(p => p.id === propertyId);
+              const property = properties.find((p: Property) => p.id === propertyId); // CORREÇÃO: Tipagem adicionada
               if (!property) throw new Error("Empreendimento não encontrado.");
 
               const transformedData = parsedData.map(item => transformer(item));
@@ -203,14 +203,12 @@ export default function AdminPropertiesPage() {
       return isNaN(numberValue) ? 0 : numberValue;
     };
     
-    // FUNÇÃO NOVA: Para converter área (metros quadrados)
     const toSquareMeters = (value: unknown) => {
       if (value === undefined || value === null || String(value).trim() === '') return 0;
       const stringValue = String(value);
-      // Remove caracteres não numéricos exceto ponto e vírgula
-      const cleanedValue = stringValue.replace(/[^\d,.]/g, '').replace(',', '.');
+      const cleanedValue = stringValue.replace(/[^\\d,.]/g, '').replace(',', '.');
       const numberValue = parseFloat(cleanedValue);
-      return isNaN(numberValue) ? 0 : Math.round(numberValue * 100) / 100; // Arredonda para 2 casas decimais
+      return isNaN(numberValue) ? 0 : Math.round(numberValue * 100) / 100;
     };
     
     const fullUnitId = String(getValue(item, ['UNIDADE']) || '').trim();
@@ -223,11 +221,10 @@ export default function AdminPropertiesPage() {
         status: 'Disponível',
         floor: String(getValue(item, ['ANDAR']) || '').trim(),
         typology: String(getValue(item, ['TIPOLOGIA']) || ''),
-        // NOVO: Extrai ÁREA PRIVATIVA da planilha
         privateArea: toSquareMeters(getValue(item, ['ÁREA PRIVATIVA'])),
         sunPosition: String(getValue(item, ['POSIÇÃO DO SOL'])),
         parkingSpaces: parseInt(String(getValue(item, ['VAGA']) || '0'), 10),
-        totalArea: 0, // Mantém 0 por enquanto, pode ser adicionado depois
+        totalArea: 0,
         appraisalValue: toReais(getValue(item, ['VALOR DE AVALIAÇÃO'])),
         complianceBonus: 0,
         saleValue: toReais(getValue(item, ['VALOR DE VENDA'])),
@@ -399,7 +396,7 @@ export default function AdminPropertiesPage() {
                         value={activeAccordionItem ?? ""}
                         onValueChange={setActiveAccordionItem}
                     >
-                        {properties.map((property) => {
+                        {properties.map((property: Property) => { // CORREÇÃO: Tipagem adicionada
                             const currentIsAnalyzing = isAnalyzing[property.id] || false;
                             const currentIsDeleting = isDeleting[property.id] || false;
 
@@ -410,14 +407,14 @@ export default function AdminPropertiesPage() {
                                             <div className="flex items-center gap-2">
                                                 <Building className="h-4 w-4" />
                                                 <span>{property.enterpriseName}</span>
-                                                {property.pricing && property.pricing.length > 0 && property.pricing.every(p => p.saleValue > 0) && ( // Check if pricing exists and has valid sale values
+                                                {property.pricing && property.pricing.length > 0 && property.pricing.every((p: CombinedUnit) => p.saleValue > 0) && ( // CORREÇÃO: Tipagem adicionada
                                                     <div className="flex items-center gap-1 text-xs text-green-600">
                                                         <FileBarChart2 className="h-4 w-4" />
                                                         <span>Preços OK</span>
                                                     </div>
                                                 )}
                                                  {property.availability?.towers && property.availability.towers.length > 0 && (
-                                                    <div className="flex items-center gap-1 text-xs text-blue-600"> {/* Assuming Availability has a way to check if it's populated */}
+                                                    <div className="flex items-center gap-1 text-xs text-blue-600">
                                                         <Grid3X3 className="h-4 w-4" />
                                                         <span>Disponibilidade OK</span>
                                                     </div>
@@ -451,8 +448,8 @@ export default function AdminPropertiesPage() {
                                     <AccordionContent>
                                         <Tabs defaultValue="pricing" className="p-2">
                                             <TabsList>
-                                                <TabsTrigger value="pricing" disabled={currentIsAnalyzing}>Tabela de Preços</TabsTrigger> {/* Disable pricing tab if analyzing */}
-                                                <TabsTrigger value="availability" disabled={!property.pricing || property.pricing.length === 0}>Disponibilidade</TabsTrigger> {/* Disable availability if no pricing data */}
+                                                <TabsTrigger value="pricing" disabled={currentIsAnalyzing}>Tabela de Preços</TabsTrigger>
+                                                <TabsTrigger value="availability" disabled={!property.pricing || property.pricing.length === 0}>Disponibilidade</TabsTrigger>
                                             </TabsList>
                                             <TabsContent value="pricing" className="pt-4">
                                                 {currentIsAnalyzing && <div className="mb-4">Analisando...</div>}
@@ -503,9 +500,9 @@ export default function AdminPropertiesPage() {
                                                                     </TableHeader>
                                                                     <TableBody>
                                                                         {property.pricing.map((p: CombinedUnit, index: number) => (
-                                                                          <TableRow key={p.unitId || index}> {/* Use index as fallback key */}
+                                                                          <TableRow key={p.unitId || index}>
                                                                                 <TableCell>{p.unitNumber}</TableCell>
-                                                                                <TableCell>{p.block}</TableCell> {/* Use block or tower */}
+                                                                                <TableCell>{p.block}</TableCell>
                                                                                 <TableCell className="text-right">{centsToBrl(p.saleValue)}</TableCell> 
                                                                             </TableRow>
                                                                         ))}

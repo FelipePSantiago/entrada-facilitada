@@ -160,8 +160,8 @@ export function AvailabilityManager({ property }: AvailabilityManagerProps) {
                         </TableHeader>
                         <TableBody>
                             {/* Iterate over allUnits which now includes towerName and floorName */}
-                            {allUnits.map((unit) => ( // Explicitly type unit
-                                <TableRow key={unit.unitId}> 
+                            {allUnits.map((unit, index) => ( // Explicitly type unit
+                                <TableRow key={`${unit.unitId}-${index}`}>
                                     <TableCell>{unit.unitNumber}</TableCell>
                                     {/* Access towerName and floorName directly */}
                                     <TableCell>{unit.towerName}</TableCell>

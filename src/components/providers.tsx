@@ -1,16 +1,23 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import React, { useEffect, useState } from 'react';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
-import { app } from '@/lib/firebase/clientApp';
+import { getApp, getApps, initializeApp } from 'firebase/app';
+import { ClientProviders } from './client-providers'; // Importação estática
 
-const ClientProviders = dynamic(() => import('./client-providers').then(mod => mod.ClientProviders), {
-  ssr: false,
-  loading: () => <div>Carregando...</div>, 
-});
+// Configuração do Firebase extraída diretamente das variáveis de ambiente
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+};
 
-// Interface para o contexto de App Check
+// A inicialização do app do Firebase continua aqui
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
 interface AppCheckContextType {
   isAppCheckAvailable: boolean;
   appCheckError: string | null;
@@ -36,103 +43,40 @@ export function Providers({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
+    if (typeof window === 'undefined') return;
 
-    const initializeAppCheckWithFallback = async () => {
+    const initialize = async () => {
       try {
         const recaptchaSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
-        
-        // Verificar se a chave reCAPTCHA está configurada
-        if (!recaptchaSiteKey || recaptchaSiteKey === 'dummy-key-for-dev') {
-          const errorMsg = process.env.NODE_ENV === 'production' 
-            ? "App Check: reCAPTCHA key not configured in production. Some features may be limited."
-            : "App Check: Using debug mode for development.";
-          
-          console.warn(errorMsg);
-          setAppCheckState({
-            isAppCheckAvailable: false,
-            appCheckError: errorMsg,
-          });
-
-          // Em desenvolvimento, continuar com debug token
-          if (process.env.NODE_ENV !== 'production') {
-            (window as Window & { FIREBASE_APPCHECK_DEBUG_TOKEN?: string }).FIREBASE_APPCHECK_DEBUG_TOKEN = "a5864223-9b38-489e-817b-c14ca8009e41";
-            
-            try {
-              initializeAppCheck(app, {
-                provider: new ReCaptchaV3Provider('dummy-key-for-dev'),
-                isTokenAutoRefreshEnabled: true,
-              });
-              
-              setAppCheckState({
-                isAppCheckAvailable: true,
-                appCheckError: null,
-              });
-              console.log("Firebase App Check initialized in debug mode successfully.");
-            } catch (debugError) {
-              console.error("Failed to initialize App Check in debug mode:", debugError);
-            }
-          }
-          return;
+        if (!recaptchaSiteKey) {
+          throw new Error("Chave reCAPTCHA não configurada.");
         }
 
-        // Configurar debug token para desenvolvimento
         if (process.env.NODE_ENV !== 'production') {
-          (window as Window & { FIREBASE_APPCHECK_DEBUG_TOKEN?: string }).FIREBASE_APPCHECK_DEBUG_TOKEN = "a5864223-9b38-489e-817b-c14ca8009e41";
+          (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
         }
 
-        // Inicializar App Check em produção
-        try {
-          initializeAppCheck(app, {
-            provider: new ReCaptchaV3Provider(recaptchaSiteKey),
-            isTokenAutoRefreshEnabled: true,
-          });
-
-          setAppCheckState({
-            isAppCheckAvailable: true,
-            appCheckError: null,
-          });
-          console.log("Firebase App Check initialized successfully.");
-
-        } catch (initError) {
-          const errorMsg = `App Check initialization failed: ${initError instanceof Error ? initError.message : 'Unknown error'}`;
-          console.error(errorMsg, initError);
-          
-          setAppCheckState({
-            isAppCheckAvailable: false,
-            appCheckError: errorMsg,
-          });
-
-          // Tentar inicializar sem App Check como fallback
-          console.warn("Continuing without App Check. Some features may be limited.");
-        }
-
-      } catch (e) {
-        const errorMsg = `Critical error during App Check setup: ${e instanceof Error ? e.message : 'Unknown error'}`;
-        console.error(errorMsg, e);
-        
-        setAppCheckState({
-          isAppCheckAvailable: false,
-          appCheckError: errorMsg,
+        initializeAppCheck(app, {
+          provider: new ReCaptchaV3Provider(recaptchaSiteKey),
+          isTokenAutoRefreshEnabled: true,
         });
 
-        // Continuar sem App Check em vez de quebrar a aplicação
-        console.warn("Application will continue without App Check. Consider configuring reCAPTCHA for full functionality.");
+        setAppCheckState({ isAppCheckAvailable: true, appCheckError: null });
+        console.log("Firebase App Check inicializado com sucesso.");
+      } catch (e) {
+        const error = e as Error;
+        console.error("Falha na inicialização do Firebase App Check:", error.message);
+        setAppCheckState({ isAppCheckAvailable: false, appCheckError: error.message });
       }
     };
 
-    // Inicializar App Check com um pequeno delay para garantir que o DOM esteja pronto
-    const timer = setTimeout(initializeAppCheckWithFallback, 100);
-
-    return () => clearTimeout(timer);
-
+    initialize();
   }, []);
 
   return (
     <AppCheckContext.Provider value={appCheckState}>
-      <ClientProviders>{children}</ClientProviders>
+      {/* Passando o app inicializado para o ClientProviders */}
+      <ClientProviders app={app}>{children}</ClientProviders>
     </AppCheckContext.Provider>
   );
 }

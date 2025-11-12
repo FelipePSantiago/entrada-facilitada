@@ -1,80 +1,80 @@
-"use client";
+'use client';
 
 import { FirebaseError } from "firebase/app";
-import {
-  sendEmailVerification,
-  signInWithEmailAndPassword,
-} from "firebase/auth";
+import { getMultiFactorResolver, MultiFactorError, sendEmailVerification, signInWithEmailAndPassword } from "firebase/auth";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from 'next/navigation';
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-} from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/components/client-providers"; // CORREÇÃO
 import { useToast } from "@/hooks/use-toast";
-import { auth } from "@/lib/firebase/clientApp";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [password, setPassword] = useState("");
-  const { authLoading, isFullyAuthenticated, user } = useAuth();
+  const { authLoading, isFullyAuthenticated, user, setMfaResolver, auth } = useAuth(); // <<< auth OBTIDO AQUI
   const { toast } = useToast();
+  const router = useRouter();
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
+    
+    // Guarda para garantir que o auth esteja disponível
+    if (!auth) {
+        toast({
+            variant: "destructive",
+            title: "Aguarde um momento",
+            description: "O serviço de autenticação está sendo carregado. Tente novamente em alguns segundos.",
+        });
+        return;
+    }
+
     setIsLoading(true);
 
     try {
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
 
       if (!userCredential.user.emailVerified) {
         await sendEmailVerification(userCredential.user);
         toast({
           title: "Verificação de E-mail Necessária",
-          description:
-            "Enviamos um novo link de verificação para o seu e-mail. Por favor, verifique sua caixa de entrada antes de fazer login.",
+          description: "Enviamos um novo link de verificação para o seu e-mail. Por favor, verifique sua caixa de entrada antes de fazer login.",
         });
         await auth.signOut(); // Força o logout para que o usuário verifique o e-mail
         setIsLoading(false);
         return;
       }
-      // O redirecionamento é tratado pelo AuthContext/Providers
     } catch (e) {
       const error = e as FirebaseError;
       let title = "Erro no Login";
-      let description =
-        "Ocorreu um erro inesperado. Por favor, tente novamente.";
+      let description = "Ocorreu um erro inesperado. Por favor, tente novamente.";
 
       switch (error.code) {
+        case "auth/multi-factor-auth-required":
+          const resolver = getMultiFactorResolver(auth, e as MultiFactorError);
+          setMfaResolver(resolver);
+          router.push("/verify-2fa");
+          return;
         case "auth/invalid-credential":
         case "auth/wrong-password":
         case "auth/user-not-found":
           title = "Credenciais Inválidas";
-          description =
-            "E-mail ou senha incorretos. Verifique seus dados e tente novamente.";
+          description = "E-mail ou senha incorretos. Verifique seus dados e tente novamente.";
           break;
         case "auth/user-disabled":
           title = "Conta Desativada";
-          description =
-            "Sua conta foi desativada. Entre em contato com o suporte para mais informações.";
+          description = "Sua conta foi desativada. Entre em contato com o suporte para mais informações.";
           break;
         case "appCheck/recaptcha-error":
           title = "Erro de Verificação";
-          description =
-            "Não foi possível verificar seu dispositivo. Recarregue a página e tente novamente.";
+          description = "Não foi possível verificar seu dispositivo. Recarregue a página e tente novamente.";
           break;
         default:
           console.error("Erro de login não tratado:", error);
@@ -141,7 +141,7 @@ export default function LoginPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full" disabled={isLoading || !auth}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Entrar
             </Button>

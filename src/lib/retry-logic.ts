@@ -1,11 +1,23 @@
+interface ErrorWithMessage {
+  message: string;
+  name?: string;
+}
+
+interface ErrorWithStatus {
+  status?: number;
+  code?: number;
+}
+
+type RetryErrorType = ErrorWithMessage & ErrorWithStatus;
+
 export interface RetryOptions {
   maxRetries?: number;
   initialDelay?: number;
   maxDelay?: number;
   backoffFactor?: number;
-  retryCondition?: (error: any) => boolean;
-  onRetry?: (attempt: number, error: any, delay: number) => void;
-  shouldRetry?: (error: any) => boolean;
+  retryCondition?: (error: unknown) => boolean;
+  onRetry?: (attempt: number, error: unknown, delay: number) => void;
+  shouldRetry?: (error: unknown) => boolean;
 }
 
 export interface RetryResult<T> {
@@ -21,33 +33,46 @@ const defaultRetryOptions: Required<RetryOptions> = {
   backoffFactor: 2,
   retryCondition: () => true,
   onRetry: () => {},
-  shouldRetry: (error: any) => {
+  shouldRetry: (error: unknown) => {
     // Retry on network errors, 5xx, 429 (rate limit), and specific Firebase errors
     if (!error) return false;
     
+    // Helper function to check if error has message
+    const hasMessage = (err: unknown): err is ErrorWithMessage => 
+      typeof err === 'object' && err !== null && 'message' in err;
+    
+    // Helper function to check if error has status/code
+    const hasStatus = (err: unknown): err is ErrorWithStatus =>
+      typeof err === 'object' && err !== null && ('status' in err || 'code' in err);
+
     // Network errors
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+    if (hasMessage(error) && error.name === 'TypeError' && error.message.includes('fetch')) {
       return true;
     }
     
     // HTTP status codes
-    const status = error.status || error.code;
-    if (status >= 500 || status === 429 || status === 408) {
-      return true;
+    if (hasStatus(error)) {
+      const status = error.status || error.code;
+      if (status && (status >= 500 || status === 429 || status === 408)) {
+        return true;
+      }
     }
     
     // Firebase specific errors
-    if (error.message?.includes('throttled') || 
-        error.message?.includes('403') ||
-        error.message?.includes('timeout') ||
-        error.message?.includes('network')) {
-      return true;
-    }
-    
-    // App Check specific errors
-    if (error.message?.includes('app-check') || 
-        error.message?.includes('AppCheck')) {
-      return true;
+    if (hasMessage(error)) {
+      const message = error.message;
+      if (message.includes('throttled') || 
+          message.includes('403') ||
+          message.includes('timeout') ||
+          message.includes('network')) {
+        return true;
+      }
+      
+      // App Check specific errors
+      if (message.includes('app-check') || 
+          message.includes('AppCheck')) {
+        return true;
+      }
     }
     
     return false;
@@ -77,7 +102,7 @@ export async function retryWithBackoff<T>(
   options: RetryOptions = {}
 ): Promise<RetryResult<T>> {
   const opts = { ...defaultRetryOptions, ...options };
-  let lastError: any;
+  let lastError: unknown;
   let totalDelay = 0;
 
   for (let attempt = 1; attempt <= opts.maxRetries + 1; attempt++) {
@@ -88,7 +113,7 @@ export async function retryWithBackoff<T>(
         attempts: attempt,
         totalDelay,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       lastError = error;
       
       // Don't retry on the last attempt
@@ -135,9 +160,10 @@ export async function retryFirebaseFunction<T>(
     initialDelay: options.initialDelay || 1000,
     onRetry: (attempt, error, delay) => {
       const funcName = functionName || 'Firebase Function';
+      const errorMessage = error instanceof Error ? error.message : String(error);
       console.warn(
         `${funcName} failed (attempt ${attempt}/${options.maxRetries || 3}). ` +
-        `Retrying in ${Math.round(delay)}ms... Error: ${error.message || error}`
+        `Retrying in ${Math.round(delay)}ms... Error: ${errorMessage}`
       );
       
       if (options.onRetry) {
@@ -243,9 +269,9 @@ export class CircuitBreaker {
  */
 export class RetryQueue {
   private queue: Array<{
-    fn: () => Promise<any>;
-    resolve: (value: any) => void;
-    reject: (error: any) => void;
+    fn: () => Promise<unknown>;
+    resolve: (value: unknown) => void;
+    reject: (error: unknown) => void;
     options: RetryOptions;
     attempt: number;
   }> = [];
@@ -257,9 +283,9 @@ export class RetryQueue {
   async add<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
     return new Promise((resolve, reject) => {
       this.queue.push({
-        fn,
-        resolve,
-        reject,
+        fn: fn as () => Promise<unknown>,
+        resolve: resolve as (value: unknown) => void,
+        reject: reject as (error: unknown) => void,
         options,
         attempt: 1,
       });
@@ -287,16 +313,16 @@ export class RetryQueue {
   }
   
   private async processItem(item: {
-    fn: () => Promise<any>;
-    resolve: (value: any) => void;
-    reject: (error: any) => void;
+    fn: () => Promise<unknown>;
+    resolve: (value: unknown) => void;
+    reject: (error: unknown) => void;
     options: RetryOptions;
     attempt: number;
   }): Promise<void> {
     try {
       const result = await item.fn();
       item.resolve(result);
-    } catch (error: any) {
+    } catch (error: unknown) {
       const maxRetries = item.options.maxRetries || 3;
       
       if (item.attempt < maxRetries && this.shouldRetry(error)) {
@@ -323,7 +349,7 @@ export class RetryQueue {
     }
   }
   
-  private shouldRetry(error: any): boolean {
+  private shouldRetry(error: unknown): boolean {
     return defaultRetryOptions.shouldRetry(error);
   }
 }
@@ -337,7 +363,7 @@ export const globalRetryQueue = new RetryQueue();
 export class RetryError extends Error {
   constructor(
     message: string,
-    public readonly originalError: any,
+    public readonly originalError: unknown,
     public readonly attempts: number,
     public readonly totalDelay: number
   ) {
@@ -349,17 +375,18 @@ export class RetryError extends Error {
 /**
  * Utility function to create a wrapped function with retry logic
  */
-export function withRetry<T extends (...args: any[]) => Promise<any>>(
+export function withRetry<T extends (...args: unknown[]) => Promise<unknown>>(
   fn: T,
   options: RetryOptions = {}
 ): T {
   return (async (...args: Parameters<T>): Promise<ReturnType<T>> => {
     try {
       const result = await retryWithBackoff(() => fn(...args), options);
-      return result.data;
-    } catch (error: any) {
+      return result.data as ReturnType<T>;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       throw new RetryError(
-        `Function failed after ${options.maxRetries || 3} retries: ${error.message}`,
+        `Function failed after ${options.maxRetries || 3} retries: ${errorMessage}`,
         error,
         options.maxRetries || 3,
         0
@@ -371,13 +398,13 @@ export function withRetry<T extends (...args: any[]) => Promise<any>>(
 /**
  * Firebase Functions specific retry wrapper
  */
-export function withFirebaseRetry<T extends (...args: any[]) => Promise<any>>(
+export function withFirebaseRetry<T extends (...args: unknown[]) => Promise<unknown>>(
   fn: T,
   functionName?: string,
   options: RetryOptions = {}
 ): T {
   return (async (...args: Parameters<T>): Promise<ReturnType<T>> => {
-    return retryFirebaseFunction(() => fn(...args), functionName, options);
+    return retryFirebaseFunction(() => fn(...args), functionName, options) as Promise<ReturnType<T>>;
   }) as T;
 }
 
