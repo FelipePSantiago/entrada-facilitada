@@ -20,7 +20,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import type { Property, PropertyFormValues } from "@/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSavePropertyAction } from "@/actions";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/components/client-providers";
 import { useToast } from "@/hooks/use-toast";
 
 

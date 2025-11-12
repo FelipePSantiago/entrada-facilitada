@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FileSpreadsheet, Loader2 } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/components/client-providers';
 import { httpsCallable } from 'firebase/functions';
 
 
@@ -97,7 +97,7 @@ export function AvailabilityManager({ property }: AvailabilityManagerProps) {
                     }
                     resolve(e.target.result);
                 };
-                fileReader.onerror = () => reject(new Error('Falha ao ler o arquivo.\''));
+                fileReader.onerror = () => reject(new Error('Falha ao ler o arquivo.'));
             });
 
 

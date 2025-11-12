@@ -51,7 +51,7 @@ import {
 import type { CombinedUnit, Property } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { centsToBrl, getValue } from "@/lib/utils";
-import { useAuth } from "@/components/client-providers"; // CORREÇÃO: Importação ajustada
+import { useAuth } from "@/components/client-providers";
 import { Timestamp } from 'firebase/firestore';
 import { Skeleton } from "@/components/ui/skeleton";
 import { parseExcel } from "@/lib/parsers/excel-parser";
@@ -60,7 +60,7 @@ import { httpsCallable } from "firebase/functions"; // Moved isDateLocked here
 const AvailabilityManager = dynamic(() => 
     import('@/components/admin/availability-manager').then(mod => mod.AvailabilityManager), 
     { 
-        loading: () => <div class="p-4"><Skeleton className="h-40 w-full" /></div>,
+        loading: () => <div className="p-4"><Skeleton className="h-40 w-full" /></div>,
         ssr: false 
     }
 );
@@ -166,7 +166,7 @@ export default function AdminPropertiesPage() {
                   throw new Error("Nenhum dado encontrado na planilha.");
               }
 
-              const property = properties.find((p: Property) => p.id === propertyId); // CORREÇÃO: Tipagem adicionada
+              const property = properties.find((p: Property) => p.id === propertyId);
               if (!property) throw new Error("Empreendimento não encontrado.");
 
               const transformedData = parsedData.map(item => transformer(item));
@@ -286,7 +286,7 @@ export default function AdminPropertiesPage() {
       await deleteProperty({ propertyId, idToken });
       toast({
         title: "🗑️ Empreendimento Removido",
-        description: `O empreendimento "${propertyName}" foi excluído com sucesso.`
+        description: `O empreendimento \"${propertyName}\" foi excluído com sucesso.`
       });
     } catch (error: unknown) {
       const err = error as Error;
@@ -396,7 +396,7 @@ export default function AdminPropertiesPage() {
                         value={activeAccordionItem ?? ""}
                         onValueChange={setActiveAccordionItem}
                     >
-                        {properties.map((property: Property) => { // CORREÇÃO: Tipagem adicionada
+                        {properties.map((property: Property) => {
                             const currentIsAnalyzing = isAnalyzing[property.id] || false;
                             const currentIsDeleting = isDeleting[property.id] || false;
 
@@ -407,7 +407,7 @@ export default function AdminPropertiesPage() {
                                             <div className="flex items-center gap-2">
                                                 <Building className="h-4 w-4" />
                                                 <span>{property.enterpriseName}</span>
-                                                {property.pricing && property.pricing.length > 0 && property.pricing.every((p: CombinedUnit) => p.saleValue > 0) && ( // CORREÇÃO: Tipagem adicionada
+                                                {property.pricing && property.pricing.length > 0 && property.pricing.every((p: CombinedUnit) => p.saleValue > 0) && (
                                                     <div className="flex items-center gap-1 text-xs text-green-600">
                                                         <FileBarChart2 className="h-4 w-4" />
                                                         <span>Preços OK</span>
@@ -425,7 +425,7 @@ export default function AdminPropertiesPage() {
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>
                                                      <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentIsDeleting}>
-                                                        {currentIsDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive"/>}
+                                                        {currentIsDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}
                                                      </Button>
                                                 </AlertDialogTrigger>
                                                 <AlertDialogContent>
