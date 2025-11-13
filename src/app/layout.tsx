@@ -1,13 +1,10 @@
+
 import type { Metadata } from "next";
 import "@/app/globals.css";
 
-import { ChunkErrorHandler } from "@/components/common/chunk-error-handler";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
-import Header from "@/components/common/Header";
-import { Providers } from "@/components/providers";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/toaster";
-import { VersionCheckHandler } from "@/components/common/version-check-handler";
+import ClientBoundary from "@/components/client-boundary"; // Importa a fronteira do cliente
 
 export const metadata: Metadata = {
   title: "Entrada Facilitada",
@@ -43,7 +40,6 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="app-version" content="0.1.85" />
         <meta name="theme-color" content="#0d6efd" />
-        {/* Meta tags adicionais para controle de cache */}
         <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
         <meta httpEquiv="Pragma" content="no-cache" />
         <meta httpEquiv="Expires" content="0" />
@@ -56,15 +52,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <ErrorBoundary>
-            <Providers>
-              <ChunkErrorHandler />
-              <VersionCheckHandler />
-              <Header />
-              <main className="flex w-full flex-col items-center justify-center pt-24">
-                {children}
-              </main>
-              <Toaster />
-            </Providers>
+            <ClientBoundary>{children}</ClientBoundary>
           </ErrorBoundary>
         </ThemeProvider>
       </body>

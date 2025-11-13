@@ -1,5 +1,10 @@
 import TerserPlugin from 'terser-webpack-plugin';
 import withPWA from 'next-pwa';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const pwaConfig = {
   dest: 'public',
@@ -10,7 +15,6 @@ const pwaConfig = {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
   images: {
     unoptimized: true,
   },
@@ -45,7 +49,6 @@ const nextConfig = {
     ],
   },
 
-  // ABORDAGEM DE DEPURAÇÃO: Adicionando a URL exata e a com wildcard.
   allowedDevOrigins: [
     'https://*.cloudworkstations.dev',
     'https://3000-firebase-studio-1754258520668.cluster-ve345ymguzcd6qqzuko2qbxtfe.cloudworkstations.dev'
@@ -57,6 +60,13 @@ const nextConfig = {
   },
 
   webpack: (config, { isServer, dev }) => {
+    // Restore the alias only for the '@' path.
+    // The Firebase aliases are removed as they were causing issues with the dev server.
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': './src',
+    };
+
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -116,11 +126,6 @@ const nextConfig = {
       };
     }
 
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@': './src',
-    };
-
     config.module.rules.push({
       test: /\.(png|jpe?g|gif|svg)$/i,
       type: 'asset',
@@ -171,7 +176,6 @@ const nextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()',
           },
-          // Headers adicionais para controle de cache agressivo
           {
             key: 'Cache-Control',
             value: 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0',
@@ -199,7 +203,7 @@ const nextConfig = {
         source: '/version.json',
         headers: [
           {
-            key: 'Cache-Control',
+            key: 'Cache-control',
             value: 'no-cache, no-store, must-revalidate, max-age=0',
           },
         ],
@@ -208,7 +212,7 @@ const nextConfig = {
         source: '/_next/static/(.*)',
         headers: [
           {
-            key: 'Cache-Control',
+            key: 'Cache-control',
             value: 'public, max-age=31536000, immutable',
           },
         ],

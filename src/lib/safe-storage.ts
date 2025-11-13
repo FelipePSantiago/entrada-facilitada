@@ -16,12 +16,15 @@ export class SafeStorage implements SafeStorageInterface {
     this.storageType = storageType;
     this.isAvailable = this.checkAvailability();
     
-    if (!this.isAvailable) {
+    if (!this.isAvailable && typeof window !== 'undefined') {
       console.warn(`${storageType} is not available. Using in-memory fallback.`);
     }
   }
 
   private checkAvailability(): boolean {
+    if (typeof window === 'undefined') {
+      return false;
+    }
     try {
       const storage = window[this.storageType];
       const test = '__storage_test__' + Date.now();
@@ -35,7 +38,7 @@ export class SafeStorage implements SafeStorageInterface {
   }
 
   setItem(key: string, value: string): void {
-    if (this.isAvailable) {
+    if (this.isAvailable && typeof window !== 'undefined') {
       try {
         window[this.storageType].setItem(key, value);
       } catch (error) {
@@ -48,7 +51,7 @@ export class SafeStorage implements SafeStorageInterface {
   }
 
   getItem(key: string): string | null {
-    if (this.isAvailable) {
+    if (this.isAvailable && typeof window !== 'undefined') {
       try {
         const value = window[this.storageType].getItem(key);
         if (value !== null) {
@@ -62,7 +65,7 @@ export class SafeStorage implements SafeStorageInterface {
   }
 
   removeItem(key: string): void {
-    if (this.isAvailable) {
+    if (this.isAvailable && typeof window !== 'undefined') {
       try {
         window[this.storageType].removeItem(key);
       } catch (error) {
@@ -75,7 +78,7 @@ export class SafeStorage implements SafeStorageInterface {
   }
 
   clear(): void {
-    if (this.isAvailable) {
+    if (this.isAvailable && typeof window !== 'undefined') {
       try {
         window[this.storageType].clear();
       } catch (error) {
@@ -88,7 +91,7 @@ export class SafeStorage implements SafeStorageInterface {
   }
 
   key(index: number): string | null {
-    if (this.isAvailable) {
+    if (this.isAvailable && typeof window !== 'undefined') {
       try {
         return window[this.storageType].key(index);
       } catch (error) {
@@ -102,7 +105,7 @@ export class SafeStorage implements SafeStorageInterface {
   }
 
   get length(): number {
-    if (this.isAvailable) {
+    if (this.isAvailable && typeof window !== 'undefined') {
       try {
         return window[this.storageType].length;
       } catch (error) {
@@ -113,14 +116,12 @@ export class SafeStorage implements SafeStorageInterface {
     return this.fallback.size;
   }
 
-  // Método utilitário para verificar se o storage está disponível
   isStorageAvailable(): boolean {
     return this.isAvailable;
   }
 
-  // Método para sincronizar dados do fallback para o storage (quando disponível)
   syncToFallback(): void {
-    if (this.isAvailable) {
+    if (this.isAvailable && typeof window !== 'undefined') {
       try {
         const storage = window[this.storageType];
         for (let i = 0; i < storage.length; i++) {
@@ -138,9 +139,8 @@ export class SafeStorage implements SafeStorageInterface {
     }
   }
 
-  // Método para persistir dados do fallback para o storage (quando disponível)
   persistFromFallback(): void {
-    if (this.isAvailable) {
+    if (this.isAvailable && typeof window !== 'undefined') {
       try {
         const storage = window[this.storageType];
         this.fallback.forEach((value, key) => {
@@ -157,28 +157,27 @@ export class SafeStorage implements SafeStorageInterface {
   }
 }
 
-// Instâncias globais para uso em toda a aplicação
 export const safeLocalStorage = new SafeStorage('localStorage');
 export const safeSessionStorage = new SafeStorage('sessionStorage');
 
-// Hook React para usar safe storage
 import { useEffect, useState } from 'react';
 
 export function useSafeStorage(storageType: 'localStorage' | 'sessionStorage' = 'localStorage') {
   const [storage] = useState(() => new SafeStorage(storageType));
-  const [isAvailable, setIsAvailable] = useState(storage.isStorageAvailable());
+  const [isAvailable, setIsAvailable] = useState(false);
 
   useEffect(() => {
+    setIsAvailable(storage.isStorageAvailable());
+
     const checkInterval = setInterval(() => {
       const currentAvailability = storage.isStorageAvailable();
       if (currentAvailability !== isAvailable) {
         setIsAvailable(currentAvailability);
         if (currentAvailability) {
-          // Storage ficou disponível, tentar persistir dados do fallback
           storage.persistFromFallback();
         }
       }
-    }, 5000); // Verificar a cada 5 segundos
+    }, 5000);
 
     return () => clearInterval(checkInterval);
   }, [storage, isAvailable]);
@@ -193,9 +192,7 @@ export function useSafeStorage(storageType: 'localStorage' | 'sessionStorage' = 
   };
 }
 
-// Funções utilitárias para operações comuns
 export const storageUtils = {
-  // Salvar objeto JSON
   setObject: (key: string, obj: any, storage: SafeStorageInterface = safeLocalStorage): void => {
     try {
       storage.setItem(key, JSON.stringify(obj));
@@ -204,7 +201,6 @@ export const storageUtils = {
     }
   },
 
-  // Recuperar objeto JSON
   getObject: <T = any>(key: string, defaultValue: T | null = null, storage: SafeStorageInterface = safeLocalStorage): T | null => {
     try {
       const item = storage.getItem(key);
@@ -215,7 +211,6 @@ export const storageUtils = {
     }
   },
 
-  // Salvar com timestamp
   setWithTimestamp: (key: string, value: string, storage: SafeStorageInterface = safeLocalStorage): void => {
     const data = {
       value,
@@ -224,7 +219,6 @@ export const storageUtils = {
     storageUtils.setObject(key, data, storage);
   },
 
-  // Recuperar com verificação de timestamp
   getWithTimestamp: (key: string, maxAge: number = 24 * 60 * 60 * 1000, storage: SafeStorageInterface = safeLocalStorage): string | null => {
     const data = storageUtils.getObject<{ value: string; timestamp: number }>(key, null, storage);
     if (!data) return null;
@@ -238,7 +232,6 @@ export const storageUtils = {
     return data.value;
   },
 
-  // Limpar itens expirados
   cleanExpired: (maxAge: number = 24 * 60 * 60 * 1000, storage: SafeStorageInterface = safeLocalStorage): void => {
     const now = Date.now();
     for (let i = 0; i < storage.length; i++) {
@@ -253,7 +246,6 @@ export const storageUtils = {
   },
 };
 
-// Exportar funções de compatibilidade para substituir localStorage/sessionStorage diretamente
 export const safeStorageCompat = {
   localStorage: {
     setItem: (key: string, value: string) => safeLocalStorage.setItem(key, value),

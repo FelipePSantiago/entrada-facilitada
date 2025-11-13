@@ -1,6 +1,6 @@
 import { httpsCallable, type Functions } from 'firebase/functions';
 import { useCallback, useState, useRef, useMemo } from 'react';
-import { useAppCheck } from '@/components/providers';
+import { useAppCheck } from '@/components/client-providers';
 import { safeLocalStorage, storageUtils } from '@/lib/safe-storage';
 import { 
   retryFirebaseFunction, 

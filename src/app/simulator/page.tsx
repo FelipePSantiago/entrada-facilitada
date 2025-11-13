@@ -2,11 +2,12 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ExternalLink, Loader2 } from "lucide-react";
-import dynamic from "next/dynamic";
 import React, { useEffect, useState } from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import * as z from "zod";
 
+import { PaymentFlowCalculator } from "@/components/business/payment-flow-calculator";
+import { SteppedPaymentFlowCalculator } from "@/components/business/stepped-payment-flow-calculator";
 import { SinalCampaignToggle } from "@/components/business/SinalCampaignToggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,29 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth } from "@/components/client-providers"; // CORREÇÃO
-
-const PaymentFlowCalculator = dynamic(
-  () =>
-    import("@/components/business/payment-flow-calculator").then(
-      (mod) => mod.PaymentFlowCalculator
-    ),
-  {
-    loading: () => <CalculatorSkeleton />,
-    ssr: false,
-  }
-);
-
-const SteppedPaymentFlowCalculator = dynamic(
-  () =>
-    import("@/components/business/stepped-payment-flow-calculator").then(
-      (mod) => mod.SteppedPaymentFlowCalculator
-    ),
-  {
-    loading: () => <CalculatorSkeleton />,
-    ssr: false,
-  }
-);
+import { useAuth } from "@/components/client-providers";
 
 const CalculatorSkeleton = () => (
   <div className="p-6 md:p-8">
