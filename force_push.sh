@@ -22,6 +22,6 @@ git add .
 git commit -m "Atualização forçada de todos os arquivos do projeto"
 
 # Força o push para a branch main do repositório remoto
-git push --force origin HEAD:main
+git push --force origin HEAD:test
 
 echo "Push forçado para o repositório concluído com sucesso!"

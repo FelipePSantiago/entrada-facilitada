@@ -1,7 +1,8 @@
 'use client';
 
-import { signOut, TotpMultiFactorGenerator } from 'firebase/auth';
-import { ArrowLeft, KeyRound, Loader2 } from 'lucide-react';
+import { signOut } from 'firebase/auth';
+import { httpsCallable } from 'firebase/functions';
+import { ArrowLeft, KeyRound, Loader2, AlertTriangle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
@@ -13,86 +14,71 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAuth } from '@/components/client-providers'; 
+import { useAuth, useAppCheck } from '@/components/client-providers';
 import { useToast } from '@/hooks/use-toast';
 import { safeLocalStorage } from '@/lib/safe-storage';
+import { retryFirebaseFunction } from '@/lib/retry-logic';
 
 function Verify2FAPageContent() {
   const router = useRouter();
   const { toast } = useToast();
-  const { 
-    authLoading, 
-    user, 
-    auth, 
-    mfaResolver, 
-    setMfaResolver, 
-    setIs2FAVerified, 
-    setIsFullyAuthenticated 
-  } = useAuth();
+  const { authLoading, functions, setIs2FAVerified, user, auth } = useAuth(); // <<< auth OBTIDO AQUI
+  const { isAppCheckAvailable, appCheckError } = useAppCheck();
   
   const [token, setToken] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
-    // If there's no user or mfaResolver, the user shouldn't be here.
-    if (!authLoading && (!user || !mfaResolver)) {
+    if (!authLoading && !user) {
       router.replace('/login');
     }
-  }, [authLoading, user, mfaResolver, router]);
+  }, [authLoading, user, router]);
 
   const handleVerify = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!user || !functions) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Usuário não autenticado ou funções indisponíveis.",
+      });
+      return;
+    }
     setIsLoading(true);
 
-    if (!mfaResolver || !user) {
-        toast({ variant: "destructive", title: "Erro de Sessão", description: "O fluxo de verificação expirou. Por favor, faça login novamente." });
-        router.push("/login");
-        setIsLoading(false);
-        return;
-    }
-
     try {
-        // Create the multi-factor assertion.
-        // Using `as any` to bypass a potential issue with outdated or incorrect type definitions
-        // where the `.assertion()` static method is not found on `TotpMultiFactorGenerator`.
-        const credential = (TotpMultiFactorGenerator as any).assertion(token);
+      const verifyToken = httpsCallable(functions, "verifyTokenAction");
+      const result = await retryFirebaseFunction(() => verifyToken({ token }));
 
-        // Complete the sign-in process.
-        await mfaResolver.resolveSignIn(credential);
+      const isValid = result.data as boolean;
 
-        // On successful sign-in, onAuthStateChanged in client-providers will handle the rest.
-        // But we can give immediate feedback and set state.
+      if (isValid) {
         toast({
-            title: "Verificação bem-sucedida!",
-            description: "Você será redirecionado em instantes.",
+          title: "Verificação bem-sucedida!",
+          description: "Você será redirecionado em instantes.",
         });
-
+        
         safeLocalStorage.setItem(`2fa-verified-${user.uid}`, "true");
         setIs2FAVerified(true);
-        setIsFullyAuthenticated(true);
-
-        // Cleanup resolver
-        setMfaResolver(null);
-
-        // The central router in client-providers will handle the redirect to /simulator
-        // but we can also push it here to make it faster.
-        router.push('/simulator');
-
-    } catch (error: any) {
-      console.error("2FA verification error:", error);
-      
-      let errorMessage = "O código inserido é inválido ou expirou. Tente novamente.";
-      if (error.code === 'auth/invalid-verification-code') {
-        errorMessage = "Código de verificação inválido. Por favor, verifique e tente novamente.";
-      } else if (error.code === 'auth/session-expired') {
-        errorMessage = "A sessão de verificação expirou. Por favor, faça o login novamente.";
-        // Force user back to login if session is lost
-        setTimeout(() => router.push("/login"), 2000);
+        setRetryCount(0);
+        
+        setTimeout(() => {
+          router.push('/simulator');
+        }, 1000);
+      } else {
+        throw new Error("Código inválido. Tente novamente.");
       }
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("2FA verification error:", err);
+      
+      let errorMessage = err.message || "Não foi possível verificar o código.";
+      let errorTitle = "Erro na Verificação";
 
       toast({
         variant: "destructive",
-        title: "Erro na Verificação",
+        title: errorTitle,
         description: errorMessage,
       });
     } finally {
@@ -102,13 +88,15 @@ function Verify2FAPageContent() {
 
   const handleBackToLogin = async () => {
     if (!auth) {
-        toast({ variant: "destructive", title: "Erro", description: "Serviço de autenticação não disponível." });
+        toast({
+            variant: "destructive",
+            title: "Erro",
+            description: "Serviço de autenticação não disponível.",
+        });
         return;
     }
     try {
       await signOut(auth);
-      setMfaResolver(null); // Clean up resolver onexplicit logout
-      // onAuthStateChanged in providers will handle the redirect.
     } catch {
       toast({
         variant: "destructive",
@@ -118,7 +106,31 @@ function Verify2FAPageContent() {
     }
   };
 
-  if (authLoading || !mfaResolver) {
+  const renderAppCheckWarning = () => {
+    if (!isAppCheckAvailable && appCheckError) {
+      return (
+        <Card className="w-full max-w-md mb-6 border-amber-200 bg-amber-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start space-x-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="text-sm">
+                <h4 className="font-semibold text-amber-800">Aviso de Segurança</h4>
+                <p className="text-amber-700 mt-1">
+                  {appCheckError.includes('production') 
+                    ? "A verificação de segurança não está configurada. Algumas funcionalidades podem estar limitadas."
+                    : "Modo de desenvolvimento detectado. Usando configurações de teste."
+                  }
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+    return null;
+  };
+
+  if (authLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -129,6 +141,8 @@ function Verify2FAPageContent() {
 
   return (
     <div className="flex flex-col items-center justify-center p-4">
+      {renderAppCheckWarning()}
+      
       <div className="w-full max-w-md text-center mb-8">
         <h1 className="text-4xl font-bold text-foreground">Verificação de Segurança</h1>
         <p className="text-muted-foreground mt-2">
@@ -156,6 +170,14 @@ function Verify2FAPageContent() {
                     placeholder="_ _ _ _ _ _"
                   />
                 </div>
+            </div>
+             <div className="text-center text-sm">
+                <p className="text-muted-foreground">Problemas com o código? Fale com o suporte.</p>
+                {retryCount > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Tentativas realizadas: {retryCount}
+                  </p>
+                )}
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">

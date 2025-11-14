@@ -10,11 +10,6 @@ import pdf from 'pdf-parse';
 import { PropertyCache, UserCache, withCache } from './cache';
 import { HttpsError } from 'firebase-functions/v2/https';
 
-const adminEmails = [
-    'santiago.physics@gmail.com',
-    'test@test.com' 
-];
-
 const processPdf = async (pdfBuffer: Buffer): Promise<ExtractPricingOutput> => {
   const pdfData = await pdf(pdfBuffer);
   const pdfText = pdfData.text;
