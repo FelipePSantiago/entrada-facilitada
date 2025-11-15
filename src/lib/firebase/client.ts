@@ -25,7 +25,7 @@ if (typeof window !== 'undefined' && !getApps().length) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
-    functions = getFunctions(app, 'southamerica-east1');
+    functions = getFunctions(app, 'us-central1');
 
     // Initialize App Check
     try {

@@ -23,7 +23,7 @@ import { retryFirebaseFunction } from '@/lib/retry-logic';
 function Verify2FAPageContent() {
   const router = useRouter();
   const { toast } = useToast();
-  const { authLoading, functions, setIs2FAVerified, user, auth } = useAuth(); // <<< auth OBTIDO AQUI
+  const { authLoading, functions, setIs2FAVerified, setIsFullyAuthenticated, user, auth } = useAuth();
   const { isAppCheckAvailable, appCheckError } = useAppCheck();
   
   const [token, setToken] = useState("");
@@ -122,13 +122,19 @@ function Verify2FAPageContent() {
           description: "Você será redirecionado em instantes.",
         });
         
+        // 🔒 MELHORIA: Garantir que o estado seja atualizado imediatamente
         safeLocalStorage.setItem(`2fa-verified-${user.uid}`, "true");
+        safeLocalStorage.setItem(`2fa-timestamp-${user.uid}`, Date.now().toString());
         setIs2FAVerified(true);
         setRetryCount(0);
         
+        // 🔒 MELHORIA: Forçar atualização do estado de autenticação completa
         setTimeout(() => {
-          router.push('/simulator');
-        }, 1500);
+          setIsFullyAuthenticated(true);
+          setTimeout(() => {
+            router.push('/simulator');
+          }, 500);
+        }, 500);
       } else {
         if (response.needsSetup) {
           toast({

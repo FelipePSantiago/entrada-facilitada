@@ -15,17 +15,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useAuth } from "@/components/client-providers";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { auth } from "../../lib/firebase/clientApp";
 import { signOut } from "firebase/auth";
 
 export default function Header() {
-  const { isAdmin, isFullyAuthenticated, user, auth } = useAuth(); // <<< auth OBTIDO AQUI
+  const { isAdmin, isFullyAuthenticated, user } = useAuth();
   const pathname = usePathname();
   const { toast } = useToast();
 
   const handleLogout = async () => {
-    if (!auth) return; // Guard clause
     try {
       await signOut(auth);
       toast({

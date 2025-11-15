@@ -119,3 +119,51 @@ export const centsToBrl = (cents: number | null | undefined): string => {
   const reais = cents / 100;
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(reais);
 };
+
+/**
+ * Retry wrapper for Firebase functions with exponential backoff
+ * @param fn The Firebase callable function to retry
+ * @param data The data to pass to the function
+ * @param maxRetries Maximum number of retries (default: 3)
+ * @returns Promise with the function result
+ */
+export const retryFirebaseFunction = async <T = unknown>(
+  fn: (data?: unknown) => Promise<{ data: T }>,
+  data?: unknown,
+  maxRetries: number = 3
+): Promise<{ data: T }> => {
+  let lastError: unknown;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await fn(data);
+      return result;
+    } catch (error: unknown) {
+      lastError = error;
+      
+      // Don't retry on authentication errors or invalid arguments
+      if (
+        error && typeof error === 'object' && 'code' in error &&
+        (
+          error.code === 'unauthenticated' ||
+          error.code === 'permission-denied' ||
+          error.code === 'invalid-argument' ||
+          error.code === 'not-found'
+        )
+      ) {
+        throw error;
+      }
+      
+      // If this is the last attempt, throw the error
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      // Exponential backoff: wait 1s, 2s, 4s...
+      const delay = Math.pow(2, attempt) * 1000;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError;
+};

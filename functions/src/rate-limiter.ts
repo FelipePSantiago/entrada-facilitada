@@ -181,7 +181,7 @@ interface RateLimitEntry {
     // Autenticação - 5 tentativas por minuto
     AUTH: {
       windowMs: 60 * 1000,
-      maxRequests: 5,
+      maxRequests: 20,
       message: 'Muitas tentativas de autenticação. Tente novamente em alguns instantes.',
     },
     
