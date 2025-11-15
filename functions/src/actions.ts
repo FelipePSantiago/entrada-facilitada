@@ -319,25 +319,46 @@ export const getTwoFactorSecretAction = async (uid: string): Promise<string | nu
 };
 
 export const verifyTokenAction = async (data: { uid: string, token: string }, context: any): Promise<boolean> => {
-    if (process.env.NODE_ENV !== 'development' && !context.app) {
-        throw new HttpsError('failed-precondition', 'A requisição não foi feita pelo app.');
-    }
     const { uid, token } = data;
+    console.log(`[verifyTokenAction] Iniciando verificação para UID: ${uid}, Token: ${token}`);
+    
     try {
-        if (!uid || !token) return false;
+        if (!uid || !token) {
+            console.log(`[verifyTokenAction] UID ou token ausente - UID: ${uid}, Token: ${token}`);
+            return false;
+        }
+        
         let userDoc = UserCache.getUser(uid);
         if (!userDoc) {
+            console.log(`[verifyTokenAction] Usuário não encontrado no cache, buscando no Firestore...`);
             const userDocSnapshot = await adminDb.collection("users").doc(uid).get();
-            if (!userDocSnapshot.exists) return false;
+            if (!userDocSnapshot.exists) {
+                console.log(`[verifyTokenAction] Documento do usuário não existe no Firestore`);
+                return false;
+            }
             userDoc = userDocSnapshot.data() as AppUser;
             UserCache.setUser(uid, userDoc);
+            console.log(`[verifyTokenAction] Usuário carregado do Firestore`);
         }
 
-        if (!userDoc.twoFactorEnabled || !userDoc.twoFactorURI) return false;
+        console.log(`[verifyTokenAction] Verificando configuração 2FA - twoFactorEnabled: ${userDoc.twoFactorEnabled}, twoFactorURI: ${!!userDoc.twoFactorURI}`);
+        
+        if (!userDoc.twoFactorEnabled || !userDoc.twoFactorURI) {
+            console.log(`[verifyTokenAction] 2FA não configurado para o usuário`);
+            return false;
+        }
+        
         const secret = new URL(userDoc.twoFactorURI).searchParams.get('secret');
-        if (!secret) return false;
+        if (!secret) {
+            console.log(`[verifyTokenAction] Secret não encontrado na URI do 2FA`);
+            return false;
+        }
 
-        return verifyTotp(secret, token);
+        console.log(`[verifyTokenAction] Verificando token TOTP...`);
+        const result = verifyTotp(secret, token);
+        console.log(`[verifyTokenAction] Resultado da verificação: ${result}`);
+        
+        return result;
     } catch (error: unknown) {
         console.error("Error in verifyTokenAction: ", getErrorMessage(error));
         return false;

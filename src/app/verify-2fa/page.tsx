@@ -72,9 +72,26 @@ function Verify2FAPageContent() {
     } catch (error: unknown) {
       const err = error as Error;
       console.error("2FA verification error:", err);
+      console.error("Error details:", {
+        message: err.message,
+        name: err.name,
+        stack: err.stack,
+        error: error
+      });
       
       let errorMessage = err.message || "Não foi possível verificar o código.";
       let errorTitle = "Erro na Verificação";
+
+      // Try to extract more specific error information
+      if (err.message.includes('internal')) {
+        errorMessage = "Erro interno do servidor. Tente novamente em alguns instantes.";
+      } else if (err.message.includes('permission-denied')) {
+        errorMessage = "Permissão negada. Verifique suas credenciais.";
+      } else if (err.message.includes('unauthenticated')) {
+        errorMessage = "Usuário não autenticado. Faça login novamente.";
+      } else if (err.message.includes('not-found')) {
+        errorMessage = "Configuração 2FA não encontrada. Configure o 2FA primeiro.";
+      }
 
       toast({
         variant: "destructive",

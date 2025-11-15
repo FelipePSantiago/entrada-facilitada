@@ -103,7 +103,7 @@ export const getTwoFactorSecretAction = onCall({ ...publicOptions, maxInstances:
 
 export const verifyTokenAction = onCall({ ...publicOptions, maxInstances: 10 }, 
   withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins })
-  ((request: CallableRequest) => actions.verifyTokenAction({ uid: ensureAuth(request), token: request.data.token }, request))
+  ((request: CallableRequest) => actions.verifyTokenAction({ ...request.data, uid: ensureAuth(request) }, request))
 );
 
 export const handleUnitStatusChangeAction = onCall({ ...publicOptions, maxInstances: 10 }, 
