@@ -38,7 +38,7 @@ export default function RootLayout({
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta name="app-version" content="0.1.105" />
+        <meta name="app-version" content="0.1.107" />
         <meta name="theme-color" content="#0d6efd" />
         <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
         <meta httpEquiv="Pragma" content="no-cache" />

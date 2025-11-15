@@ -103,7 +103,38 @@ export const getTwoFactorSecretAction = onCall({ ...publicOptions, maxInstances:
 
 export const verifyTokenAction = onCall({ ...publicOptions, maxInstances: 10 }, 
   withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins })
-  ((request: CallableRequest) => actions.verifyTokenAction({ ...request.data, uid: ensureAuth(request) }, request))
+  ((request: CallableRequest) => actions.verifyTokenActionWithValidity({ ...request.data, uid: ensureAuth(request) }, request))
+);
+
+export const verifyOrSetupTwoFactorAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins })
+  ((request: CallableRequest) => actions.verifyOrSetupTwoFactorAction({ ...request.data, uid: ensureAuth(request) }, request))
+);
+
+// 🆕 NOVOS ENDPOINTS DE ADMINISTRAÇÃO DE USUÁRIOS
+export const createUserAction = onCall({ ...publicOptions, maxInstances: 5 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => actions.createUserAction({ ...request.data }, request))
+);
+
+export const listUsersAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => actions.listUsersAction({ ...request.data }, request))
+);
+
+export const updateUserTwoFactorAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => actions.updateUserTwoFactorAction({ ...request.data, uid: ensureAuth(request) }, request))
+);
+
+export const deleteUserAction = onCall({ ...publicOptions, maxInstances: 5 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => actions.deleteUserAction({ ...request.data, uid: ensureAuth(request) }, request))
+);
+
+export const resetUserPasswordAction = onCall({ ...publicOptions, maxInstances: 5 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => actions.resetUserPasswordAction({ ...request.data, uid: ensureAuth(request) }, request))
 );
 
 export const handleUnitStatusChangeAction = onCall({ ...publicOptions, maxInstances: 10 }, 
@@ -896,3 +927,25 @@ withSecurity({
         }
     }
 }));
+
+// 🆕 NOVOS ENDPOINTS DE GERENCIAMENTO DE VALIDADE DE CONTAS
+export const toggleUserAccountAction = onCall({ ...publicOptions, maxInstances: 5 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => actions.toggleUserAccountAction({ ...request.data }, request))
+);
+
+export const updateUserValidityAction = onCall({ ...publicOptions, maxInstances: 5 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => actions.updateUserValidityAction({ ...request.data }, request))
+);
+
+export const deactivateExpiredAccountsAction = onCall({ ...publicOptions, maxInstances: 3 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => actions.deactivateExpiredAccountsAction({}, request))
+);
+
+// Substituir a função verifyTokenAction original pela versão com validade
+export const verifyTokenActionWithValidity = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins })
+  ((request: CallableRequest) => actions.verifyTokenActionWithValidity({ ...request.data, uid: ensureAuth(request) }, request))
+);

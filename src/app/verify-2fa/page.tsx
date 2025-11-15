@@ -2,9 +2,10 @@
 
 import { signOut } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
-import { ArrowLeft, KeyRound, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, KeyRound, Loader2, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -28,12 +29,62 @@ function Verify2FAPageContent() {
   const [token, setToken] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [needsSetup, setNeedsSetup] = useState(false);
+  const [setupSecret, setSetupSecret] = useState<string | null>(null);
+  const [qrCode, setQrCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace('/login');
     }
   }, [authLoading, user, router]);
+
+  // 🔒 NOVA LÓGICA: Verificar status do 2FA e gerar QR code se necessário
+  useEffect(() => {
+    if (!authLoading && user && functions) {
+      const checkTwoFactorStatus = async () => {
+        try {
+          const getTwoFactorSecret = httpsCallable(functions, "getTwoFactorSecretAction");
+          const result = await retryFirebaseFunction(() => getTwoFactorSecret(), "getTwoFactorSecretAction");
+          
+          const secretUri = result.data as string;
+          
+          if (!secretUri) {
+            // Usuário não tem 2FA configurado, gerar novo segredo
+            console.log("Usuário sem 2FA configurado, gerando segredo...");
+            const generateTwoFactorSecret = httpsCallable(functions, "generateTwoFactorSecretAction");
+            const generateResult = await retryFirebaseFunction(() => generateTwoFactorSecret(), "generateTwoFactorSecretAction");
+            
+            const newSecretUri = generateResult.data as string;
+            if (newSecretUri) {
+              // Extrair o secret da URI para usar na verificação
+              const url = new URL(newSecretUri);
+              const secret = url.searchParams.get('secret');
+              
+              if (secret) {
+                setSetupSecret(secret);
+                setQrCode(await QRCode.toDataURL(newSecretUri));
+                setNeedsSetup(true);
+              }
+            }
+          } else {
+            // Usuário já tem 2FA configurado
+            console.log("Usuário já tem 2FA configurado");
+            setNeedsSetup(false);
+          }
+        } catch (error) {
+          console.error("Erro ao verificar status do 2FA:", error);
+          toast({
+            variant: "destructive",
+            title: "Erro",
+            description: "Não foi possível verificar o status da autenticação 2FA.",
+          });
+        }
+      };
+
+      checkTwoFactorStatus();
+    }
+  }, [authLoading, user, functions, toast]);
 
   const handleVerify = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -48,14 +99,26 @@ function Verify2FAPageContent() {
     setIsLoading(true);
 
     try {
-      const verifyToken = httpsCallable(functions, "verifyTokenAction");
-      const result = await retryFirebaseFunction(() => verifyToken({ token }));
+      // 🔒 NOVA LÓGICA: Usar função universal de verificação
+      const verifyOrSetupTwoFactor = httpsCallable(functions, "verifyOrSetupTwoFactorAction");
+      const result = await retryFirebaseFunction(() => 
+        verifyOrSetupTwoFactor({ 
+          token,
+          setupSecret: needsSetup ? setupSecret : undefined 
+        }), 
+        "verifyOrSetupTwoFactorAction"
+      );
 
-      const isValid = result.data as boolean;
+      const response = result.data as { success: boolean, needsSetup: boolean, message?: string };
 
-      if (isValid) {
+      if (response.success) {
+        let successMessage = "Verificação bem-sucedida!";
+        if (response.message?.includes("configurado com sucesso")) {
+          successMessage = "Autenticação 2FA configurada e verificada com sucesso!";
+        }
+        
         toast({
-          title: "Verificação bem-sucedida!",
+          title: successMessage,
           description: "Você será redirecionado em instantes.",
         });
         
@@ -65,9 +128,17 @@ function Verify2FAPageContent() {
         
         setTimeout(() => {
           router.push('/simulator');
-        }, 1000);
+        }, 1500);
       } else {
-        throw new Error("Código inválido. Tente novamente.");
+        if (response.needsSetup) {
+          toast({
+            variant: "destructive",
+            title: "Configuração Necessária",
+            description: response.message || "É necessário configurar a autenticação 2FA.",
+          });
+        } else {
+          throw new Error(response.message || "Código inválido. Tente novamente.");
+        }
       }
     } catch (error: unknown) {
       const err = error as Error;
@@ -161,17 +232,41 @@ function Verify2FAPageContent() {
       {renderAppCheckWarning()}
       
       <div className="w-full max-w-md text-center mb-8">
-        <h1 className="text-4xl font-bold text-foreground">Verificação de Segurança</h1>
+        <h1 className="text-4xl font-bold text-foreground">
+          {needsSetup ? "Configure a Verificação em Duas Etapas" : "Verificação de Segurança"}
+        </h1>
         <p className="text-muted-foreground mt-2">
-          Digite o código do seu aplicativo de autenticação para continuar.
+          {needsSetup 
+            ? "Proteja sua conta com uma camada extra de segurança. Escaneie o QR Code e digite o código."
+            : "Digite o código do seu aplicativo de autenticação para continuar."
+          }
         </p>
       </div>
       
       <Card className="w-full max-w-md shadow-lg">
         <form onSubmit={handleVerify}>
           <CardContent className="grid gap-6 pt-6">
+            {needsSetup && qrCode && (
+              <div className="flex flex-col items-center gap-4">
+                <div className="text-center">
+                  <ShieldCheck className="mx-auto h-12 w-12 text-primary mb-2" />
+                  <h3 className="font-semibold">Escaneie este QR Code</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Use seu aplicativo autenticador (Google Authenticator, Authy, etc.)
+                  </p>
+                </div>
+                <img 
+                  src={qrCode} 
+                  alt="QR Code para 2FA" 
+                  className="w-48 h-48 rounded-lg border-2 p-2 border-background shadow-md"
+                />
+              </div>
+            )}
+            
             <div className="grid gap-2 text-left">
-               <Label htmlFor="token">Código de 6 dígitos</Label>
+               <Label htmlFor="token">
+                {needsSetup ? "Código de 6 dígitos do aplicativo" : "Código de 6 dígitos"}
+               </Label>
                 <div className="relative">
                   <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                   <Input
@@ -189,7 +284,12 @@ function Verify2FAPageContent() {
                 </div>
             </div>
              <div className="text-center text-sm">
-                <p className="text-muted-foreground">Problemas com o código? Fale com o suporte.</p>
+                <p className="text-muted-foreground">
+                  {needsSetup 
+                    ? "Após escanear o QR Code, digite o código gerado."
+                    : "Problemas com o código? Fale com o suporte."
+                  }
+                </p>
                 {retryCount > 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
                     Tentativas realizadas: {retryCount}
@@ -205,7 +305,7 @@ function Verify2FAPageContent() {
               size="lg"
             >
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Verificar
+              {needsSetup ? "Configurar e Verificar" : "Verificar"}
             </Button>
             <Button 
               variant="outline" 

@@ -115,7 +115,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
                 const userDocRef = doc(db, "users", newUser.uid);
                 getDoc(userDocRef).then((userDoc: DocumentSnapshot) => {
-                    if (userDoc.exists() && userDoc.data().is2FAEnabled === true || userDoc.data()?.twoFactorEnabled === true) {
+                    // 🔒 CORREÇÃO: Usar APENAS o campo correto 'twoFactorEnabled' do Firebase
+                    const hasTwoFactorEnabled = userDoc.exists() && 
+                        userDoc.data()?.twoFactorEnabled === true;
+                    
+                    if (hasTwoFactorEnabled) {
                         setHas2FA(true);
                         const isVerified = safeLocalStorage.getItem(`2fa-verified-${newUser.uid}`) === 'true';
                         if (isVerified) {
@@ -126,12 +130,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
                         }
                     } else {
                         setHas2FA(false);
-                        setIsFullyAuthenticated(true);
+                        // 🔒 CORREÇÃO CRÍTICA: Usuários sem 2FA TAMBÉM precisam de verificação
+                        setIsFullyAuthenticated(false);
                     }
                 }).catch((error: FirestoreError) => {
                     console.error("Erro ao buscar documento do usuário:", error);
                     setHas2FA(false);
-                    setIsFullyAuthenticated(true);
+                    // 🔒 CORREÇÃO CRÍTICA: Em caso de erro, não permitir acesso total
+                    setIsFullyAuthenticated(false);
                 });
 
                 newUser.getIdTokenResult().then(idTokenResult => {
@@ -154,10 +160,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
             const is2FAVerificationPage = pathname === '/verify-2fa';
 
             if (user) {
-                if (has2FA && !is2FAVerified && !is2FAVerificationPage) {
-                    router.push('/verify-2fa');
+                // 🔒 CORREÇÃO CRÍTICA: TODOS os usuários precisam de verificação 2FA
+                if (!isFullyAuthenticated && !is2FAVerificationPage) {
+                    if (has2FA) {
+                        // Usuário com 2FA configurado → verificar 2FA
+                        router.push('/verify-2fa');
+                    } else {
+                        // Usuário sem 2FA configurado → configurar 2FA primeiro
+                        router.push('/verify-2fa');
+                    }
                 } else if (isAuthPage) {
-                    router.push('/simulator');
+                    // Se já está autenticado e em página de login, redirecionar
+                    if (isFullyAuthenticated) {
+                        router.push('/simulator');
+                    }
+                    // Se não está totalmente autenticado, a lógica acima vai redirecionar
                 } else {
                     setIsPageLoading(false);
                 }
@@ -169,7 +186,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 }
             }
         }
-    }, [user, authLoading, is2FAVerified, has2FA, pathname, router]);
+    }, [user, authLoading, isFullyAuthenticated, is2FAVerified, has2FA, pathname, router]);
 
     // Properties loading logic now uses the imported `db` instance
     useEffect(() => {

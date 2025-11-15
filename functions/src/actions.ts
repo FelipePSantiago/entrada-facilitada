@@ -365,6 +365,346 @@ export const verifyTokenAction = async (data: { uid: string, token: string }, co
     }
 };
 
+// 🔒 NOVA FUNÇÃO: Verificação universal 2FA para todos os usuários
+export const verifyOrSetupTwoFactorAction = async (data: { uid: string, token: string, setupSecret?: string }, context: any): Promise<{ success: boolean, needsSetup: boolean, message?: string }> => {
+    const { uid, token, setupSecret } = data;
+    console.log(`[verifyOrSetupTwoFactorAction] Iniciando verificação universal para UID: ${uid}, Token: ${token}, SetupSecret: ${!!setupSecret}`);
+    
+    try {
+        if (!uid || !token) {
+            console.log(`[verifyOrSetupTwoFactorAction] UID ou token ausente - UID: ${uid}, Token: ${token}`);
+            return { success: false, needsSetup: false, message: "UID ou token ausente" };
+        }
+        
+        let userDoc = UserCache.getUser(uid);
+        if (!userDoc) {
+            console.log(`[verifyOrSetupTwoFactorAction] Usuário não encontrado no cache, buscando no Firestore...`);
+            const userDocSnapshot = await adminDb.collection("users").doc(uid).get();
+            if (!userDocSnapshot.exists) {
+                console.log(`[verifyOrSetupTwoFactorAction] Documento do usuário não existe no Firestore`);
+                return { success: false, needsSetup: true, message: "Usuário não encontrado" };
+            }
+            userDoc = userDocSnapshot.data() as AppUser;
+            UserCache.setUser(uid, userDoc);
+            console.log(`[verifyOrSetupTwoFactorAction] Usuário carregado do Firestore`);
+        }
+
+        console.log(`[verifyOrSetupTwoFactorAction] Verificando configuração 2FA - twoFactorEnabled: ${userDoc.twoFactorEnabled}, twoFactorURI: ${!!userDoc.twoFactorURI}`);
+        
+        // Caso 1: Usuário já tem 2FA configurado
+        if (userDoc.twoFactorEnabled && userDoc.twoFactorURI) {
+            const secret = new URL(userDoc.twoFactorURI).searchParams.get('secret');
+            if (!secret) {
+                console.log(`[verifyOrSetupTwoFactorAction] Secret não encontrado na URI do 2FA`);
+                return { success: false, needsSetup: true, message: "Configuração 2FA corrompida" };
+            }
+
+            console.log(`[verifyOrSetupTwoFactorAction] Verificando token TOTP existente...`);
+            const result = verifyTotp(secret, token);
+            console.log(`[verifyOrSetupTwoFactorAction] Resultado da verificação existente: ${result}`);
+            
+            return { success: result, needsSetup: false };
+        }
+        
+        // Caso 2: Usuário não tem 2FA configurado, mas está em processo de setup
+        if (setupSecret) {
+            console.log(`[verifyOrSetupTwoFactorAction] Verificando token TOTP de setup...`);
+            const result = verifyTotp(setupSecret, token);
+            console.log(`[verifyOrSetupTwoFactorAction] Resultado da verificação de setup: ${result}`);
+            
+            if (result) {
+                // Automaticamente configurar 2FA para o usuário
+                const userRecord = await adminAuth.getUser(uid);
+                if (!userRecord.email) {
+                    return { success: false, needsSetup: true, message: "E-mail do usuário não encontrado" };
+                }
+                
+                const secretUri = authenticator.keyuri(userRecord.email, "Entrada Facilitada", setupSecret);
+                await adminDb.collection("users").doc(uid).set({ 
+                    twoFactorURI: secretUri, 
+                    twoFactorEnabled: true 
+                }, { merge: true });
+                
+                UserCache.invalidateUser(uid);
+                console.log(`[verifyOrSetupTwoFactorAction] 2FA configurado automaticamente com sucesso`);
+                
+                return { success: true, needsSetup: false, message: "2FA configurado com sucesso" };
+            }
+            
+            return { success: false, needsSetup: true, message: "Código inválido" };
+        }
+        
+        // Caso 3: Usuário não tem 2FA configurado e não está em setup
+        console.log(`[verifyOrSetupTwoFactorAction] Usuário precisa configurar 2FA`);
+        return { success: false, needsSetup: true, message: "É necessário configurar a verificação em duas etapas" };
+        
+    } catch (error: unknown) {
+        console.error("Error in verifyOrSetupTwoFactorAction: ", getErrorMessage(error));
+        return { success: false, needsSetup: true, message: "Erro interno do servidor" };
+    }
+};
+
+// 🆕 NOVAS FUNÇÕES DE ADMINISTRAÇÃO DE USUÁRIOS
+export const createUserAction = async (data: { email: string, password: string, isAdmin?: boolean, validityMonths?: number }, context: any): Promise<{ success: boolean, message: string, uid?: string }> => {
+    const { email, password, isAdmin = false, validityMonths } = data;
+    console.log(`[createUserAction] Criando usuário: ${email}, isAdmin: ${isAdmin}, validityMonths: ${validityMonths}`);
+    
+    try {
+        // Verificar se o solicitante é admin
+        const requesterDoc = await adminDb.collection("users").doc(context.auth.uid).get();
+        if (!requesterDoc.exists) {
+            throw new HttpsError('permission-denied', 'Solicitante não encontrado');
+        }
+        
+        const requesterData = requesterDoc.data() as AppUser;
+        if (!requesterData.isAdmin) {
+            throw new HttpsError('permission-denied', 'Apenas administradores podem criar usuários');
+        }
+        
+        // Criar usuário no Firebase Auth
+        const userRecord = await adminAuth.createUser({
+            email: email,
+            password: password,
+            emailVerified: false
+        });
+        
+        // Calcular data de validade
+        let validUntil = null;
+        if (validityMonths && validityMonths > 0) {
+            const now = new Date();
+            validUntil = new Date(
+                now.getFullYear(),
+                now.getMonth() + validityMonths,
+                now.getDate()
+            );
+        }
+        
+        // Criar documento no Firestore
+        const userData: AppUser = {
+            uid: userRecord.uid,
+            email: email,
+            emailLower: email.toLowerCase(),
+            isAdmin: isAdmin || false,
+            twoFactorEnabled: false,
+            twoFactorURI: null,
+            twoFactorResetToken: null,
+            twoFactorResetExpires: null,
+            isActive: true,
+            validUntil: validUntil ? adminDb.firestore.Timestamp.fromDate(validUntil) : null,
+            validityMonths: validityMonths || null,
+        };
+        
+        await adminDb.collection("users").doc(userRecord.uid).set(userData);
+        UserCache.setUser(userRecord.uid, userData);
+        
+        // Registrar log administrativo
+        await adminDb.collection('adminLogs').add({
+            adminUid: context.auth.uid,
+            action: "CREATE_USER",
+            targetUserId: userRecord.uid,
+            details: {
+                email: email,
+                isAdmin: isAdmin || false,
+                validityMonths: validityMonths,
+                validUntil: validUntil?.toISOString(),
+            },
+            timestamp: FieldValue.serverTimestamp(),
+        });
+        
+        console.log(`[createUserAction] Usuário criado com sucesso: ${userRecord.uid}`);
+        
+        return {
+            success: true,
+            message: "Usuário criado com sucesso",
+            uid: userRecord.uid
+        };
+        
+    } catch (error: unknown) {
+        console.error("Error in createUserAction: ", getErrorMessage(error));
+        
+        if (error instanceof Error && error.message.includes('email-already-exists')) {
+            return { success: false, message: "E-mail já está em uso" };
+        }
+        
+        return { success: false, message: `Erro ao criar usuário: ${getErrorMessage(error)}` };
+    }
+};
+
+export const listUsersAction = async (data: { page?: number, limit?: number }, context: any): Promise<{ success: boolean, users: AppUser[], total: number, message: string }> => {
+    try {
+        // Verificar se o solicitante é admin
+        const requesterDoc = await adminDb.collection("users").doc(context.auth.uid).get();
+        if (!requesterDoc.exists) {
+            throw new HttpsError('permission-denied', 'Solicitante não encontrado');
+        }
+        
+        const requesterData = requesterDoc.data() as AppUser;
+        if (!requesterData.isAdmin) {
+            throw new HttpsError('permission-denied', 'Apenas administradores podem listar usuários');
+        }
+        
+        const page = data.page || 1;
+        const limit = data.limit || 20;
+        const offset = (page - 1) * limit;
+        
+        // Buscar usuários
+        const usersSnapshot = await adminDb.collection("users")
+            .orderBy('email')
+            .offset(offset)
+            .limit(limit)
+            .get();
+        
+        const users = usersSnapshot.docs.map(doc => {
+            const userData = doc.data() as AppUser;
+            return {
+                ...userData,
+                uid: doc.id,
+                validUntil: userData.validUntil ? userData.validUntil.toDate().toISOString() : null,
+                createdAt: userData.createdAt ? userData.createdAt.toDate().toISOString() : null,
+                deactivatedAt: userData.deactivatedAt ? userData.deactivatedAt.toDate().toISOString() : null,
+            } as AppUser;
+        });
+        
+        // Buscar total
+        const totalSnapshot = await adminDb.collection("users").get();
+        const total = totalSnapshot.size;
+        
+        console.log(`[listUsersAction] Listados ${users.length} usuários, total: ${total}`);
+        
+        return {
+            success: true,
+            users: users,
+            total: total,
+            message: "Usuários listados com sucesso"
+        };
+        
+    } catch (error: unknown) {
+        console.error("Error in listUsersAction: ", getErrorMessage(error));
+        return { success: false, users: [], total: 0, message: `Erro ao listar usuários: ${getErrorMessage(error)}` };
+    }
+};
+
+export const updateUserTwoFactorAction = async (data: { uid: string, twoFactorEnabled: boolean }, context: any): Promise<{ success: boolean, message: string }> => {
+    const { uid, twoFactorEnabled } = data;
+    console.log(`[updateUserTwoFactorAction] Atualizando 2FA do usuário ${uid}: ${twoFactorEnabled}`);
+    
+    try {
+        // Verificar se o solicitante é admin
+        const requesterDoc = await adminDb.collection("users").doc(context.auth.uid).get();
+        if (!requesterDoc.exists) {
+            throw new HttpsError('permission-denied', 'Solicitante não encontrado');
+        }
+        
+        const requesterData = requesterDoc.data() as AppUser;
+        if (!requesterData.isAdmin) {
+            throw new HttpsError('permission-denied', 'Apenas administradores podem alterar 2FA de usuários');
+        }
+        
+        // Atualizar apenas o campo twoFactorEnabled
+        await adminDb.collection("users").doc(uid).update({
+            twoFactorEnabled: twoFactorEnabled
+        });
+        
+        // Se desativando 2FA, limpar campos relacionados
+        if (!twoFactorEnabled) {
+            await adminDb.collection("users").doc(uid).update({
+                twoFactorURI: null,
+                twoFactorResetToken: null,
+                twoFactorResetExpires: null
+            });
+        }
+        
+        UserCache.invalidateUser(uid);
+        
+        console.log(`[updateUserTwoFactorAction] 2FA atualizado com sucesso`);
+        
+        return {
+            success: true,
+            message: `2FA ${twoFactorEnabled ? 'ativado' : 'desativado'} com sucesso`
+        };
+        
+    } catch (error: unknown) {
+        console.error("Error in updateUserTwoFactorAction: ", getErrorMessage(error));
+        return { success: false, message: `Erro ao atualizar 2FA: ${getErrorMessage(error)}` };
+    }
+};
+
+export const deleteUserAction = async (data: { uid: string }, context: any): Promise<{ success: boolean, message: string }> => {
+    const { uid } = data;
+    console.log(`[deleteUserAction] Excluindo usuário: ${uid}`);
+    
+    try {
+        // Verificar se o solicitante é admin
+        const requesterDoc = await adminDb.collection("users").doc(context.auth.uid).get();
+        if (!requesterDoc.exists) {
+            throw new HttpsError('permission-denied', 'Solicitante não encontrado');
+        }
+        
+        const requesterData = requesterDoc.data() as AppUser;
+        if (!requesterData.isAdmin) {
+            throw new HttpsError('permission-denied', 'Apenas administradores podem excluir usuários');
+        }
+        
+        // Não permitir excluir a si mesmo
+        if (context.auth.uid === uid) {
+            return { success: false, message: "Não é possível excluir seu próprio usuário" };
+        }
+        
+        // Excluir usuário do Firebase Auth
+        await adminAuth.deleteUser(uid);
+        
+        // Excluir documento do Firestore
+        await adminDb.collection("users").doc(uid).delete();
+        
+        UserCache.invalidateUser(uid);
+        
+        console.log(`[deleteUserAction] Usuário excluído com sucesso`);
+        
+        return {
+            success: true,
+            message: "Usuário excluído com sucesso"
+        };
+        
+    } catch (error: unknown) {
+        console.error("Error in deleteUserAction: ", getErrorMessage(error));
+        return { success: false, message: `Erro ao excluir usuário: ${getErrorMessage(error)}` };
+    }
+};
+
+export const resetUserPasswordAction = async (data: { uid: string, newPassword: string }, context: any): Promise<{ success: boolean, message: string }> => {
+    const { uid, newPassword } = data;
+    console.log(`[resetUserPasswordAction] Redefinindo senha do usuário: ${uid}`);
+    
+    try {
+        // Verificar se o solicitante é admin
+        const requesterDoc = await adminDb.collection("users").doc(context.auth.uid).get();
+        if (!requesterDoc.exists) {
+            throw new HttpsError('permission-denied', 'Solicitante não encontrado');
+        }
+        
+        const requesterData = requesterDoc.data() as AppUser;
+        if (!requesterData.isAdmin) {
+            throw new HttpsError('permission-denied', 'Apenas administradores podem redefinir senhas');
+        }
+        
+        // Atualizar senha no Firebase Auth
+        await adminAuth.updateUser(uid, {
+            password: newPassword
+        });
+        
+        console.log(`[resetUserPasswordAction] Senha redefinida com sucesso`);
+        
+        return {
+            success: true,
+            message: "Senha redefinida com sucesso"
+        };
+        
+    } catch (error: unknown) {
+        console.error("Error in resetUserPasswordAction: ", getErrorMessage(error));
+        return { success: false, message: `Erro ao redefinir senha: ${getErrorMessage(error)}` };
+    }
+};
+
 export const handleUnitStatusChangeAction = async (data: { propertyId: string, unitId: string, newStatus: UnitStatus, idToken: string }): Promise<void> => {
     const { propertyId, unitId, newStatus, idToken } = data;
     await verifyAdmin(idToken);
@@ -448,5 +788,334 @@ export const updatePropertyAvailabilityAction = async (data: { propertyId: strin
         return { unitsUpdatedCount };
     } catch (error: unknown) {
         throw new HttpsError('internal', `Não foi possível atualizar a disponibilidade: ${getErrorMessage(error)}`);
+    }
+};
+
+// 🔒 FUNÇÕES DE GERENCIAMENTO DE VALIDADE DE CONTAS 🔒
+
+/**
+ * Verifica se a conta do usuário está válida
+ */
+async function isAccountValid(uid: string): Promise<boolean> {
+    try {
+        const userDoc = await adminDb.collection('users').doc(uid).get();
+        if (!userDoc.exists) {
+            return false;
+        }
+
+        const userData = userDoc.data() as AppUser;
+        
+        // Verifica se o usuário está ativo
+        if (userData.isActive === false) {
+            return false;
+        }
+
+        // Verifica se a conta não expirou
+        if (userData.validUntil) {
+            const validUntil = userData.validUntil.toDate();
+            if (validUntil < new Date()) {
+                // Desativa automaticamente a conta expirada
+                await adminDb.collection('users').doc(uid).update({
+                    isActive: false,
+                    deactivatedAt: FieldValue.serverTimestamp(),
+                    deactivationReason: "EXPIRED"
+                });
+                UserCache.invalidateUser(uid);
+                return false;
+            }
+        }
+
+        return true;
+    } catch (error) {
+        console.error("Erro ao verificar validade da conta:", error);
+        return false;
+    }
+}
+
+/**
+ * Ativa/Desativa manualmente a conta de um usuário
+ */
+export const toggleUserAccountAction = async (data: { uid: string; isActive: boolean; reason?: string }, context: any): Promise<{ success: boolean; message: string }> => {
+    const { uid, isActive, reason } = data;
+    try {
+        const adminUid = await verifyAdmin(context.auth?.token);
+        
+        // Impedir auto desativação
+        if (uid === adminUid && !isActive) {
+            throw new HttpsError('invalid-argument', 'Você não pode desativar sua própria conta.');
+        }
+
+        // Verificar se o usuário existe
+        const userDoc = await adminDb.collection('users').doc(uid).get();
+        if (!userDoc.exists) {
+            throw new HttpsError('not-found', 'Usuário não encontrado no sistema.');
+        }
+
+        const userData = userDoc.data() as AppUser;
+
+        // Impedir desativação de outros admins
+        if (userData.isAdmin && !isActive) {
+            throw new HttpsError('permission-denied', 'Não é possível desativar contas de administrador.');
+        }
+
+        // Atualizar status da conta
+        await adminDb.collection('users').doc(uid).update({
+            isActive: isActive,
+            deactivatedAt: isActive ? null : FieldValue.serverTimestamp(),
+            deactivationReason: isActive ? null : (reason || "MANUAL_ADMIN"),
+            activatedAt: isActive ? FieldValue.serverTimestamp() : null,
+        });
+
+        UserCache.invalidateUser(uid);
+
+        // Registrar log administrativo
+        await adminDb.collection('adminLogs').add({
+            adminUid,
+            action: "TOGGLE_ACCOUNT",
+            targetUserId: uid,
+            details: {
+                email: userData.email,
+                isActive: isActive,
+                reason: reason,
+            },
+            timestamp: FieldValue.serverTimestamp(),
+        });
+
+        console.log(`Conta ${isActive ? 'ativada' : 'desativada'}: ${userData.email} (${uid}) por admin ${adminUid}`);
+
+        return {
+            success: true,
+            message: `Conta ${isActive ? 'ativada' : 'desativada'} com sucesso!`,
+        };
+    } catch (error: unknown) {
+        throw new HttpsError('internal', `Erro interno ao alterar status da conta: ${getErrorMessage(error)}`);
+    }
+};
+
+/**
+ * Define ou atualiza a validade da conta de um usuário
+ */
+export const updateUserValidityAction = async (data: { 
+    uid: string; 
+    validityMonths?: number; 
+    validUntil?: Date;
+    removeValidity?: boolean;
+}, context: any): Promise<{ success: boolean; validUntil?: string; validityMonths?: number; message: string }> => {
+    const { uid, validityMonths, validUntil, removeValidity } = data;
+    try {
+        const adminUid = await verifyAdmin(context.auth?.token);
+
+        // Validar dados de entrada
+        if (!validityMonths && !validUntil && !removeValidity) {
+            throw new HttpsError('invalid-argument', 'Especifique meses de validade, data específica ou remova a validade.');
+        }
+
+        // Verificar se o usuário existe
+        const userDoc = await adminDb.collection('users').doc(uid).get();
+        if (!userDoc.exists) {
+            throw new HttpsError('not-found', 'Usuário não encontrado no sistema.');
+        }
+
+        const userData = userDoc.data() as AppUser;
+
+        // Impedir alteração de validade de outros admins
+        if (userData.isAdmin && uid !== adminUid) {
+            throw new HttpsError('permission-denied', 'Não é possível alterar a validade de contas de administrador.');
+        }
+
+        let validUntilDate: Date | null = null;
+        let months: number | null = null;
+
+        if (removeValidity) {
+            // Remover validade (conta permanente)
+            validUntilDate = null;
+            months = null;
+        } else if (validUntil) {
+            // Usar data específica
+            validUntilDate = validUntil;
+            months = null;
+        } else if (validityMonths && validityMonths > 0) {
+            // Calcular data baseada em meses
+            const now = new Date();
+            validUntilDate = new Date(
+                now.getFullYear(),
+                now.getMonth() + validityMonths,
+                now.getDate()
+            );
+            months = validityMonths;
+        }
+
+        // Atualizar validade da conta
+        await adminDb.collection('users').doc(uid).update({
+            validUntil: validUntilDate ? adminDb.firestore.Timestamp.fromDate(validUntilDate) : null,
+            validityMonths: months,
+            validityUpdatedAt: FieldValue.serverTimestamp(),
+            updatedBy: adminUid,
+        });
+
+        UserCache.invalidateUser(uid);
+
+        // Registrar log administrativo
+        await adminDb.collection('adminLogs').add({
+            adminUid,
+            action: "UPDATE_VALIDITY",
+            targetUserId: uid,
+            details: {
+                email: userData.email,
+                validityMonths: months,
+                validUntil: validUntilDate?.toISOString(),
+                removeValidity: removeValidity,
+            },
+            timestamp: FieldValue.serverTimestamp(),
+        });
+
+        console.log(`Validade atualizada para usuário ${userData.email} (${uid}) por admin ${adminUid}`);
+
+        return {
+            success: true,
+            validUntil: validUntilDate?.toISOString(),
+            validityMonths: months,
+            message: removeValidity 
+                ? "Validade removida com sucesso! Conta agora é permanente."
+                : `Validade definida até ${validUntilDate?.toLocaleDateString('pt-BR')}`,
+        };
+    } catch (error: unknown) {
+        throw new HttpsError('internal', `Erro interno ao atualizar validade da conta: ${getErrorMessage(error)}`);
+    }
+};
+
+/**
+ * Verifica e desativa contas expiradas (função de manutenção)
+ */
+export const deactivateExpiredAccountsAction = async (data: {}, context: any): Promise<{ success: boolean; deactivatedCount: number; deactivatedUsers: any[]; message: string }> => {
+    try {
+        const adminUid = await verifyAdmin(context.auth?.token);
+
+        // Buscar todos os usuários com validade definida
+        const usersSnapshot = await adminDb.collection('users')
+            .where('validUntil', '!=', null)
+            .get();
+
+        const now = new Date();
+        const expiredUsers: any[] = [];
+        const batch = adminDb.firestore.batch();
+
+        usersSnapshot.forEach((userDoc) => {
+            const userData = userDoc.data() as AppUser;
+            
+            if (userData.isActive !== false && userData.validUntil) {
+                const validUntil = userData.validUntil.toDate();
+                
+                if (validUntil < now) {
+                    // Adicionar ao batch para desativação
+                    const userRef = adminDb.collection('users').doc(userDoc.id);
+                    batch.update(userRef, {
+                        isActive: false,
+                        deactivatedAt: FieldValue.serverTimestamp(),
+                        deactivationReason: "EXPIRED",
+                    });
+
+                    expiredUsers.push({
+                        uid: userDoc.id,
+                        email: userData.email,
+                        displayName: userData.displayName,
+                        validUntil: validUntil.toISOString(),
+                    });
+
+                    UserCache.invalidateUser(userDoc.id);
+                }
+            }
+        });
+
+        // Executar batch de desativações
+        if (expiredUsers.length > 0) {
+            await batch.commit();
+        }
+
+        // Registrar log administrativo
+        await adminDb.collection('adminLogs').add({
+            adminUid,
+            action: "DEACTIVATE_EXPIRED",
+            targetUserId: "BATCH",
+            details: {
+                deactivatedCount: expiredUsers.length,
+                users: expiredUsers,
+            },
+            timestamp: FieldValue.serverTimestamp(),
+        });
+
+        console.log(`${expiredUsers.length} contas expiradas desativadas por admin ${adminUid}`);
+
+        return {
+            success: true,
+            deactivatedCount: expiredUsers.length,
+            deactivatedUsers: expiredUsers,
+            message: `${expiredUsers.length} contas expiradas foram desativadas automaticamente.`,
+        };
+    } catch (error: unknown) {
+        throw new HttpsError('internal', `Erro interno ao desativar contas expiradas: ${getErrorMessage(error)}`);
+    }
+};
+
+/**
+ * Sobrescreve a função verifyTokenAction para incluir verificação de validade da conta
+ */
+export const verifyTokenActionWithValidity = async (data: { uid: string, token: string }, context: any): Promise<boolean> => {
+    const { uid, token } = data;
+    console.log(`[verifyTokenActionWithValidity] Iniciando verificação para UID: ${uid}, Token: ${token}`);
+    
+    try {
+        if (!uid || !token) {
+            console.log(`[verifyTokenActionWithValidity] UID ou token ausente - UID: ${uid}, Token: ${token}`);
+            return false;
+        }
+
+        // Verificar se a conta está válida
+        const isValid = await isAccountValid(uid);
+        if (!isValid) {
+            console.log(`[verifyTokenActionWithValidity] Conta do usuário ${uid} está inválida ou expirada`);
+            return false;
+        }
+        
+        let userDoc = UserCache.getUser(uid);
+        if (!userDoc) {
+            console.log(`[verifyTokenActionWithValidity] Usuário não encontrado no cache, buscando no Firestore...`);
+            const userDocSnapshot = await adminDb.collection("users").doc(uid).get();
+            if (!userDocSnapshot.exists) {
+                console.log(`[verifyTokenActionWithValidity] Documento do usuário não existe no Firestore`);
+                return false;
+            }
+            userDoc = userDocSnapshot.data() as AppUser;
+            UserCache.setUser(uid, userDoc);
+            console.log(`[verifyTokenActionWithValidity] Usuário carregado do Firestore`);
+        }
+
+        console.log(`[verifyTokenActionWithValidity] Verificando configuração 2FA - twoFactorEnabled: ${userDoc.twoFactorEnabled}, twoFactorURI: ${!!userDoc.twoFactorURI}`);
+        
+        if (!userDoc.twoFactorEnabled || !userDoc.twoFactorURI) {
+            console.log(`[verifyTokenActionWithValidity] 2FA não configurado para o usuário`);
+            return false;
+        }
+        
+        const secret = new URL(userDoc.twoFactorURI).searchParams.get('secret');
+        if (!secret) {
+            console.log(`[verifyTokenActionWithValidity] Segredo não encontrado na URI do 2FA`);
+            return false;
+        }
+
+        const isValidToken = verifyTotp(secret, token);
+        console.log(`[verifyTokenActionWithValidity] Token 2FA ${isValidToken ? 'válido' : 'inválido'}`);
+        
+        if (isValidToken) {
+            await adminDb.collection("users").doc(uid).update({
+                lastTwoFactorVerification: FieldValue.serverTimestamp(),
+            });
+            UserCache.invalidateUser(uid);
+        }
+        
+        return isValidToken;
+    } catch (error: unknown) {
+        console.error(`[verifyTokenActionWithValidity] Erro durante verificação: ${getErrorMessage(error)}`);
+        return false;
     }
 };

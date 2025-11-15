@@ -13,6 +13,13 @@ export interface AppUser {
     twoFactorEnabled?: boolean; // Propriedade adicionada
     twoFactorResetToken?: string;
     twoFactorResetExpires?: FieldValue | Timestamp;
+    isActive?: boolean;
+    validUntil?: FieldValue | Timestamp;
+    validityMonths?: number;
+    deactivatedAt?: FieldValue | Timestamp;
+    deactivationReason?: string;
+    createdAt?: FieldValue | Timestamp;
+    lastLoginAt?: FieldValue | Timestamp;
 }
 
 export interface TwoFactorSecret {
