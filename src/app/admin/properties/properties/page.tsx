@@ -68,7 +68,7 @@ const AvailabilityManager = dynamic(() =>
 
 
 export default function AdminPropertiesPage() {
-  const { properties, propertiesLoading, currentUser, functions } = useAuth();
+  const { properties, propertiesLoading, user, functions } = useAuth();
   const { toast } = useToast();
 
   const [activeAccordionItem, setActiveAccordionItem] = useState<string | null>(null);
@@ -199,7 +199,7 @@ export default function AdminPropertiesPage() {
     const toReais = (value: unknown) => {
       if (value === undefined || value === null || String(value).trim() === '') return 0;        
       const stringValue = String(value);
-      const cleanedValue = stringValue.replace(/[R$\\.\\s]/g, '').replace(',', '.');
+      const cleanedValue = stringValue.replace(/[R$\.\s]/g, '').replace(',', '.');
       const numberValue = parseFloat(cleanedValue);
       return isNaN(numberValue) ? 0 : numberValue;
     };
@@ -207,7 +207,7 @@ export default function AdminPropertiesPage() {
     const toSquareMeters = (value: unknown) => {
       if (value === undefined || value === null || String(value).trim() === '') return 0;
       const stringValue = String(value);
-      const cleanedValue = stringValue.replace(/[^\\d,.]/g, '').replace(',', '.');
+      const cleanedValue = stringValue.replace(/[^\d,.]/g, '').replace(',', '.');
       const numberValue = parseFloat(cleanedValue);
       return isNaN(numberValue) ? 0 : Math.round(numberValue * 100) / 100;
     };
