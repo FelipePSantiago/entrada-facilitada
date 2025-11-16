@@ -147,7 +147,7 @@ export function ClientProviders({ children }: ProvidersProps) {
 
     const isPublicPath = PUBLIC_PATHS.includes(pathname);
     const isAuthFlowPath = AUTH_ONLY_PATHS.includes(pathname);
-    const targetPath = appUser?.isAdmin ? '/admin/properties' : '/simulator';
+    const targetPath = appUser?.isAdmin ? '/simulator' : '/simulator';
 
     if (!user) {
       if (!isPublicPath) {
