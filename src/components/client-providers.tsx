@@ -16,7 +16,7 @@ interface ProvidersProps {
 }
 
 const PUBLIC_PATHS = ['/login', '/signup', '/plans', '/pix-payment', '/forgot-password', '/', '/sumup-payment', '/sumup-payment/success', '/api/sumup/payment'];
-const AUTH_ONLY_PATHS = ['/setup-2fa', '/verify-2fa'];
+const AUTH_ONLY_PATHS = ['/verify-2fa'];
 
 function LoadingScreen() {
     return (
@@ -170,8 +170,9 @@ export function ClientProviders({ children }: ProvidersProps) {
         }
       }
     } else {
-      if (pathname !== '/setup-2fa') {
-        router.replace('/setup-2fa');
+      // Usuário não tem 2FA configurado - redirecionar para verify-2fa que gerencia o setup
+      if (pathname !== '/verify-2fa') {
+        router.replace('/verify-2fa');
         setIsPageLoading(true);
       }
     }
