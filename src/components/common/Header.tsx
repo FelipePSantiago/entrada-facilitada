@@ -15,9 +15,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useAuth } from "@/components/client-providers";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { auth } from "@/lib/firebase/client";
+import { auth } from "@/lib/firebase/clientApp";
 import { signOut } from "firebase/auth";
 
 export default function Header() {
@@ -62,7 +62,7 @@ export default function Header() {
                   variant={pathname.startsWith("/admin") ? "secondary" : "ghost"}
                   asChild
                 >
-                  <Link href="/admin/properties/properties">
+                  <Link href="/admin">
                     <LayoutDashboard className="mr-2 h-4 w-4" />
                     Admin
                   </Link>

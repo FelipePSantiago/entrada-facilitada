@@ -24,7 +24,8 @@ import {
   Clock,
   Ban,
   CheckCircle,
-  Settings
+  Settings,
+  ArrowLeft
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -38,8 +39,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/components/client-providers';
-import { retryFirebaseFunction } from '@/lib/retry-logic';
+import { useAuth } from '@/contexts/AuthContext';
+import Link from "next/link";
 
 interface User {
   uid: string;
@@ -76,6 +77,16 @@ interface AccountValidityFormData {
   validUntil?: string;
   removeValidity?: boolean;
 }
+
+// Função simples de retry para substituir a dependência faltante
+const retryFirebaseFunction = async (fn: () => Promise<any>, functionName: string) => {
+  try {
+    return await fn();
+  } catch (error) {
+    console.error(`Error in ${functionName}:`, error);
+    throw error;
+  }
+};
 
 export default function AdminUsersPage() {
   const { user: currentUser, functions } = useAuth();
@@ -493,8 +504,17 @@ export default function AdminUsersPage() {
   );
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+      <div className="mb-6">
+        <Button variant="ghost" asChild className="mb-4">
+          <Link href="/admin">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Voltar ao Painel
+          </Link>
+        </Button>
+      </div>
+
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold">Administração de Usuários</h1>
           <p className="text-muted-foreground">Gerencie usuários e autenticação 2FA</p>

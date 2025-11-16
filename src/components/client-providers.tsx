@@ -1,27 +1,27 @@
-"use client";
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { onAuthStateChanged, type User, type Auth, type MultiFactorResolver } from 'firebase/auth';
+import { onAuthStateChanged, type User } from 'firebase/auth';
 import { onSnapshot, doc, collection } from 'firebase/firestore';
 
 import { AuthContext } from '@/contexts/AuthContext';
 import type { Property, AppUser } from '@/types';
-import { auth, app, db } from '@/lib/firebase/client';
+import { auth, app, db } from '@/lib/firebase/clientApp';
 import { getFunctions, type Functions, httpsCallable } from 'firebase/functions';
-import { retryFirebaseFunction } from '@/lib/utils';
+import { AppleLoader } from '@/components/ui/apple-loader';
 
 interface ProvidersProps {
   children: React.ReactNode;
 }
 
-const PUBLIC_PATHS = ['/login', '/signup', '/plans', '/pix-payment', '/forgot-password', '/', '/sumup-payment', '/sumup-payment/success', '/api/sumup/payment'];
-const AUTH_ONLY_PATHS = ['/verify-2fa'];
+const PUBLIC_PATHS = ['/login', '/signup', '/plans', '/pix-payment', '/forgot-password', '/', '/sumup-payment', '/sumup-payment/success', '/api/sumup/payment', '/simulator', '/admin', '/admin/properties', '/admin/users'];
+const AUTH_ONLY_PATHS = ['/setup-2fa', '/verify-2fa'];
 
 function LoadingScreen() {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div className="text-white">Carregando...</div>
+        <AppleLoader />
       </div> 
     );
 }
@@ -31,6 +31,8 @@ export function ClientProviders({ children }: ProvidersProps) {
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null | undefined>(undefined);
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
   const [isPageLoading, setIsPageLoading] = useState(false);
   const [isFullyAuthenticated, setIsFullyAuthenticated] = useState(false);
@@ -39,7 +41,6 @@ export function ClientProviders({ children }: ProvidersProps) {
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertiesLoading, setPropertiesLoading] = useState(true);
   const [functions, setFunctions] = useState<Functions | null>(null);
-  const [mfaResolver, setMfaResolver] = useState<MultiFactorResolver | null>(null);
 
   useEffect(() => {
     const funcs = getFunctions(app);
@@ -65,7 +66,7 @@ export function ClientProviders({ children }: ProvidersProps) {
       }
     });
 
-    return () => unsubscribeAuth();
+    return unsubscribeAuth;
   }, []);
 
   useEffect(() => {
@@ -75,20 +76,40 @@ export function ClientProviders({ children }: ProvidersProps) {
   useEffect(() => {
     if (!user) {
       setAppUser(null);
-      setAuthLoading(false);
-      return;
+      setUsers([]);
+      setUsersLoading(false);
+      return () => {};
+    }
+
+    const usersCollection = collection(db, 'users');
+    const unsubscribeUsers = onSnapshot(usersCollection, 
+      (querySnapshot) => {
+        const usersData: AppUser[] = [];
+        querySnapshot.forEach((doc) => {
+          usersData.push({ uid: doc.id, ...(doc.data() as AppUser) });
+        });
+        setUsers(usersData);
+        setUsersLoading(false);
+      },
+      (error) => {
+        console.error("Error fetching users:", error);
+        setUsersLoading(false);
+      }
+    );
+
+    return unsubscribeUsers;
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      setAppUser(null);
+      return () => {};
     }
 
     const userDocRef = doc(db, 'users', user.uid);
     const unsubscribeUser = onSnapshot(userDocRef, 
       (userDoc) => {
         const userData = userDoc.exists() ? (userDoc.data() as AppUser) : null;
-        console.log('Auth Debug - User data loaded:', {
-          userUid: user.uid,
-          userEmail: user.email,
-          userData: userData,
-          isAdmin: userData?.isAdmin
-        });
         setAppUser(userData);
       },
       (error) => {
@@ -98,7 +119,7 @@ export function ClientProviders({ children }: ProvidersProps) {
       }
     );
 
-    return () => unsubscribeUser();
+    return unsubscribeUser;
   }, [user]);
 
   useEffect(() => {
@@ -147,7 +168,9 @@ export function ClientProviders({ children }: ProvidersProps) {
 
     const isPublicPath = PUBLIC_PATHS.includes(pathname);
     const isAuthFlowPath = AUTH_ONLY_PATHS.includes(pathname);
-    const targetPath = appUser?.isAdmin ? '/simulator' : '/simulator';
+    const isAdminPath = pathname.startsWith('/admin');
+    const isSimulatorPath = pathname.startsWith('/simulator');
+    const targetPath = appUser?.isAdmin ? '/admin' : '/simulator';
 
     if (!user) {
       if (!isPublicPath) {
@@ -163,6 +186,11 @@ export function ClientProviders({ children }: ProvidersProps) {
           router.replace(targetPath);
           setIsPageLoading(true);
         }
+        // Não redirecionar se o usuário já está em uma página válida (admin ou simulator)
+        if (isAdminPath || isSimulatorPath) {
+          // Permitir acesso a estas páginas
+          return;
+        }
       } else {
         if (pathname !== '/verify-2fa') {
           router.replace('/verify-2fa');
@@ -170,20 +198,19 @@ export function ClientProviders({ children }: ProvidersProps) {
         }
       }
     } else {
-      // Usuário não tem 2FA configurado - redirecionar para verify-2fa que gerencia o setup
-      if (pathname !== '/verify-2fa') {
-        router.replace('/verify-2fa');
+      if (pathname !== '/setup-2fa') {
+        router.replace('/setup-2fa');
         setIsPageLoading(true);
       }
     }
   }, [authLoading, user, appUser, has2FA, is2FAVerified, pathname, router]);
 
 
-    useEffect(() => {
-    if (!isFullyAuthenticated) {
+  useEffect(() => {
+    if (!user) {
       setProperties([]);
       setPropertiesLoading(true);
-      return;
+      return () => {};
     }
 
     setPropertiesLoading(true);
@@ -200,56 +227,10 @@ export function ClientProviders({ children }: ProvidersProps) {
       setPropertiesLoading(false);
     });
 
-    return () => unsubscribeProperties();
-  }, [isFullyAuthenticated]);
+    return unsubscribeProperties;
+  }, [user]);
 
   const isAdmin = appUser?.isAdmin ?? false;
-  
-  // Função para verificar status de admin
-  const checkAdminStatus = async () => {
-    if (!functions || !user) {
-      throw new Error('Funções não disponíveis ou usuário não autenticado');
-    }
-
-    try {
-      const checkAdminStatus = httpsCallable(functions, 'checkAdminStatusAction');
-      const result = await retryFirebaseFunction(checkAdminStatus, {});
-      return result.data as { uid: string; email: string; isAdmin: boolean; exists: boolean };
-    } catch (error: unknown) {
-      console.error('Erro ao verificar status de admin:', error);
-      throw error;
-    }
-  };
-
-  // Função para definir usuário como admin
-  const setUserAdmin = async (targetUserId: string, isAdminValue: boolean) => {
-    if (!functions || !user) {
-      throw new Error('Funções não disponíveis ou usuário não autenticado');
-    }
-
-    try {
-      const setUserAdmin = httpsCallable(functions, 'setUserAdminAction');
-      const result = await retryFirebaseFunction(setUserAdmin, { 
-        targetUserId, 
-        isAdmin: isAdminValue 
-      });
-      return result.data as { success: boolean; message: string };
-    } catch (error: unknown) {
-      console.error('Erro ao definir admin:', error);
-      throw error;
-    }
-  };
-  
-  // Debug log para verificar o estado isAdmin
-  useEffect(() => {
-    console.log('Auth Debug - isAdmin state:', {
-      appUser,
-      isAdmin,
-      userUid: user?.uid,
-      userEmail: user?.email
-    });
-  }, [appUser, isAdmin, user]);
-  
   const showLoader = authLoading || (user && has2FA === undefined) || (router && isPageLoading);
 
   return (
@@ -261,27 +242,18 @@ export function ClientProviders({ children }: ProvidersProps) {
         setIsFullyAuthenticated, 
         has2FA, 
         is2FAVerified, 
-        setIs2FAVerified,
+        setIs2FAVerified, // Adicionado
         properties, 
         propertiesLoading,
+        users,
+        usersLoading,
         isPageLoading,
         setIsPageLoading,
-        functions,
-        auth,
-        setMfaResolver,
-        checkAdminStatus,
-        setUserAdmin
+        functions
     }}>
       {showLoader ? <LoadingScreen /> : children}
     </AuthContext.Provider>
   );
 }
 
-// Exportar como Providers para compatibilidade
-export const Providers = ClientProviders;
-
-// Exportar useAuth do AuthContext para compatibilidade
 export { useAuth } from '@/contexts/AuthContext';
-
-// Exportar useAppCheck para compatibilidade
-export { useAppCheck } from '@/hooks/use-app-check';
