@@ -303,7 +303,7 @@ interface UnitSelectorDialogProps {
   selectedProperty: Property | null;
 }
 
-export function UnitSelectorDialog({ isOpen, onOpenChange, units, onUnitSelect, selectedProperty }: UnitSelectorDialogProps) {
+export const UnitSelectorDialog = memo(function UnitSelectorDialog({ isOpen, onOpenChange, units, onUnitSelect, selectedProperty }: UnitSelectorDialogProps) {
   // Filter states
   const [status, setStatus] = useState<UnitStatus | 'Todos'>('Disponível');
   const [floor, setFloor] = useState('Todos');
@@ -360,4 +360,4 @@ export function UnitSelectorDialog({ isOpen, onOpenChange, units, onUnitSelect, 
       </DialogContent>
     </Dialog>
   );
-}
+});

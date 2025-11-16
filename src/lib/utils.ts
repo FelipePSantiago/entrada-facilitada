@@ -1,7 +1,6 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 
-import { PaymentFieldType } from "@/types";
 import { isSameMonth, startOfMonth, isAfter } from 'date-fns';
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -93,7 +92,7 @@ export const isClient = () => !isServer();
  * @param type The type of payment field.
  * @returns A function that takes a Date and returns a boolean (true if locked, false if allowed).
  */
-export const isDateLocked = (type: PaymentFieldType) => {
+export const isDateLocked = (type: string) => {
   return (date: Date): boolean => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);

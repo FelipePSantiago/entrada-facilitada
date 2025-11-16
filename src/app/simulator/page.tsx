@@ -85,43 +85,45 @@ function SimulatorInterface() {
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [isSinalCampaignActive, setIsSinalCampaignActive] = useState(false);
 
-  // Debug log para verificar o estado isAdmin
+  // Debug log para verificar o estado isAdmin (apenas em desenvolvimento)
   useEffect(() => {
-    console.log('SimulatorInterface - Debug Info:', {
-      user: user?.email,
-      isAdmin,
-      userUid: user?.uid
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('SimulatorInterface - Debug Info:', {
+        user: user?.email,
+        isAdmin,
+        userUid: user?.uid
+      });
 
-    // Função de debug global para console
-    (window as any).debugAdmin = async () => {
-      try {
-        const status = await checkAdminStatus();
-        console.log('Admin Status Debug:', status);
-        return status;
-      } catch (error: unknown) {
-        console.error('Erro ao verificar admin status:', error);
-      }
-    };
-
-    (window as any).setUserAsAdmin = async (targetUserId?: string, isAdminValue: boolean = true) => {
-      try {
-        const uid = targetUserId || user?.uid;
-        if (!uid) {
-          console.error('Nenhum usuário ID fornecido');
-          return;
+      // Função de debug global para console (apenas em desenvolvimento)
+      (window as any).debugAdmin = async () => {
+        try {
+          const status = await checkAdminStatus();
+          console.log('Admin Status Debug:', status);
+          return status;
+        } catch (error: unknown) {
+          console.error('Erro ao verificar admin status:', error);
         }
-        const result = await setUserAdmin(uid, isAdminValue);
-        console.log('Set Admin Result:', result);
-        return result;
-      } catch (error: unknown) {
-        console.error('Erro ao definir admin:', error);
-      }
-    };
+      };
 
-    console.log('Debug functions disponíveis no console:');
-    console.log('- debugAdmin() - Verifica status de admin do usuário atual');
-    console.log('- setUserAsAdmin(userId, isAdmin) - Define usuário como admin');
+      (window as any).setUserAsAdmin = async (targetUserId?: string, isAdminValue: boolean = true) => {
+        try {
+          const uid = targetUserId || user?.uid;
+          if (!uid) {
+            console.error('Nenhum usuário ID fornecido');
+            return;
+          }
+          const result = await setUserAdmin(uid, isAdminValue);
+          console.log('Set Admin Result:', result);
+          return result;
+        } catch (error: unknown) {
+          console.error('Erro ao definir admin:', error);
+        }
+      };
+
+      console.log('Debug functions disponíveis no console:');
+      console.log('- debugAdmin() - Verifica status de admin do usuário atual');
+      console.log('- setUserAsAdmin(userId, isAdmin) - Define usuário como admin');
+    }
   }, [user, isAdmin, checkAdminStatus, setUserAdmin]);
 
   const methods = useForm<z.infer<typeof simulatorFormSchema>>({

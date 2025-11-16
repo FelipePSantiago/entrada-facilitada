@@ -81,7 +81,6 @@ import { cn } from "@/lib/utils";
 import { PaymentTimeline } from "./payment-timeline";
 import { centsToBrl } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
-import { FaSpinner } from "react-icons/fa";
 
 const formatPercentage = (value: number) => {
   return `${(value * 100).toFixed(2)}%`;
@@ -131,10 +130,12 @@ const generatePdf = async (pdfValues: ExtendedPdfFormValues, results: ExtendedRe
     const orangeColor = [255, 193, 7]; // Laranja #FFC107
     const redColor = [220, 53, 69]; // Vermelho #DC3545
 
-    // Carregar a logo da Quadraimob da URL
+    // Carregar a logo da Quadraimob da URL (variável de ambiente)
     let logoData: string | null = null;
+    const logoUrl = process.env.NEXT_PUBLIC_QUADRAIMOBO_LOGO_URL || 'https://i.ibb.co/XqPsv3x/Quadraimob-logo.png';
+    
     try {
-      const logoResponse = await fetch('https://i.ibb.co/XqPsv3x/Quadraimob-logo.png');
+      const logoResponse = await fetch(logoUrl);
       if (logoResponse.ok) {
         const blob = await logoResponse.blob();
         logoData = await new Promise<string>((resolve, reject) => {
@@ -1793,7 +1794,7 @@ interface PaymentFlowCalculatorProps {
     setIsTutorialOpen: (isOpen: boolean) => void;
 }
 
-export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinalCampaignLimitPercent, isTutorialOpen, setIsTutorialOpen }: PaymentFlowCalculatorProps) {
+export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinalCampaignLimitPercent, isTutorialOpen, setIsTutorialOpen }: PaymentFlowCalculatorProps) {
   const { toast } = useToast();
   const [results, setResults] = useState<ExtendedResults | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -2455,87 +2456,6 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       replace(correctedPayments);
     }
   }, [watchedPayments, deliveryDateObj, replace]);
-
-  useEffect(() => {
-    if (!selectedProperty || !deliveryDateObj) return;
-    
-    // Lógica específica para o Bônus de Campanha
-    const campaignBonusPayment = watchedPayments.find(p => p.type === 'bonusCampanha');
-    const sinalAtoPayment = watchedPayments.find(p => p.type === 'sinalAto');
-    
-    // Só processar bônus de campanha se houver sinal ato definido
-    if (sinalAtoPayment && sinalAtoPayment.value > 0) {
-      const descontoPayment = watchedPayments.find(p => p.type === 'desconto');
-      const descontoValue = descontoPayment?.value || 0;
-      const valorFinalImovel = (watchedSaleValue || 0) - descontoValue;
-      const sinalMinimo = 0.05 * valorFinalImovel;
-      
-      if (isSinalCampaignActive && sinalCampaignLimitPercent !== undefined) {
-        if (sinalAtoPayment.value > sinalMinimo) {
-          const excedente = sinalAtoPayment.value - sinalMinimo;
-          const limiteMaximoBonus = valorFinalImovel * (sinalCampaignLimitPercent / 100);
-          const expectedBonusValue = Math.min(excedente, limiteMaximoBonus);
-          
-          if (expectedBonusValue > 0.01) { // Só criar bônus se for significativo
-            if (!campaignBonusPayment) {
-              // Adicionar novo bônus
-              append({
-                type: 'bonusCampanha',
-                value: expectedBonusValue,
-                date: deliveryDateObj,
-              });
-            } else if (Math.abs(campaignBonusPayment.value - expectedBonusValue) > 0.01) {
-              // Atualizar valor se for diferente
-              const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
-              if (bonusIndex !== -1) {
-                const newPayments = [...watchedPayments];
-                newPayments[bonusIndex] = {
-                  ...newPayments[bonusIndex],
-                  value: expectedBonusValue,
-                  date: deliveryDateObj,
-                };
-                replace(newPayments);
-              }
-            }
-          } else if (campaignBonusPayment) {
-            // Remover bônus se não houver mais excedente significativo
-            const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
-            if (bonusIndex !== -1) {
-              remove(bonusIndex);
-            }
-          }
-        } else if (campaignBonusPayment) {
-          // Remover bônus se sinal ato não tiver excedente
-          const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
-          if (bonusIndex !== -1) {
-            remove(bonusIndex);
-          }
-        }
-      } else if (campaignBonusPayment) {
-        // Remover bônus se a campanha não estiver ativa
-        const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
-        if (bonusIndex !== -1) {
-          remove(bonusIndex);
-        }
-      }
-    } else if (campaignBonusPayment) {
-      // Remover bônus se não houver sinal ato ou for zero
-      const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
-      if (bonusIndex !== -1) {
-        remove(bonusIndex);
-      }
-    }
-  }, [
-    watchedPayments, 
-    selectedProperty, 
-    deliveryDateObj, 
-    isSinalCampaignActive, 
-    sinalCampaignLimitPercent,
-    watchedSaleValue,
-    append,
-    remove,
-    replace,
-  ]);
 
   useEffect(() => {
     if (!selectedProperty || !deliveryDateObj) return;
@@ -3737,7 +3657,7 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
                       disabled={isSimulatingCaixa || !selectedProperty || !watchedAppraisalValue}
                       className="w-full h-11"
                     >
-                      {isSimulatingCaixa && <FaSpinner className="mr-2 h-4 w-4 animate-spin" />}
+                      {isSimulatingCaixa && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                       {isSimulatingCaixa ? "Simulando..." : "Simular Financiamento"}
                     </Button>
                     
@@ -4591,4 +4511,4 @@ export function PaymentFlowCalculator({ properties, isSinalCampaignActive, sinal
       </Dialog>
     </div>
   );
-}
+});

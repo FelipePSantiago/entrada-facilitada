@@ -12,7 +12,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { useAuth } from "@/components/client-providers"; // CORREÇÃO
+import { useAuth } from "@/components/client-providers";
 import { useToast } from "@/hooks/use-toast";
 
 export default function LoginPage() {
