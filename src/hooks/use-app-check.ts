@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { app } from '@/lib/firebase/client';
+import { app } from '@/lib/firebase/clientApp';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 
 let appCheckInitialized = false;
