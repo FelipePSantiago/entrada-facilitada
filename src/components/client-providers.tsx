@@ -179,7 +179,7 @@ export function ClientProviders({ children }: ProvidersProps) {
   }, [authLoading, user, appUser, has2FA, is2FAVerified, pathname, router]);
 
 
-  useEffect(() => {
+    useEffect(() => {
     if (!isFullyAuthenticated) {
       setProperties([]);
       setPropertiesLoading(true);

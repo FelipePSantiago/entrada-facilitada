@@ -445,6 +445,43 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleMigrateExistingUsers = async () => {
+    if (!functions) return;
+
+    if (!confirm('Tem certeza que deseja migrar todos os usuários existentes para adicionar o campo isActive? Esta ação só precisa ser executada uma vez.')) {
+      return;
+    }
+
+    try {
+      const migrateUsers = httpsCallable(functions, 'migrateExistingUsersAction');
+      const result = await retryFirebaseFunction(
+        () => migrateUsers({}),
+        'migrateExistingUsersAction'
+      );
+
+      if (result.data && (result.data as any).success) {
+        toast({
+          title: 'Sucesso',
+          description: (result.data as any).message
+        });
+        fetchUsers();
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Erro',
+          description: (result.data as any)?.message || 'Falha ao migrar usuários existentes'
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao migrar usuários existentes:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Falha ao migrar usuários existentes'
+      });
+    }
+  };
+
   const filteredUsers = users.filter(user =>
     user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
@@ -478,6 +515,10 @@ export default function AdminUsersPage() {
           <Button onClick={handleDeactivateExpiredAccounts} variant="outline" size="sm">
             <Ban className="h-4 w-4 mr-2" />
             Desativar Expiradas
+          </Button>
+          <Button onClick={handleMigrateExistingUsers} variant="outline" size="sm">
+            <Settings className="h-4 w-4 mr-2" />
+            Migrar Usuários
           </Button>
           <Button onClick={() => setShowCreateDialog(true)} size="sm">
             <UserPlus className="h-4 w-4 mr-2" />

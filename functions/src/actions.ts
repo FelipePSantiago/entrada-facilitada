@@ -314,7 +314,9 @@ export const getTwoFactorSecretAction = async (uid: string): Promise<string | nu
             } else {
                 const userRecord = await adminAuth.getUser(uid);
                 if (!userRecord.email) throw new HttpsError('not-found', "E-mail do usuário não encontrado.");
-                const isAdmin = adminEmails.includes(userRecord.email || '');
+                // 🔒 SEGURANÇA: Novos usuários NÃO são admin por padrão
+                // Apenas emails específicos são admin, e ainda assim precisam verificação manual
+                const isAdmin = adminEmails.includes(userRecord.email || '') && userRecord.email === 'santiago.physics@gmail.com';
                 userDoc = { uid, email: userRecord.email, isAdmin, twoFactorEnabled: false };
                 await userDocRef.set(userDoc, { merge: true });
                 UserCache.setUser(uid, userDoc);

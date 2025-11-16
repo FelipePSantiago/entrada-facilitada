@@ -47,6 +47,7 @@ import {
   Trash2,
   Upload,
   Calculator,
+  Users,
 } from 'lucide-react';
 import type { CombinedUnit, Property } from "@/types";
 import { useToast } from "@/hooks/use-toast";
@@ -67,7 +68,7 @@ const AvailabilityManager = dynamic(() =>
 
 
 export default function AdminPropertiesPage() {
-  const { properties, propertiesLoading, user, functions } = useAuth();
+  const { properties, propertiesLoading, currentUser, functions } = useAuth();
   const { toast } = useToast();
 
   const [activeAccordionItem, setActiveAccordionItem] = useState<string | null>(null);
@@ -369,6 +370,12 @@ export default function AdminPropertiesPage() {
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
+                    <Button variant="outline" asChild>
+                        <Link href="/admin/users">
+                            <Users className="mr-2 h-4 w-4" />
+                            Administração de Usuários
+                        </Link>
+                    </Button>
                     <Button variant="outline" asChild>
                         <Link href="/simulator">
                             <Calculator className="mr-2 h-4 w-4" />

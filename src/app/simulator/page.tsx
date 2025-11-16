@@ -167,14 +167,6 @@ function SimulatorInterface() {
               isActive={isSinalCampaignActive}
               setIsActive={setIsSinalCampaignActive}
             />
-            {isAdmin && (
-              <Button asChild variant="outline">
-                <a href="/admin/properties/properties">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Administração
-                </a>
-              </Button>
-            )}
             <Button asChild variant="outline">
               <a
                 href="https://www.portaldeempreendimentos.caixa.gov.br/simulador/"

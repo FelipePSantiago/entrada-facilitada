@@ -82,6 +82,66 @@ import { PaymentTimeline } from "./payment-timeline";
 import { centsToBrl } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 
+// Interface para garantir imutabilidade do Bônus de Campanha
+interface ProtectedCampaignBonus {
+  value: number;
+  initialSinalAtoValue: number;
+  sinalMinimo: number;
+  deliveryDate: Date;
+  isLocked: boolean;
+}
+
+// Estado global para proteger o Bônus de Campanha
+let protectedCampaignBonus: ProtectedCampaignBonus | null = null;
+
+// Funções para gerenciar o Bônus de Campanha protegido
+const lockCampaignBonus = (
+  value: number,
+  initialSinalAtoValue: number,
+  sinalMinimo: number,
+  deliveryDate: Date
+): void => {
+  if (value > 0) {
+    protectedCampaignBonus = {
+      value,
+      initialSinalAtoValue,
+      sinalMinimo,
+      deliveryDate,
+      isLocked: true
+    };
+    console.log('🔒 BÔNUS DE CAMPANHA BLOQUEADO:', {
+      value: centsToBrl(value * 100),
+      initialSinalAtoValue: centsToBrl(initialSinalAtoValue * 100),
+      sinalMinimo: centsToBrl(sinalMinimo * 100),
+      deliveryDate: format(deliveryDate, 'dd/MM/yyyy')
+    });
+  }
+};
+
+const unlockCampaignBonus = (): void => {
+  if (protectedCampaignBonus) {
+    console.log('🔓 BÔNUS DE CAMPANHA DESBLOQUEADO:', {
+      value: centsToBrl(protectedCampaignBonus.value * 100)
+    });
+    protectedCampaignBonus = null;
+  }
+};
+
+const getProtectedCampaignBonus = (): ProtectedCampaignBonus | null => {
+  return protectedCampaignBonus;
+};
+
+const getMinimumSinalAtoWithBonus = (): number => {
+  if (!protectedCampaignBonus) return 0;
+  return protectedCampaignBonus.sinalMinimo + protectedCampaignBonus.value;
+};
+
+const isSinalAtoValidForBonus = (sinalAtoValue: number): boolean => {
+  if (!protectedCampaignBonus) return true;
+  const minimumRequired = getMinimumSinalAtoWithBonus();
+  return sinalAtoValue >= minimumRequired;
+};
+
 const formatPercentage = (value: number) => {
   return `${(value * 100).toFixed(2)}%`;
 };
@@ -866,10 +926,30 @@ const validatePaymentSumWithBusinessLogic = (
   
   const campaignBonus = payments.find(p => p.type === 'bonusCampanha');
   
+  // 🔒 VALIDAÇÃO PROTEGIDA DO BÔNUS DE CAMPANHA
   if (campaignBonus && sinalAto && isSinalCampaignActive) {
-    const sinalMinimo = 0.05 * valorFinalImovel;
-    if (sinalAto.value <= sinalMinimo) {
-      businessLogicViolation = "Bônus de campanha não pode existir quando o sinal ato é igual ou inferior ao mínimo (5%).";
+    const protectedBonus = getProtectedCampaignBonus();
+    
+    if (protectedBonus && protectedBonus.isLocked) {
+      // 🔒 USAR VALIDAÇÃO PROTEGIDA
+      const minimumRequired = getMinimumSinalAtoWithBonus();
+      
+      if (!isSinalAtoValidForBonus(sinalAto.value)) {
+        businessLogicViolation = `Sinal Ato (${centsToBrl(sinalAto.value * 100)}) é menor que o mínimo necessário (${centsToBrl(minimumRequired * 100)}) para justificar o Bônus de Campanha protegido de ${centsToBrl(protectedBonus.value * 100)}.`;
+      } else {
+        console.log('✅ BÔNUS DE CAMPANHA PROTEGIDO VALIDADO:', {
+          bonusValue: centsToBrl(protectedBonus.value * 100),
+          sinalAtoValue: centsToBrl(sinalAto.value * 100),
+          minimumRequired: centsToBrl(minimumRequired * 100),
+          isValid: isSinalAtoValidForBonus(sinalAto.value)
+        });
+      }
+    } else {
+      // 🆕 VALIDAÇÃO NORMAL (SÓ SE NÃO HOUVER PROTEGIDO)
+      const sinalMinimo = 0.05 * valorFinalImovel;
+      if (sinalAto.value <= sinalMinimo) {
+        businessLogicViolation = "Bônus de campanha não pode existir quando o sinal ato é igual ou inferior ao mínimo (5%).";
+      }
     }
   }
   
@@ -1241,11 +1321,46 @@ const applyMinimumCondition = (
       }
     }
 
-    // Lógica do bônus de campanha
+    // 🔒🔒 LÓGICA PROTEGIDA DO BÔNUS DE CAMPANHA 🔒🔒
     let campaignBonusValue = 0;
     let sinalAtoAntesDoBonus = sinalAtoValue; // Guardar valor original para validação
     
-    if (isSinalCampaignActive && sinalCampaignLimitPercent !== undefined) {
+    // Verificar se já existe um bônus protegido
+    const existingProtectedBonus = getProtectedCampaignBonus();
+    
+    if (existingProtectedBonus && existingProtectedBonus.isLocked) {
+      // 🔒 USAR BÔNUS PROTEGIDO EXISTENTE
+      campaignBonusValue = existingProtectedBonus.value;
+      console.log('🛡️ USANDO BÔNUS DE CAMPANHA PROTEGIDO:', {
+        protectedValue: centsToBrl(campaignBonusValue * 100),
+        sinalAtoAtual: centsToBrl(sinalAtoValue * 100),
+        minimumRequired: centsToBrl(getMinimumSinalAtoWithBonus() * 100)
+      });
+      
+      // Garantir que Sinal Ato atinja o mínimo necessário para o bônus protegido
+      const minimumRequired = getMinimumSinalAtoWithBonus();
+      if (sinalAtoValue < minimumRequired) {
+        const deficit = minimumRequired - sinalAtoValue;
+        
+        // Tentar cobrir o déficit reduzindo o pró-soluto
+        if (proSolutoValue >= deficit) {
+          proSolutoValue -= deficit;
+          sinalAtoValue = minimumRequired;
+          console.log('✅ Sinal Ato ajustado para mínimo necessário usando Pró-Soluto:', {
+            deficit: centsToBrl(deficit * 100),
+            novoSinalAto: centsToBrl(sinalAtoValue * 100),
+            novoProSoluto: centsToBrl(proSolutoValue * 100)
+          });
+        } else {
+          // Se não há pró-soluto suficiente, usar o remainingAmount
+          console.warn('⚠️ Pró-Soluto insuficiente para cobrir déficit do Sinal Ato');
+          sinalAtoValue = Math.min(sinalAtoValue + proSolutoValue, minimumRequired);
+          proSolutoValue = Math.max(0, proSolutoValue - (minimumRequired - sinalAtoValue));
+        }
+      }
+      
+    } else if (isSinalCampaignActive && sinalCampaignLimitPercent !== undefined) {
+      // 🆕 CALCULAR NOVO BÔNUS (SÓ SE NÃO HOUVER PROTEGIDO)
       if (sinalAtoValue > sinalMinimo) {
         const excedente = sinalAtoValue - sinalMinimo;
         const limiteMaximoBonus = valorFinalImovel * (sinalCampaignLimitPercent / 100);
@@ -1258,6 +1373,16 @@ const applyMinimumCondition = (
           sinalAtoValue = sinalMinimo + limiteMaximoBonus;
         }
         
+        // 🔒 BLOQUEAR O BÔNUS CALCULADO
+        if (campaignBonusValue > 0) {
+          lockCampaignBonus(
+            campaignBonusValue,
+            sinalAtoAntesDoBonus,
+            sinalMinimo,
+            deliveryDate || new Date()
+          );
+        }
+        
         // Recalcular pró-soluto considerando o bônus
         const novaSoma = sinalAtoValue + proSolutoValue + campaignBonusValue;
         if (novaSoma > remainingAmount) {
@@ -1267,7 +1392,7 @@ const applyMinimumCondition = (
       }
     }
 
-    // CORREÇÃO PRINCIPAL: VALIDAÇÃO FINAL MANTENDO O BÔNUS FIXO
+  // 🔒🔒 VALIDAÇÃO FINAL PROTEGENDO O BÔNUS 🔒🔒
     const somaFinal = sinalAtoValue + proSolutoValue + campaignBonusValue;
     const diferencaFinal = remainingAmount - somaFinal;
 
@@ -1281,171 +1406,156 @@ const applyMinimumCondition = (
         if (proSolutoCorrigido <= maxProSolutoByPercent) {
           proSolutoValue = novoProSoluto;
         } else {
-          // Se exceder, adicionar ao sinal ato (mas garantir que não afete o bônus)
-          const sinalMinimoComBonus = campaignBonusValue > 0 ? sinalMinimo + campaignBonusValue : sinalMinimo;
+          // Se exceder, adicionar ao sinal ato (mas garantir que não afete o bônus protegido)
+          const minimumRequired = campaignBonusValue > 0 ? getMinimumSinalAtoWithBonus() : sinalMinimo;
           const novoSinalAto = sinalAtoValue + diferencaFinal;
           
-          // Só aumentar o sinal ato se não comprometer o bônus
-          if (campaignBonusValue === 0 || novoSinalAto >= sinalMinimoComBonus) {
+          // Só aumentar o sinal ato se não comprometer o bônus protegido
+          if (campaignBonusValue === 0 || isSinalAtoValidForBonus(novoSinalAto)) {
             sinalAtoValue = novoSinalAto;
           } else {
             // Se comprometer, aumentar o sinal ato apenas até o mínimo necessário
-            sinalAtoValue = sinalMinimoComBonus;
-            // O restante fica sem ajuste (erro aceitável)
-            console.warn('Não foi possível ajustar completamente sem afetar o bônus de campanha');
+            sinalAtoValue = minimumRequired;
+            console.warn('⚠️ Não foi possível ajustar completamente sem afetar o bônus de campanha protegido');
           }
         }
       } else {
-        // PRECISA DIMINUIR: Remover do pró-soluto primeiro
+        // PRECISA DIMINUIR: Remover do pró-soluto primeiro (protegendo o bônus)
         const excesso = Math.abs(diferencaFinal);
         
         if (proSolutoValue >= excesso) {
           proSolutoValue -= excesso;
         } else {
-          // Se não há pró-soluto suficiente, remover do sinal ato
+          // Se não há pró-soluto suficiente, remover do sinal ato (protegendo o bônus)
           const excessoRestante = excesso - proSolutoValue;
           proSolutoValue = 0;
           
-          // Calcular o sinal ato mínimo necessário para manter o bônus
-          const sinalMinimoComBonus = campaignBonusValue > 0 ? sinalMinimo + campaignBonusValue : sinalMinimo;
+          // Calcular o sinal ato mínimo necessário para manter o bônus protegido
+          const minimumRequired = campaignBonusValue > 0 ? getMinimumSinalAtoWithBonus() : sinalMinimo;
           
-          // Tentar reduzir o sinal ato sem comprometer o bônus
+          // Tentar reduzir o sinal ato sem comprometer o bônus protegido
           const novoSinalAto = sinalAtoValue - excessoRestante;
           
-          if (novoSinalAto >= sinalMinimoComBonus) {
+          if (isSinalAtoValidForBonus(novoSinalAto)) {
             sinalAtoValue = novoSinalAto;
           } else {
-            // Se não for possível, manter o sinal ato no mínimo necessário
-            sinalAtoValue = sinalMinimoComBonus;
-            // O excesso restante fica sem ajuste (erro aceitável)
-            console.warn('Não foi possível ajustar completamente sem afetar o bônus de campanha');
+            // Se não for possível, manter o sinal ato no mínimo necessário para o bônus
+            sinalAtoValue = minimumRequired;
+            console.warn('⚠️ Não foi possível ajustar completamente sem afetar o bônus de campanha protegido');
           }
         }
       }
     }
 
-    // VALIDAÇÃO FINAL: Garantir que o bônus ainda seja válido
-    if (campaignBonusValue > 0) {
-      const excedenteFinal = sinalAtoValue - sinalMinimo;
-      const limiteMaximoBonus = valorFinalImovel * (sinalCampaignLimitPercent! / 100);
-      
-      // Se o excedente final for diferente do bônus, recalcular
-      if (Math.abs(excedenteFinal - campaignBonusValue) > 0.01) {
-        console.warn('O bônus de campanha precisa ser recalculado devido a ajustes');
-        
-        // Recalcular o bônus com base no excedente final
-        if (excedenteFinal > 0 && excedenteFinal <= limiteMaximoBonus) {
-          campaignBonusValue = excedenteFinal;
-          sinalAtoValue = sinalMinimo;
-        } else if (excedenteFinal > limiteMaximoBonus) {
-          campaignBonusValue = limiteMaximoBonus;
-          sinalAtoValue = sinalMinimo + limiteMaximoBonus;
-        } else {
-          // Se não há excedente, remover o bônus
-          campaignBonusValue = 0;
-        }
-        
-        // Ajustar o pró-soluto para compensar
-        const somaAjustada = sinalAtoValue + proSolutoValue + campaignBonusValue;
-        const diferencaAjustada = remainingAmount - somaAjustada;
-        
-        if (Math.abs(diferencaAjustada) > 0.01) {
-          if (diferencaAjustada > 0) {
-            proSolutoValue += diferencaAjustada;
-          } else {
-            proSolutoValue = Math.max(0, proSolutoValue + diferencaAjustada);
-          }
-        }
-      }
-    }
+    // 🔒 NÃO RECALCULAR MAIS O BÔNUS - ELE ESTÁ PROTEGIDO
+    // Removido o recálculo que poderia alterar o valor do bônus
 
-    // ⭐⭐ NOVA FUNCIONALIDADE: Otimização do Pró-Soluto para reduzir Sinal Ato
-    console.log('🔧🔧🔧 INICIANDO OTIMIZAÇÃO DO PRÓ-SOLUTO PARA REDUZIR SINAL ATO');
+    // 🔒⭐ OTIMIZAÇÃO PROTEGIDA DO PRÓ-SOLUTO 🔒⭐
+    console.log('🔧🔧🔧 INICIANDO OTIMIZAÇÃO PROTEGIDA DO PRÓ-SOLUTO');
 
     // Verificar se há margem para incrementar o pró-soluto e reduzir o sinal ato
     if (campaignBonusValue > 0) {
-      // Calcular capacidade disponível no pró-soluto após a campanha
-      const proSolutoPosCampanhaCorrigido = calculateCorrectedProSoluto(
-        proSolutoValue,
-        deliveryDate,
-        newPayments
-      );
+      const protectedBonus = getProtectedCampaignBonus();
       
-      const isReservaParque = propertyEnterpriseName.includes('Reserva Parque Clube');
-      const conditionTypeForLimit = conditionType === 'especial' ? 'especial' : 'padrao';
-      const proSolutoLimitPercent = isReservaParque ? 0.1799 : (conditionTypeForLimit === 'especial' ? 0.1799 : 0.1499);
-      const percentualPosCampanha = valorFinalImovel > 0 ? proSolutoPosCampanhaCorrigido / valorFinalImovel : 0;
-      
-      console.log('📊 Status do Pró-Soluto após campanha:', {
-        proSolutoPosCampanha: centsToBrl(proSolutoPosCampanhaCorrigido * 100),
-        percentualPosCampanha: formatPercentage(percentualPosCampanha),
-        limiteProSoluto: formatPercentage(proSolutoLimitPercent)
-      });
-      
-      // Calcular capacidade disponível no pró-soluto
-      const capacidadeDisponivelFinal = Math.max(0, (proSolutoLimitPercent * valorFinalImovel) - proSolutoPosCampanhaCorrigido);
-      
-      // CÁLCULO CRÍTICO: Soma mínima que justifica o bônus campanha
-      const somaMinimaComBonus = sinalMinimo + campaignBonusValue;
-      
-      console.log('🎯 Análise para otimização:', {
-        sinalAtoAtual: centsToBrl(sinalAtoValue * 100),
-        sinalMinimoPermitido: centsToBrl(sinalMinimo * 100),
-        campaignBonusValue: centsToBrl(campaignBonusValue * 100),
-        somaMinimaComBonus: centsToBrl(somaMinimaComBonus * 100),
-        capacidadeDisponivelFinal: centsToBrl(capacidadeDisponivelFinal * 100),
-        podeReduzir: sinalAtoValue > somaMinimaComBonus && capacidadeDisponivelFinal > 0
-      });
-      
-      // REGRA 1: Se sinal ato já for igual à soma mínima + bônus, não reduzir
-      if (sinalAtoValue <= somaMinimaComBonus) {
-        console.log('🚫 Sinal Ato já está no mínimo que justifica o bônus. Sem otimização para evitar loop infinito.');
-      } 
-      // REGRA 2: Se sinal ato for maior que a soma mínima + bônus, otimizar
-      else if (sinalAtoValue > somaMinimaComBonus && capacidadeDisponivelFinal > 0) {
-        // Calcular o excedente que pode ser transferido
-        const excedenteAcimaDaSomaMinima = sinalAtoValue - somaMinimaComBonus;
-        
-        // A transferência máxima é o menor entre: excedente disponível e capacidade do pró-soluto
-        const maximoTransferencia = Math.min(excedenteAcimaDaSomaMinima, capacidadeDisponivelFinal);
-        
-        console.log('💰 Análise de transferência:', {
-          excedenteAcimaDaSomaMinima: centsToBrl(excedenteAcimaDaSomaMinima * 100),
-          capacidadeDisponivelFinal: centsToBrl(capacidadeDisponivelFinal * 100),
-          maximoTransferencia: centsToBrl(maximoTransferencia * 100)
+      if (protectedBonus && protectedBonus.isLocked) {
+        console.log('🛡️ BÔNUS PROTEGIDO DETECTADO - OTIMIZAÇÃO BLOQUEADA');
+        console.log('📊 Status do Bônus Protegido:', {
+          protectedValue: centsToBrl(protectedBonus.value * 100),
+          sinalMinimo: centsToBrl(protectedBonus.sinalMinimo * 100),
+          minimumRequired: centsToBrl(getMinimumSinalAtoWithBonus() * 100),
+          sinalAtoAtual: centsToBrl(sinalAtoValue * 100)
         });
         
-        if (maximoTransferencia > 0.01) { // Só transferir se for significativo
-          // Aplicar a transferência
-          const novoSinalAto = sinalAtoValue - maximoTransferencia;
-          const novoProSoluto = proSolutoValue + maximoTransferencia;
-          
-          console.log('✅✅✅ TRANSFERÊNCIA APLICADA:', {
-            sinalAtoAnterior: centsToBrl(sinalAtoValue * 100),
-            sinalAtoNovo: centsToBrl(novoSinalAto * 100),
-            sinalMinimoPermitido: centsToBrl(sinalMinimo * 100),
-            campaignBonusMantido: centsToBrl(campaignBonusValue * 100),
-            somaMinimaComBonus: centsToBrl(somaMinimaComBonus * 100),
-            proSolutoAnterior: centsToBrl(proSolutoValue * 100),
-            proSolutoNovo: centsToBrl(novoProSoluto * 100),
-            transferencia: centsToBrl(maximoTransferencia * 100),
-            sinalAtoAindaAcimaDoMinimo: novoSinalAto > sinalMinimo
-          });
-          
-          // Atualizar os valores finais
-          sinalAtoValue = novoSinalAto;
-          proSolutoValue = novoProSoluto;
-          
-          toast({
-            title: "✅ Otimização Aplicada",
-            description: `Transferido ${centsToBrl(maximoTransferencia * 100)} do Sinal Ato para o Pró-Soluto. Bônus campanha mantido em ${centsToBrl(campaignBonusValue * 100)}.`
-          });
-        } else {
-          console.log('🚫 Não há excedente significativo para transferir ou capacidade insuficiente no pró-soluto');
-        }
+        // 🔒 NÃO OTIMIZAR QUANDO HOUVER BÔNUS PROTEGIDO
+        // Ele já foi otimizado na criação e não deve ser alterado
+        
       } else {
-        console.log('🚫 Não há margem para otimização - sem capacidade disponível no pró-soluto');
+        // 🆕 OTIMIZAÇÃO SÓ SE NÃO HOUVER BÔNUS PROTEGIDO
+        // Calcular capacidade disponível no pró-soluto após a campanha
+        const proSolutoPosCampanhaCorrigido = calculateCorrectedProSoluto(
+          proSolutoValue,
+          deliveryDate,
+          newPayments
+        );
+        
+        const isReservaParque = propertyEnterpriseName.includes('Reserva Parque Clube');
+        const conditionTypeForLimit = conditionType === 'especial' ? 'especial' : 'padrao';
+        const proSolutoLimitPercent = isReservaParque ? 0.1799 : (conditionTypeForLimit === 'especial' ? 0.1799 : 0.1499);
+        const percentualPosCampanha = valorFinalImovel > 0 ? proSolutoPosCampanhaCorrigido / valorFinalImovel : 0;
+        
+        console.log('📊 Status do Pró-Soluto após campanha:', {
+          proSolutoPosCampanha: centsToBrl(proSolutoPosCampanhaCorrigido * 100),
+          percentualPosCampanha: formatPercentage(percentualPosCampanha),
+          limiteProSoluto: formatPercentage(proSolutoLimitPercent)
+        });
+        
+        // Calcular capacidade disponível no pró-soluto
+        const capacidadeDisponivelFinal = Math.max(0, (proSolutoLimitPercent * valorFinalImovel) - proSolutoPosCampanhaCorrigido);
+        
+        // CÁLCULO CRÍTICO: Soma mínima que justifica o bônus campanha
+        const somaMinimaComBonus = sinalMinimo + campaignBonusValue;
+        
+        console.log('🎯 Análise para otimização:', {
+          sinalAtoAtual: centsToBrl(sinalAtoValue * 100),
+          sinalMinimoPermitido: centsToBrl(sinalMinimo * 100),
+          campaignBonusValue: centsToBrl(campaignBonusValue * 100),
+          somaMinimaComBonus: centsToBrl(somaMinimaComBonus * 100),
+          capacidadeDisponivelFinal: centsToBrl(capacidadeDisponivelFinal * 100),
+          podeReduzir: sinalAtoValue > somaMinimaComBonus && capacidadeDisponivelFinal > 0
+        });
+        
+        // REGRA 1: Se sinal ato já for igual à soma mínima + bônus, não reduzir
+        if (sinalAtoValue <= somaMinimaComBonus) {
+          console.log('🚫 Sinal Ato já está no mínimo que justifica o bônus. Sem otimização.');
+        } 
+        // REGRA 2: Se sinal ato for maior que a soma mínima + bônus, otimizar
+        else if (sinalAtoValue > somaMinimaComBonus && capacidadeDisponivelFinal > 0) {
+          // Calcular o excedente que pode ser transferido
+          const excedenteAcimaDaSomaMinima = sinalAtoValue - somaMinimaComBonus;
+          
+          // A transferência máxima é o menor entre: excedente disponível e capacidade do pró-soluto
+          const maximoTransferencia = Math.min(excedenteAcimaDaSomaMinima, capacidadeDisponivelFinal);
+          
+          console.log('💰 Análise de transferência:', {
+            excedenteAcimaDaSomaMinima: centsToBrl(excedenteAcimaDaSomaMinima * 100),
+            capacidadeDisponivelFinal: centsToBrl(capacidadeDisponivelFinal * 100),
+            maximoTransferencia: centsToBrl(maximoTransferencia * 100)
+          });
+          
+          if (maximoTransferencia > 0.01) { // Só transferir se for significativo
+            // Aplicar a transferência
+            const novoSinalAto = sinalAtoValue - maximoTransferencia;
+            const novoProSoluto = proSolutoValue + maximoTransferencia;
+            
+            console.log('✅✅✅ TRANSFERÊNCIA APLICADA:', {
+              sinalAtoAnterior: centsToBrl(sinalAtoValue * 100),
+              sinalAtoNovo: centsToBrl(novoSinalAto * 100),
+              sinalMinimoPermitido: centsToBrl(sinalMinimo * 100),
+              campaignBonusMantido: centsToBrl(campaignBonusValue * 100),
+              somaMinimaComBonus: centsToBrl(somaMinimaComBonus * 100),
+              proSolutoAnterior: centsToBrl(proSolutoValue * 100),
+              proSolutoNovo: centsToBrl(novoProSoluto * 100),
+              transferencia: centsToBrl(maximoTransferencia * 100),
+              sinalAtoAindaAcimaDoMinimo: novoSinalAto > sinalMinimo
+            });
+            
+            // Atualizar os valores finais
+            sinalAtoValue = novoSinalAto;
+            proSolutoValue = novoProSoluto;
+            
+            toast({
+              title: "✅ Otimização Aplicada",
+              description: `Transferido ${centsToBrl(maximoTransferencia * 100)} do Sinal Ato para o Pró-Soluto. Bônus campanha mantido em ${centsToBrl(campaignBonusValue * 100)}.`
+            });
+          } else {
+            console.log('🚫 Não há excedente significativo para transferir ou capacidade insuficiente no pró-soluto');
+          }
+        } else {
+          console.log('🚫 Não há margem para otimização - sem capacidade disponível no pró-soluto');
+        }
       }
+    } else {
+      console.log('🚫 Não há bônus de campanha para otimizar');
     }
 
     // Montar lista final de pagamentos
@@ -1477,20 +1587,45 @@ const applyMinimumCondition = (
       });
     }
 
-    // Adicionar bônus de campanha se for maior que zero
+    // 🔒 ADICIONAR BÔNUS DE CAMPANHA PROTEGIDO
     if (campaignBonusValue > 0) {
+      const protectedBonus = getProtectedCampaignBonus();
+      
       // Verificar se o campo já existe
       const existingBonusIndex = finalPayments.findIndex(p => p.type === 'bonusCampanha');
       
       if (existingBonusIndex >= 0) {
-        // Atualizar valor existente
+        // Atualizar valor existente com o valor protegido
         finalPayments[existingBonusIndex].value = campaignBonusValue;
+        
+        // 🔒 GARANTIR DATA DE ENTREGA SEMPRE
+        if (protectedBonus && protectedBonus.isLocked) {
+          finalPayments[existingBonusIndex].date = protectedBonus.deliveryDate;
+        } else {
+          finalPayments[existingBonusIndex].date = deliveryDate || new Date();
+        }
+        
+        console.log('🔄 BÔNUS DE CAMPANHA ATUALIZADO:', {
+          value: centsToBrl(campaignBonusValue * 100),
+          date: format(finalPayments[existingBonusIndex].date, 'dd/MM/yyyy'),
+          isProtected: !!protectedBonus
+        });
       } else {
-        // Adicionar novo campo
+        // 🔒 ADICIONAR NOVO CAMPO COM DATA DE ENTREGA GARANTIDA
+        const bonusDate = protectedBonus && protectedBonus.isLocked 
+          ? protectedBonus.deliveryDate 
+          : (deliveryDate || new Date());
+          
         finalPayments.push({
           type: 'bonusCampanha', 
           value: campaignBonusValue, 
-          date: deliveryDate || new Date(),
+          date: bonusDate,
+        });
+        
+        console.log('➕ BÔNUS DE CAMPANHA ADICIONADO:', {
+          value: centsToBrl(campaignBonusValue * 100),
+          date: format(bonusDate, 'dd/MM/yyyy'),
+          isProtected: !!protectedBonus
         });
       }
     }
@@ -2023,6 +2158,85 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
     const descontoValue = descontoPayment?.value || 0;
     const valorFinalImovel = saleValue - descontoValue;
     
+    // 🔒 VERIFICAR SE HÁ BÔNUS DE CAMPANHA PROTEGIDO
+    const protectedBonus = getProtectedCampaignBonus();
+    const campaignBonus = newPayments.find(p => p.type === 'bonusCampanha');
+    
+    if (protectedBonus && protectedBonus.isLocked && campaignBonus) {
+      console.log('🛡️ adjustPaymentsToMatchTarget: BÔNUS PROTEGIDO DETECTADO - PROTEGENDO VALOR');
+      
+      // 🔒 NÃO ALTERAR O BÔNUS PROTEGIDO
+      // Ajustar apenas Pró-Soluto e Sinal Ato respeitando o mínimo necessário
+      
+      const proSolutoIndex = newPayments.findIndex(p => p.type === 'proSoluto');
+      const sinalAtoIndex = newPayments.findIndex(p => p.type === 'sinalAto');
+      
+      if (proSolutoIndex !== -1 && sinalAtoIndex !== -1) {
+        const minimumRequired = getMinimumSinalAtoWithBonus();
+        const currentSinalAto = newPayments[sinalAtoIndex].value;
+        const currentProSoluto = newPayments[proSolutoIndex].value;
+        
+        // 🔒 GARANTIR QUE SINAL ATO NÃO FIQUE ABAIXO DO MÍNIMO NECESSÁRIO
+        if (difference > 0) {
+          // PRECISA AUMENTAR: Priorizar pró-soluto
+          newPayments[proSolutoIndex].value += difference;
+          
+          // Verificar se o pró-soluto excede os limites
+          const isReservaParque = selectedProperty?.enterpriseName.includes('Reserva Parque Clube');
+          const conditionType = form.getValues('conditionType') as 'padrao' | 'especial';
+          const proSolutoLimitPercent = isReservaParque ? 0.1799 : (conditionType === 'especial' ? 0.1799 : 0.1499);
+          const maxProSolutoValue = saleValue * proSolutoLimitPercent;
+          
+          if (newPayments[proSolutoIndex].value > maxProSolutoValue) {
+            const excesso = newPayments[proSolutoIndex].value - maxProSolutoValue;
+            newPayments[proSolutoIndex].value = maxProSolutoValue;
+            
+            // Adicionar excesso ao sinal ato (mas garantir mínimo necessário)
+            const novoSinalAto = currentSinalAto + excesso;
+            if (isSinalAtoValidForBonus(novoSinalAto)) {
+              newPayments[sinalAtoIndex].value = novoSinalAto;
+            } else {
+              // Manter no mínimo necessário
+              newPayments[sinalAtoIndex].value = minimumRequired;
+              console.warn('⚠️ Excesso de pró-soluto não pode ser adicionado ao sinal ato sem comprometer bônus protegido');
+            }
+          }
+          
+        } else if (difference < 0) {
+          // PRECISA DIMINUIR: Priorizar pró-soluto
+          const excesso = Math.abs(difference);
+          
+          if (currentProSoluto >= excesso) {
+            newPayments[proSolutoIndex].value -= excesso;
+          } else {
+            // Se não há pró-soluto suficiente, reduzir do sinal ato (protegendo o bônus)
+            const excessoRestante = excesso - currentProSoluto;
+            newPayments[proSolutoIndex].value = 0;
+            
+            const novoSinalAto = currentSinalAto - excessoRestante;
+            if (isSinalAtoValidForBonus(novoSinalAto)) {
+              newPayments[sinalAtoIndex].value = novoSinalAto;
+            } else {
+              // Manter no mínimo necessário para o bônus
+              newPayments[sinalAtoIndex].value = minimumRequired;
+              console.warn('⚠️ Excesso não pode ser removido do sinal ato sem comprometer bônus protegido');
+            }
+          }
+        }
+        
+        console.log('🔄 AJUSTE PROTEGIDO APLICADO:', {
+          difference,
+          sinalAtoFinal: centsToBrl(newPayments[sinalAtoIndex].value * 100),
+          proSolutoFinal: centsToBrl(newPayments[proSolutoIndex].value * 100),
+          bonusProtegido: centsToBrl(campaignBonus.value * 100),
+          minimumRequired: centsToBrl(minimumRequired * 100)
+        });
+      }
+      
+      return newPayments;
+    }
+    
+    // 🆕 LÓGICA NORMAL (SÓ SE NÃO HOUVER BÔNUS PROTEGIDO)
     const proSolutoIndex = newPayments.findIndex(p => p.type === 'proSoluto');
     const sinalAtoIndex = newPayments.findIndex(p => p.type === 'sinalAto');
     
@@ -2361,6 +2575,16 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
       }
     }
   
+    // 🔒🔒 useEffect PROTEGIDO DO BÔNUS DE CAMPANHA 🔒🔒
+    // 🔒 SÓ PROCESSAR SE NÃO HOUVER BÔNUS PROTEGIDO
+    const protectedBonus = getProtectedCampaignBonus();
+    
+    if (protectedBonus && protectedBonus.isLocked) {
+      console.log('🛡️ useEffect: BÔNUS PROTEGIDO DETECTADO - IGNORANDO MUDANÇAS AUTOMÁTICAS');
+      return; // 🔒 NÃO FAZER NADA SE HOUVER BÔNUS PROTEGIDO
+    }
+    
+    // 🆕 SÓ PROCESSAR SE NÃO HOUVER BÔNUS PROTEGIDO
     // NOVO: Adicionar bônus de campanha quando aplicável
     const campaignBonusPayment = watchedPayments.find(p => p.type === 'bonusCampanha');
     const sinalAtoPayment = watchedPayments.find(p => p.type === 'sinalAto');
@@ -2380,11 +2604,25 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
           
           if (expectedBonusValue > 0.01) { // Só criar bônus se for significativo
             if (!campaignBonusPayment) {
+              // 🔒 BLOQUEAR O BÔNUS CRIADO
+              lockCampaignBonus(
+                expectedBonusValue,
+                sinalAtoPayment.value,
+                sinalMinimo,
+                deliveryDateObj || new Date()
+              );
+              
               // Adicionar novo bônus
               append({
                 type: 'bonusCampanha',
                 value: expectedBonusValue,
                 date: deliveryDateObj,
+              });
+              
+              console.log('🆕 BÔNUS DE CAMPANHA CRIADO E BLOQUEADO:', {
+                value: centsToBrl(expectedBonusValue * 100),
+                sinalAtoOriginal: centsToBrl(sinalAtoPayment.value * 100),
+                sinalMinimo: centsToBrl(sinalMinimo * 100)
               });
             } else if (Math.abs(campaignBonusPayment.value - expectedBonusValue) > 0.01) {
               // Atualizar valor se for diferente
@@ -2397,6 +2635,20 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
                   date: deliveryDateObj,
                 };
                 replace(newPayments);
+                
+                // 🔒 BLOQUEAR O BÔNUS ATUALIZADO
+                lockCampaignBonus(
+                  expectedBonusValue,
+                  sinalAtoPayment.value,
+                  sinalMinimo,
+                  deliveryDateObj || new Date()
+                );
+                
+                console.log('🔄 BÔNUS DE CAMPANHA ATUALIZADO E BLOQUEADO:', {
+                  value: centsToBrl(expectedBonusValue * 100),
+                  sinalAtoOriginal: centsToBrl(sinalAtoPayment.value * 100),
+                  sinalMinimo: centsToBrl(sinalMinimo * 100)
+                });
               }
             }
           } else if (campaignBonusPayment) {
@@ -2404,6 +2656,9 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
             const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
             if (bonusIndex !== -1) {
               remove(bonusIndex);
+              unlockCampaignBonus(); // 🔓 DESBLOQUEAR
+              
+              console.log('🗑️ BÔNUS DE CAMPANHA REMOVIDO E DESBLOQUEADO');
             }
           }
         } else if (campaignBonusPayment) {
@@ -2411,6 +2666,9 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
           const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
           if (bonusIndex !== -1) {
             remove(bonusIndex);
+            unlockCampaignBonus(); // 🔓 DESBLOQUEAR
+            
+            console.log('🗑️ BÔNUS DE CAMPANHA REMOVIDO E DESBLOQUEADO (sem excedente)');
           }
         }
       } else if (campaignBonusPayment) {
@@ -2418,6 +2676,9 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
         const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
         if (bonusIndex !== -1) {
           remove(bonusIndex);
+          unlockCampaignBonus(); // 🔓 DESBLOQUEAR
+          
+          console.log('🗑️ BÔNUS DE CAMPANHA REMOVIDO E DESBLOQUEADO (campanha inativa)');
         }
       }
     } else if (campaignBonusPayment) {
@@ -2425,6 +2686,9 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
       const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
       if (bonusIndex !== -1) {
         remove(bonusIndex);
+        unlockCampaignBonus(); // 🔓 DESBLOQUEAR
+        
+        console.log('🗑️ BÔNUS DE CAMPANHA REMOVIDO E DESBLOQUEADO (sem sinal ato)');
       }
     }
   }, [
@@ -2463,87 +2727,6 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
       replace(correctedPayments);
     }
   }, [watchedPayments, deliveryDateObj, replace]);
-
-  useEffect(() => {
-    if (!selectedProperty || !deliveryDateObj) return;
-    
-    // Lógica específica para o Bônus de Campanha
-    const campaignBonusPayment = watchedPayments.find(p => p.type === 'bonusCampanha');
-    const sinalAtoPayment = watchedPayments.find(p => p.type === 'sinalAto');
-    
-    // Só processar bônus de campanha se houver sinal ato definido
-    if (sinalAtoPayment && sinalAtoPayment.value > 0) {
-      const descontoPayment = watchedPayments.find(p => p.type === 'desconto');
-      const descontoValue = descontoPayment?.value || 0;
-      const valorFinalImovel = (watchedSaleValue || 0) - descontoValue;
-      const sinalMinimo = 0.05 * valorFinalImovel;
-      
-      if (isSinalCampaignActive && sinalCampaignLimitPercent !== undefined) {
-        if (sinalAtoPayment.value > sinalMinimo) {
-          const excedente = sinalAtoPayment.value - sinalMinimo;
-          const limiteMaximoBonus = valorFinalImovel * (sinalCampaignLimitPercent / 100);
-          const expectedBonusValue = Math.min(excedente, limiteMaximoBonus);
-          
-          if (expectedBonusValue > 0.01) { // Só criar bônus se for significativo
-            if (!campaignBonusPayment) {
-              // Adicionar novo bônus
-              append({
-                type: 'bonusCampanha',
-                value: expectedBonusValue,
-                date: deliveryDateObj,
-              });
-            } else if (Math.abs(campaignBonusPayment.value - expectedBonusValue) > 0.01) {
-              // Atualizar valor se for diferente
-              const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
-              if (bonusIndex !== -1) {
-                const newPayments = [...watchedPayments];
-                newPayments[bonusIndex] = {
-                  ...newPayments[bonusIndex],
-                  value: expectedBonusValue,
-                  date: deliveryDateObj,
-                };
-                replace(newPayments);
-              }
-            }
-          } else if (campaignBonusPayment) {
-            // Remover bônus se não houver mais excedente significativo
-            const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
-            if (bonusIndex !== -1) {
-              remove(bonusIndex);
-            }
-          }
-        } else if (campaignBonusPayment) {
-          // Remover bônus se sinal ato não tiver excedente
-          const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
-          if (bonusIndex !== -1) {
-            remove(bonusIndex);
-          }
-        }
-      } else if (campaignBonusPayment) {
-        // Remover bônus se a campanha não estiver ativa
-        const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
-        if (bonusIndex !== -1) {
-          remove(bonusIndex);
-        }
-      }
-    } else if (campaignBonusPayment) {
-      // Remover bônus se não houver sinal ato ou for zero
-      const bonusIndex = watchedPayments.findIndex(p => p.type === 'bonusCampanha');
-      if (bonusIndex !== -1) {
-        remove(bonusIndex);
-      }
-    }
-  }, [
-    watchedPayments, 
-    selectedProperty, 
-    deliveryDateObj, 
-    isSinalCampaignActive, 
-    sinalCampaignLimitPercent,
-    watchedSaleValue,
-    append,
-    remove,
-    replace,
-  ]);
 
   useEffect(() => {
     if (!selectedProperty) return;
@@ -3234,6 +3417,9 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
   ]);
 
   const handleClearAll = useCallback(() => {
+    // 🔓 DESBLOQUEAR O BÔNUS DE CAMPANHA AO LIMPAR FORMULÁRIO
+    unlockCampaignBonus();
+    
     form.reset({
       propertyId: "",
       selectedUnit: "",
@@ -3267,6 +3453,8 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
       renda: ""
     });
     setCaixaSimulationResult(null);
+    
+    console.log('🧹 FORMULÁRIO LIMPO E BÔNUS DE CAMPANHA DESBLOQUEADO');
     
     toast({
       title: "Formulário Limpo",
