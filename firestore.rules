@@ -14,11 +14,13 @@ service cloud.firestore {
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true));
     }
     
-    // 🔒 CORREÇÃO: Permitir leitura do próprio usuário para validações básicas
+    // 🔒 CORREÇÃO: Simplificar verificação de usuário ativo
+    // Usuário autenticado é considerado ativo por padrão
+    // a menos que explicitamente desativado
     function isActiveUser() {
       return request.auth != null && 
-        (request.auth.token.isActive == true ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true);
+        (request.auth.token.isActive != false &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive != false);
     }
     
     match /users/{userId} {
@@ -36,7 +38,9 @@ service cloud.firestore {
     }
 
     match /properties/{propertyId} {
-      allow read: if isActiveUser();
+      // 🔒 CORREÇÃO: Permitir leitura para qualquer usuário autenticado
+      // que não esteja explicitamente desativado
+      allow read: if request.auth != null && request.auth.token.isActive != false;
       allow write: if isAdmin();
     }
     

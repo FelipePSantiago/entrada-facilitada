@@ -51,7 +51,7 @@ if (typeof window !== 'undefined' && !getApps().length) {
     app = getApp();
     auth = getAuth(app);
     db = getFirestore(app);
-    functions = getFunctions(app, 'southamerica-east1');
+    functions = getFunctions(app, 'us-central1');
 }
 
 export { app, auth, db, functions };

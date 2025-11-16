@@ -169,7 +169,7 @@ function SimulatorInterface() {
             />
             {isAdmin && (
               <Button asChild variant="outline">
-                <a href="/admin/properties">
+                <a href="/admin/properties/properties">
                   <Settings className="mr-2 h-4 w-4" />
                   Administração
                 </a>

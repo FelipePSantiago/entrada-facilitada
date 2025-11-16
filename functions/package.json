@@ -2,7 +2,7 @@
   "name": "functions",
   "description": "Cloud Functions for Firebase",
   "scripts": {
-    "libbuild": "esbuild src/index.ts --bundle --minify --platform=node --target=node20 --outfile=lib/index.js --external:firebase-functions --external:firebase-admin --external:otplib --external:pdf-parse --external:puppeteer-core --external:@sparticuz/chromium",
+    "libbuild": "esbuild src/index.ts --bundle --minify --platform=node --target=node20 --outfile=lib/index.js",
     "build": "npm run libbuild",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",

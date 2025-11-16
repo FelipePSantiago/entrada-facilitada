@@ -1942,6 +1942,13 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
   
   const filteredProperties = (properties || []).filter(p => p.brand === 'Riva');
 
+  // Verifica se há propriedades Riva disponíveis
+  const hasRivaProperties = filteredProperties.length > 0;
+  const hasOtherProperties = (properties || []).some(p => p.brand !== 'Riva');
+  
+  // Controla se o formulário deve ser desabilitado
+  const shouldDisableForm = !hasRivaProperties || !properties || properties.length === 0;
+
   const filterOptions = useMemo(() => {
     const floors = [...new Set(allUnits.map(u => u.floor))].sort((a, b) => {
       const numA = parseInt(a.match(/\d+/)?.[0] || '0');
@@ -3589,6 +3596,34 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
         <CardContent className="p-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {/* Alerta informativo quando não há propriedades Riva */}
+              {!hasRivaProperties && properties && properties.length > 0 && (
+                <Alert className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
+                  <Building className="h-4 w-4 text-amber-600" />
+                  <AlertTitle className="text-amber-800 dark:text-amber-200">
+                    Nenhum empreendimento Riva disponível
+                  </AlertTitle>
+                  <AlertDescription className="text-amber-700 dark:text-amber-300">
+                    {hasOtherProperties 
+                      ? "Este simulador funciona apenas com empreendimentos da marca Riva. Para simular com outras marcas, utilize o simulador 'Fluxo Escalonado'."
+                      : "Não há empreendimentos cadastrados no sistema. Entre em contato com o administrador."
+                    }
+                  </AlertDescription>
+                </Alert>
+              )}
+              
+              {/* Alerta quando não há propriedades nenhuma */}
+              {!properties || properties.length === 0 ? (
+                <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20">
+                  <Building className="h-4 w-4 text-blue-600" />
+                  <AlertTitle className="text-blue-800 dark:text-blue-200">
+                    Nenhum empreendimento cadastrado
+                  </AlertTitle>
+                  <AlertDescription className="text-blue-700 dark:text-blue-300">
+                    Entre em contato com o administrador para cadastrar empreendimentos no sistema.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
               {isAutomatedSimulationEnabled && (
                 <Card className="border-blue-200 dark:border-blue-800">
                   <CardHeader className="pb-4">
@@ -3616,6 +3651,7 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
                             onBlur={() => handleCaixaMonetaryBlur('renda')}
                             placeholder="R$ 0,00"
                             className="pl-10 h-11"
+                            disabled={shouldDisableForm}
                             required 
                           />
                         </div>
@@ -3654,7 +3690,7 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
                     <Button 
                       type="button" 
                       onClick={handleSimulateCaixaFinancing}
-                      disabled={isSimulatingCaixa || !selectedProperty || !watchedAppraisalValue}
+                      disabled={isSimulatingCaixa || !selectedProperty || !watchedAppraisalValue || shouldDisableForm}
                       className="w-full h-11"
                     >
                       {isSimulatingCaixa && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -3724,11 +3760,34 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {filteredProperties.map((property) => (
-                                <SelectItem key={property.id} value={property.id}>
-                                  {property.enterpriseName}
-                                </SelectItem>
-                              ))}
+                              {hasRivaProperties ? (
+                                filteredProperties.map((property) => (
+                                  <SelectItem key={property.id} value={property.id}>
+                                    {property.enterpriseName}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <div className="p-4 text-center text-sm text-muted-foreground">
+                                  {properties && properties.length > 0 ? (
+                                    <div>
+                                      <Building className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                      <p className="font-medium">Nenhum empreendimento Riva disponível</p>
+                                      <p className="text-xs mt-1">
+                                        {hasOtherProperties 
+                                          ? "Os empreendimentos disponíveis são de outras marcas. Use o simulador 'Fluxo Escalonado' para visualizá-los."
+                                          : "Nenhum empreendimento cadastrado no sistema."
+                                        }
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <Building className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                      <p className="font-medium">Nenhum empreendimento cadastrado</p>
+                                      <p className="text-xs mt-1">Entre em contato com o administrador para cadastrar empreendimentos.</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -3761,7 +3820,7 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
                               variant="outline"
                               size="sm"
                               onClick={() => setIsUnitSelectorOpen(true)}
-                              disabled={!selectedProperty}
+                              disabled={!selectedProperty || shouldDisableForm}
                               className="h-11 px-3"
                             >
                               <Building className="h-4 w-4" />
@@ -4132,7 +4191,7 @@ export const PaymentFlowCalculator = memo(function PaymentFlowCalculator({ prope
                   type="button"
                   variant="secondary"
                   onClick={handleApplyMinimumCondition}
-                  disabled={!selectedProperty || !deliveryDateObj || !form.getValues('saleValue')}
+                  disabled={!selectedProperty || !deliveryDateObj || !form.getValues('saleValue') || shouldDisableForm}
                   className="w-full sm:w-auto h-11"
                 >
                   <ShieldCheck className="h-4 w-4 mr-2" />

@@ -604,6 +604,13 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
   }, [watchedPayments, hasSinal1, hasSinal2]);
 
   const filteredProperties = useMemo(() => (properties || []).filter(p => p.brand === 'Direcional'), [properties]);
+  
+  // Verifica se há propriedades Direcionais disponíveis
+  const hasDirecionalProperties = useMemo(() => filteredProperties.length > 0, [filteredProperties]);
+  const hasOtherProperties = useMemo(() => (properties || []).some(p => p.brand !== 'Direcional'), [properties]);
+  
+  // Controla se o formulário deve ser desabilitado
+  const shouldDisableForm = !hasDirecionalProperties || !properties || properties.length === 0;
   const selectedProperty = useMemo(() => properties.find(p => p.id === watchedPropertyId) || null, [properties, watchedPropertyId]);
   const isReservaParque = useMemo(() => selectedProperty?.enterpriseName.includes('Reserva Parque Clube') ?? false, [selectedProperty]);
   
@@ -2320,6 +2327,34 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
         <CardContent className="p-6">
           <FormProvider {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+              {/* Alerta informativo quando não há propriedades Direcionais */}
+              {!hasDirecionalProperties && properties && properties.length > 0 && (
+                <Alert className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
+                  <Building className="h-4 w-4 text-amber-600" />
+                  <AlertTitle className="text-amber-800 dark:text-amber-200">
+                    Nenhum empreendimento Direcional disponível
+                  </AlertTitle>
+                  <AlertDescription className="text-amber-700 dark:text-amber-300">
+                    {hasOtherProperties 
+                      ? "Este simulador funciona apenas com empreendimentos da marca Direcional. Para simular com outras marcas, utilize o simulador 'Fluxo Linear'."
+                      : "Não há empreendimentos cadastrados no sistema. Entre em contato com o administrador."
+                    }
+                  </AlertDescription>
+                </Alert>
+              )}
+              
+              {/* Alerta quando não há propriedades nenhuma */}
+              {!properties || properties.length === 0 ? (
+                <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20">
+                  <Building className="h-4 w-4 text-blue-600" />
+                  <AlertTitle className="text-blue-800 dark:text-blue-200">
+                    Nenhum empreendimento cadastrado
+                  </AlertTitle>
+                  <AlertDescription className="text-blue-700 dark:text-blue-300">
+                    Entre em contato com o administrador para cadastrar empreendimentos no sistema.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
               {/* Seção 1: Empreendimento e Unidade */}
               <Card>
                 <CardHeader className="pb-4">
@@ -2340,11 +2375,34 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {filteredProperties.map((property) => (
-                                <SelectItem key={property.id} value={property.id}>
-                                  {property.enterpriseName}
-                                </SelectItem>
-                              ))}
+                              {hasDirecionalProperties ? (
+                                filteredProperties.map((property) => (
+                                  <SelectItem key={property.id} value={property.id}>
+                                    {property.enterpriseName}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <div className="p-4 text-center text-sm text-muted-foreground">
+                                  {properties && properties.length > 0 ? (
+                                    <div>
+                                      <Building className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                      <p className="font-medium">Nenhum empreendimento Direcional disponível</p>
+                                      <p className="text-xs mt-1">
+                                        {hasOtherProperties 
+                                          ? "Os empreendimentos disponíveis são de outras marcas. Use o simulador 'Fluxo Linear' para visualizá-los."
+                                          : "Nenhum empreendimento cadastrado no sistema."
+                                        }
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <Building className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                      <p className="font-medium">Nenhum empreendimento cadastrado</p>
+                                      <p className="text-xs mt-1">Entre em contato com o administrador para cadastrar empreendimentos.</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -2359,7 +2417,7 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
                           type="button"
                           variant="outline"
                           onClick={() => setIsUnitSelectorOpen(true)}
-                          disabled={!selectedProperty}
+                          disabled={!selectedProperty || shouldDisableForm}
                           className="flex-1 h-11"
                           data-testid="unit-select-button"
                         >
@@ -2610,7 +2668,7 @@ export function SteppedPaymentFlowCalculator({ properties, isSinalCampaignActive
                       type="button"
                       variant="secondary"
                       onClick={handleApplyMinimumCondition}
-                      disabled={!selectedProperty || !deliveryDateObj || !constructionStartDateObj}
+                      disabled={!selectedProperty || !deliveryDateObj || !constructionStartDateObj || shouldDisableForm}
                       className="w-full h-11"
                     >
                       <TrendingUp className="h-4 w-4 mr-2" />
