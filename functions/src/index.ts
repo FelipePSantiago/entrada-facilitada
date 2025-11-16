@@ -123,12 +123,66 @@ export const getPropertiesAction = onCall({ ...publicOptions, maxInstances: 20 }
 
 export const setUserAdminAction = onCall({ ...publicOptions, maxInstances: 10 }, 
   withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
-  ((request: CallableRequest) => actions.setUserAdminAction(request))
+  ((request: CallableRequest) => (ensureAuth(request), actions.setUserAdminAction(request)))
 );
 
 export const checkAdminStatusAction = onCall({ ...publicOptions, maxInstances: 20 }, 
   withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.API, allowedOrigins })
-  ((request: CallableRequest) => actions.checkAdminStatusAction(request))
+  ((request: CallableRequest) => (ensureAuth(request), actions.checkAdminStatusAction(request)))
+);
+
+// =======================================================================================
+// ======================== FUNÇÕES DE ADMINISTRAÇÃO DE USUÁRIOS ========================
+// =======================================================================================
+
+export const createUserAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.createUserAction(request)))
+);
+
+export const deleteUserAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.deleteUserAction(request)))
+);
+
+export const listUsersAction = onCall({ ...publicOptions, maxInstances: 20 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.listUsersAction(request)))
+);
+
+export const resetUserPasswordAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.resetUserPasswordAction(request)))
+);
+
+export const toggleUserAccountAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.toggleUserAccountAction(request)))
+);
+
+export const updateUserTwoFactorAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.updateUserTwoFactorAction(request)))
+);
+
+export const updateUserValidityAction = onCall({ ...publicOptions, maxInstances: 10 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.updateUserValidityAction(request)))
+);
+
+export const verifyOrSetupTwoFactorAction = onCall({ ...publicOptions, maxInstances: 20 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.verifyOrSetupTwoFactorAction(request)))
+);
+
+export const verifyTokenActionWithValidity = onCall({ ...publicOptions, maxInstances: 20 }, 
+  withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.AUTH, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.verifyTokenActionWithValidity(request)))
+);
+
+export const deactivateExpiredAccountsAction = onCall({ ...publicOptions, maxInstances: 5 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  ((request: CallableRequest) => (ensureAuth(request), actions.deactivateExpiredAccountsAction(request)))
 );
 
 // =======================================================================================

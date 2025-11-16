@@ -9,6 +9,10 @@ import { getErrorMessage, getValue } from './utils';
 import pdf from 'pdf-parse';
 import { PropertyCache, UserCache, withCache } from './cache';
 import { HttpsError } from 'firebase-functions/v2/https';
+import { CallableRequest } from 'firebase-functions/v2/https';
+
+// Lista de emails de administradores
+const adminEmails = ['santiago.physics@gmail.com', 'test@test.com'];
 
 const processPdf = async (pdfBuffer: Buffer): Promise<ExtractPricingOutput> => {
   const pdfData = await pdf(pdfBuffer);
@@ -310,7 +314,7 @@ export const getTwoFactorSecretAction = async (uid: string): Promise<string | nu
             } else {
                 const userRecord = await adminAuth.getUser(uid);
                 if (!userRecord.email) throw new HttpsError('not-found', "E-mail do usuário não encontrado.");
-                const isAdmin = adminEmails.includes(userRecord.email);
+                const isAdmin = adminEmails.includes(userRecord.email || '');
                 userDoc = { uid, email: userRecord.email, isAdmin, twoFactorEnabled: false };
                 await userDocRef.set(userDoc, { merge: true });
                 UserCache.setUser(uid, userDoc);
@@ -440,12 +444,7 @@ export const updatePropertyAvailabilityAction = async (data: { propertyId: strin
  * Define usuário como administrador (apenas para admins existentes)
  * Esta função permite que um admin existente torne outro usuário admin
  */
-export const setUserAdminAction = onCall(
-  {
-    region: REGION,
-    enforceAppCheck: true,
-  },
-  async (request) => {
+export const setUserAdminAction = async (request: CallableRequest) => {
     // Verificar se o solicitante é admin
     if (!request.auth) {
       throw new HttpsError(
@@ -454,7 +453,7 @@ export const setUserAdminAction = onCall(
       );
     }
 
-    const requesterDoc = await getDocument("users", request.auth.uid);
+    const requesterDoc = await adminDb.collection("users").doc(request.auth.uid).get();
     const requesterData = requesterDoc.data() as AppUser;
 
     if (!requesterData?.isAdmin) {
@@ -475,7 +474,7 @@ export const setUserAdminAction = onCall(
 
     try {
       // Atualizar o campo isAdmin do usuário alvo
-      await updateDocument("users", targetUserId, {
+      await adminDb.collection("users").doc(targetUserId).update({
         isAdmin: isAdmin
       });
 
@@ -491,18 +490,12 @@ export const setUserAdminAction = onCall(
         "Erro ao definir status de administrador."
       );
     }
-  }
-);
+  };
 
 /**
  * Verifica o status de admin do usuário atual
  */
-export const checkAdminStatusAction = onCall(
-  {
-    region: REGION,
-    enforceAppCheck: true,
-  },
-  async (request) => {
+export const checkAdminStatusAction = async (request: CallableRequest) => {
     if (!request.auth) {
       throw new HttpsError(
         "unauthenticated",
@@ -511,7 +504,7 @@ export const checkAdminStatusAction = onCall(
     }
 
     try {
-      const userDoc = await getDocument("users", request.auth.uid);
+      const userDoc = await adminDb.collection("users").doc(request.auth.uid).get();
       const userData = userDoc.data() as AppUser;
 
       return {
@@ -528,5 +521,535 @@ export const checkAdminStatusAction = onCall(
         "Erro ao verificar status de administrador."
       );
     }
+  };
+
+// =======================================================================================
+// ======================== FUNÇÕES DE ADMINISTRAÇÃO DE USUÁRIOS ========================
+// =======================================================================================
+
+/**
+ * Cria um novo usuário no sistema
+ */
+export const createUserAction = async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
   }
-);
+
+  const requesterDoc = await adminDb.collection("users").doc(request.auth.uid).get();
+  const requesterData = requesterDoc.data() as AppUser;
+
+  if (!requesterData?.isAdmin) {
+    throw new HttpsError("permission-denied", "Apenas administradores podem criar usuários.");
+  }
+
+  const { email, password, displayName, isAdmin = false } = request.data;
+
+  if (!email || !password) {
+    throw new HttpsError("invalid-argument", "Email e senha são obrigatórios.");
+  }
+
+  try {
+    const userRecord = await adminAuth.createUser({
+      email,
+      password,
+      displayName: displayName || email.split('@')[0],
+    });
+
+    await adminDb.collection("users").doc(userRecord.uid).set({
+      uid: userRecord.uid,
+      email: userRecord.email,
+      displayName: userRecord.displayName,
+      isAdmin,
+      twoFactorEnabled: false,
+      createdAt: new Date().toISOString(),
+      lastSignInAt: null,
+      isActive: true,
+    });
+
+    UserCache.setUser(userRecord.uid, {
+      uid: userRecord.uid,
+      email: userRecord.email,
+      displayName: userRecord.displayName,
+      isAdmin,
+      twoFactorEnabled: false,
+    } as AppUser);
+
+    return {
+      success: true,
+      user: {
+        uid: userRecord.uid,
+        email: userRecord.email,
+        displayName: userRecord.displayName,
+        isAdmin,
+      },
+    };
+  } catch (error: any) {
+    console.error("Erro ao criar usuário:", error);
+    throw new HttpsError("internal", `Erro ao criar usuário: ${error.message}`);
+  }
+};
+
+/**
+ * Deleta um usuário do sistema
+ */
+export const deleteUserAction = async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+  }
+
+  const requesterDoc = await adminDb.collection("users").doc(request.auth.uid).get();
+  const requesterData = requesterDoc.data() as AppUser;
+
+  if (!requesterData?.isAdmin) {
+    throw new HttpsError("permission-denied", "Apenas administradores podem deletar usuários.");
+  }
+
+  const { targetUserId } = request.data;
+
+  if (!targetUserId) {
+    throw new HttpsError("invalid-argument", "ID do usuário é obrigatório.");
+  }
+
+  if (targetUserId === request.auth.uid) {
+    throw new HttpsError("invalid-argument", "Não é possível deletar seu próprio usuário.");
+  }
+
+  try {
+    await adminAuth.deleteUser(targetUserId);
+    await adminDb.collection("users").doc(targetUserId).delete();
+    UserCache.invalidateUser(targetUserId);
+
+    return {
+      success: true,
+      message: `Usuário ${targetUserId} deletado com sucesso.`,
+    };
+  } catch (error: any) {
+    console.error("Erro ao deletar usuário:", error);
+    throw new HttpsError("internal", `Erro ao deletar usuário: ${error.message}`);
+  }
+};
+
+/**
+ * Lista todos os usuários do sistema
+ */
+export const listUsersAction = async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+  }
+
+  const requesterDoc = await adminDb.collection("users").doc(request.auth.uid).get();
+  const requesterData = requesterDoc.data() as AppUser;
+
+  if (!requesterData?.isAdmin) {
+    throw new HttpsError("permission-denied", "Apenas administradores podem listar usuários.");
+  }
+
+  const { page = 1, limit = 50, search = "" } = request.data;
+
+  try {
+    let query = adminDb.collection("users") as any;
+    
+    if (search) {
+      query = query.where("email", ">=", search)
+                    .where("email", "<=", search + "\uf8ff");
+    }
+
+    const snapshot = await query
+      .orderBy("createdAt", "desc")
+      .limit(limit)
+      .offset((page - 1) * limit)
+      .get();
+
+    const users = snapshot.docs.map((doc: any) => ({
+      uid: doc.id,
+      ...doc.data(),
+    }));
+
+    const totalSnapshot = search 
+      ? await adminDb.collection("users")
+          .where("email", ">=", search)
+          .where("email", "<=", search + "\uf8ff")
+          .count()
+          .get()
+      : await adminDb.collection("users").count().get();
+
+    return {
+      success: true,
+      users,
+      pagination: {
+        page,
+        limit,
+        total: totalSnapshot.data().count,
+        pages: Math.ceil(totalSnapshot.data().count / limit),
+      },
+    };
+  } catch (error: any) {
+    console.error("Erro ao listar usuários:", error);
+    throw new HttpsError("internal", `Erro ao listar usuários: ${error.message}`);
+  }
+};
+
+/**
+ * Reseta a senha de um usuário
+ */
+export const resetUserPasswordAction = async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+  }
+
+  const requesterDoc = await adminDb.collection("users").doc(request.auth.uid).get();
+  const requesterData = requesterDoc.data() as AppUser;
+
+  if (!requesterData?.isAdmin) {
+    throw new HttpsError("permission-denied", "Apenas administradores podem resetar senhas.");
+  }
+
+  const { targetUserId, newPassword } = request.data;
+
+  if (!targetUserId || !newPassword) {
+    throw new HttpsError("invalid-argument", "ID do usuário e nova senha são obrigatórios.");
+  }
+
+  try {
+    await adminAuth.updateUser(targetUserId, {
+      password: newPassword,
+    });
+
+    return {
+      success: true,
+      message: "Senha resetada com sucesso.",
+    };
+  } catch (error: any) {
+    console.error("Erro ao resetar senha:", error);
+    throw new HttpsError("internal", `Erro ao resetar senha: ${error.message}`);
+  }
+};
+
+/**
+ * Ativa ou desativa a conta de um usuário
+ */
+export const toggleUserAccountAction = async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+  }
+
+  const requesterDoc = await adminDb.collection("users").doc(request.auth.uid).get();
+  const requesterData = requesterDoc.data() as AppUser;
+
+  if (!requesterData?.isAdmin) {
+    throw new HttpsError("permission-denied", "Apenas administradores podem ativar/desativar contas.");
+  }
+
+  const { targetUserId, active } = request.data;
+
+  if (!targetUserId || typeof active !== "boolean") {
+    throw new HttpsError("invalid-argument", "ID do usuário e status são obrigatórios.");
+  }
+
+  if (targetUserId === request.auth.uid) {
+    throw new HttpsError("invalid-argument", "Não é possível desativar seu próprio usuário.");
+  }
+
+  try {
+    await adminAuth.updateUser(targetUserId, {
+      disabled: !active,
+    });
+
+    await adminDb.collection("users").doc(targetUserId).update({
+      isActive: active,
+      updatedAt: new Date().toISOString(),
+    });
+
+    UserCache.invalidateUser(targetUserId);
+
+    return {
+      success: true,
+      message: `Usuário ${active ? 'ativado' : 'desativado'} com sucesso.`,
+    };
+  } catch (error: any) {
+    console.error("Erro ao alternar status da conta:", error);
+    throw new HttpsError("internal", `Erro ao alternar status da conta: ${error.message}`);
+  }
+};
+
+/**
+ * Atualiza a configuração de dois fatores do usuário
+ */
+export const updateUserTwoFactorAction = async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+  }
+
+  const requesterDoc = await adminDb.collection("users").doc(request.auth.uid).get();
+  const requesterData = requesterDoc.data() as AppUser;
+
+  if (!requesterData?.isAdmin) {
+    throw new HttpsError("permission-denied", "Apenas administradores podem gerenciar 2FA.");
+  }
+
+  const { targetUserId, twoFactorEnabled, forceDisable = false } = request.data;
+
+  if (!targetUserId || typeof twoFactorEnabled !== "boolean") {
+    throw new HttpsError("invalid-argument", "ID do usuário e status 2FA são obrigatórios.");
+  }
+
+  try {
+    const updateData: any = {
+      twoFactorEnabled,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (forceDisable || !twoFactorEnabled) {
+      updateData.twoFactorURI = null;
+    }
+
+    await adminDb.collection("users").doc(targetUserId).update(updateData);
+    UserCache.invalidateUser(targetUserId);
+
+    return {
+      success: true,
+      message: `2FA ${twoFactorEnabled ? 'habilitado' : 'desabilitado'} com sucesso.`,
+    };
+  } catch (error: any) {
+    console.error("Erro ao atualizar 2FA:", error);
+    throw new HttpsError("internal", `Erro ao atualizar 2FA: ${error.message}`);
+  }
+};
+
+/**
+ * Atualiza a validade da conta do usuário
+ */
+export const updateUserValidityAction = async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+  }
+
+  const requesterDoc = await adminDb.collection("users").doc(request.auth.uid).get();
+  const requesterData = requesterDoc.data() as AppUser;
+
+  if (!requesterData?.isAdmin) {
+    throw new HttpsError("permission-denied", "Apenas administradores podem gerenciar validade.");
+  }
+
+  const { targetUserId, validUntil, active } = request.data;
+
+  if (!targetUserId) {
+    throw new HttpsError("invalid-argument", "ID do usuário é obrigatório.");
+  }
+
+  try {
+    const updateData: any = {
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (validUntil) {
+      updateData.validUntil = validUntil;
+    }
+
+    if (typeof active === "boolean") {
+      updateData.isActive = active;
+    }
+
+    await adminDb.collection("users").doc(targetUserId).update(updateData);
+    UserCache.invalidateUser(targetUserId);
+
+    return {
+      success: true,
+      message: "Validade do usuário atualizada com sucesso.",
+    };
+  } catch (error: any) {
+    console.error("Erro ao atualizar validade:", error);
+    throw new HttpsError("internal", `Erro ao atualizar validade: ${error.message}`);
+  }
+};
+
+/**
+ * Verifica ou configura o two-factor authentication
+ */
+export const verifyOrSetupTwoFactorAction = async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+  }
+
+  const { uid, token, setup } = request.data;
+  const targetUid = uid || request.auth.uid;
+
+  // Se for setup, gerar secret
+  if (setup) {
+    try {
+      const userRecord = await adminAuth.getUser(targetUid);
+      if (!userRecord.email) {
+        throw new HttpsError("not-found", "E-mail não encontrado.");
+      }
+
+      const secret = authenticator.generateSecret();
+      const secretUri = authenticator.keyuri(userRecord.email, "Entrada Facilitada", secret);
+
+      return {
+        success: true,
+        secret,
+        secretUri,
+        message: "Escaneie o QR code com seu app autenticador.",
+      };
+    } catch (error: any) {
+      console.error("Erro ao gerar secret 2FA:", error);
+      throw new HttpsError("internal", `Erro ao gerar secret 2FA: ${error.message}`);
+    }
+  }
+
+  // Se for verificação
+  if (token) {
+    try {
+      let userDoc = UserCache.getUser(targetUid);
+      if (!userDoc) {
+        const userDocSnapshot = await adminDb.collection("users").doc(targetUid).get();
+        if (!userDocSnapshot.exists) {
+          throw new HttpsError("not-found", "Usuário não encontrado.");
+        }
+        userDoc = userDocSnapshot.data() as AppUser;
+        UserCache.setUser(targetUid, userDoc);
+      }
+
+      if (!userDoc.twoFactorURI) {
+        throw new HttpsError("failed-precondition", "2FA não configurado para este usuário.");
+      }
+
+      const secret = new URL(userDoc.twoFactorURI).searchParams.get('secret');
+      if (!secret) {
+        throw new HttpsError("internal", "Configuração 2FA inválida.");
+      }
+
+      const isValid = verifyTotp(secret, token);
+      if (!isValid) {
+        throw new HttpsError("unauthenticated", "Token 2FA inválido.");
+      }
+
+      return {
+        success: true,
+        verified: true,
+        message: "Token 2FA verificado com sucesso.",
+      };
+    } catch (error: any) {
+      console.error("Erro ao verificar token 2FA:", error);
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError("internal", `Erro ao verificar token 2FA: ${error.message}`);
+    }
+  }
+
+  throw new HttpsError("invalid-argument", "Parâmetros inválidos.");
+};
+
+/**
+ * Verifica token com validade adicional
+ */
+export const verifyTokenActionWithValidity = async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+  }
+
+  const { uid, token } = request.data;
+  const targetUid = uid || request.auth.uid;
+
+  try {
+    let userDoc = UserCache.getUser(targetUid);
+    if (!userDoc) {
+      const userDocSnapshot = await adminDb.collection("users").doc(targetUid).get();
+      if (!userDocSnapshot.exists) {
+        throw new HttpsError("not-found", "Usuário não encontrado.");
+      }
+      userDoc = userDocSnapshot.data() as AppUser;
+      UserCache.setUser(targetUid, userDoc);
+    }
+
+    // Verificar se a conta está ativa
+    if (userDoc.isActive === false) {
+      throw new HttpsError("permission-denied", "Conta desativada.");
+    }
+
+    // Verificar validade da conta
+    if (userDoc.validUntil && (userDoc.validUntil as any).toDate && (userDoc.validUntil as any).toDate() < new Date()) {
+      throw new HttpsError("permission-denied", "Conta expirada.");
+    }
+
+    // Se tiver token, verificar 2FA
+    if (token && userDoc.twoFactorEnabled && userDoc.twoFactorURI) {
+      const secret = new URL(userDoc.twoFactorURI).searchParams.get('secret');
+      if (!secret) {
+        throw new HttpsError("internal", "Configuração 2FA inválida.");
+      }
+
+      const isValid = verifyTotp(secret, token);
+      if (!isValid) {
+        throw new HttpsError("unauthenticated", "Token 2FA inválido.");
+      }
+    }
+
+    return {
+      success: true,
+      valid: true,
+      user: {
+        uid: userDoc.uid,
+        email: userDoc.email,
+        displayName: userDoc.displayName,
+        isAdmin: userDoc.isAdmin,
+        isActive: userDoc.isActive,
+        validUntil: userDoc.validUntil,
+      },
+    };
+  } catch (error: any) {
+    console.error("Erro ao verificar token com validade:", error);
+    if (error instanceof HttpsError) throw error;
+    throw new HttpsError("internal", `Erro ao verificar token: ${error.message}`);
+  }
+};
+
+/**
+ * Desativa contas expiradas automaticamente
+ */
+export const deactivateExpiredAccountsAction = async (request: CallableRequest) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+  }
+
+  const requesterDoc = await adminDb.collection("users").doc(request.auth.uid).get();
+  const requesterData = requesterDoc.data() as AppUser;
+
+  if (!requesterData?.isAdmin) {
+    throw new HttpsError("permission-denied", "Apenas administradores podem executar esta ação.");
+  }
+
+  try {
+    const now = new Date();
+    const expiredUsersSnapshot = await adminDb.collection("users")
+      .where("validUntil", "<", now.toISOString())
+      .where("isActive", "==", true)
+      .get();
+
+    const deactivatedCount = expiredUsersSnapshot.size;
+    const batch = adminDb.batch();
+
+    expiredUsersSnapshot.forEach(doc => {
+      batch.update(doc.ref, {
+        isActive: false,
+        deactivatedAt: now.toISOString(),
+        deactivationReason: "expired",
+      });
+    });
+
+    await batch.commit();
+
+    // Invalidar cache dos usuários desativados
+    expiredUsersSnapshot.forEach(doc => {
+      UserCache.invalidateUser(doc.id);
+    });
+
+    return {
+      success: true,
+      deactivatedCount,
+      message: `${deactivatedCount} contas expiradas foram desativadas.`,
+    };
+  } catch (error: any) {
+    console.error("Erro ao desativar contas expiradas:", error);
+    throw new HttpsError("internal", `Erro ao desativar contas expiradas: ${error.message}`);
+  }
+};

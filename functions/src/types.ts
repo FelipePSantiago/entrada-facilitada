@@ -8,6 +8,7 @@ export interface AppUser {
     uid: string;
     email: string;
     emailLower?: string;
+    displayName?: string;
     isAdmin?: boolean;
     twoFactorURI?: string;
     twoFactorEnabled?: boolean; // Propriedade adicionada
