@@ -13,7 +13,7 @@ interface AuthContextType {
   setIsFullyAuthenticated: (isAuth: boolean) => void;
   has2FA: boolean | undefined;
   is2FAVerified: boolean;
-  setIs2FAVerified: (isVerified: boolean) => void; // Adicionado
+  setIs2FAVerified: (isVerified: boolean) => void;
   properties: Property[];
   propertiesLoading: boolean;
   isPageLoading: boolean;
@@ -31,7 +31,7 @@ export const AuthContext = createContext<AuthContextType>({
   setIsFullyAuthenticated: () => {},
   has2FA: undefined,
   is2FAVerified: false,
-  setIs2FAVerified: () => {}, // Adicionado
+  setIs2FAVerified: () => {},
   properties: [],
   propertiesLoading: true,
   isPageLoading: true,

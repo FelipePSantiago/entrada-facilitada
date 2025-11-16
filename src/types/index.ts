@@ -188,7 +188,12 @@ export interface PaymentFlowCalculatorProps {
   setIsTutorialOpen: (isOpen: boolean) => void;
 }
 
-export interface SteppedPaymentFlowCalculatorProps extends PaymentFlowCalculatorProps {}
+export interface SteppedPaymentFlowCalculatorProps {
+  properties: Property[];
+  isSinalCampaignActive: boolean;
+  isTutorialOpen: boolean;
+  setIsTutorialOpen: (isOpen: boolean) => void;
+}
 
 export interface ResultsDisplayProps {
   results: Results;

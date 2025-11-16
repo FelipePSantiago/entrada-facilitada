@@ -9,7 +9,6 @@ import { AuthContext } from '@/contexts/AuthContext';
 import type { Property, AppUser } from '@/types';
 import { auth, app, db } from '../lib/firebase/clientApp';
 import { getFunctions, type Functions, httpsCallable } from 'firebase/functions';
-import { AppleLoader } from '@/components/ui/apple-loader';
 import { retryFirebaseFunction } from '@/lib/utils';
 
 interface ProvidersProps {
@@ -22,7 +21,7 @@ const AUTH_ONLY_PATHS = ['/setup-2fa', '/verify-2fa'];
 function LoadingScreen() {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <AppleLoader />
+        <div className="text-white">Carregando...</div>
       </div> 
     );
 }
@@ -260,7 +259,7 @@ export function ClientProviders({ children }: ProvidersProps) {
         setIsFullyAuthenticated, 
         has2FA, 
         is2FAVerified, 
-        setIs2FAVerified, // Adicionado
+        setIs2FAVerified,
         properties, 
         propertiesLoading,
         isPageLoading,
@@ -273,3 +272,12 @@ export function ClientProviders({ children }: ProvidersProps) {
     </AuthContext.Provider>
   );
 }
+
+// Exportar como Providers para compatibilidade
+export const Providers = ClientProviders;
+
+// Exportar useAuth do AuthContext para compatibilidade
+export { useAuth } from '@/contexts/AuthContext';
+
+// Exportar useAppCheck para compatibilidade
+export { useAppCheck } from '@/hooks/use-app-check';

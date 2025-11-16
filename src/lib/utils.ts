@@ -11,7 +11,7 @@ export function cn(...inputs: ClassValue[]) {
  * Safely retrieves a value from a record-like object using multiple possible keys.
  * This function is case-insensitive.
  *
- * @param item - The object to retrieve the value from.
+ * @param item - The object to retrieve value from.
  * @param keys - An array of possible keys to try.
  * @returns The value found for the first matching key, or undefined if no key is matched.
  */
@@ -76,21 +76,21 @@ export const getErrorMessage = (error: unknown): string => {
 
 
 /**
- * Checks if the code is running on the server side.
- * @returns True if the environment is Node.js (or similar), false otherwise.
+ * Checks if code is running on server side.
+ * @returns True if environment is Node.js (or similar), false otherwise.
  */
 export const isServer = () => typeof window === 'undefined';
 
 /**
- * Checks if the code is running on the client side.
- * @returns True if the environment is a browser, false otherwise.
+ * Checks if code is running on client side.
+ * @returns True if environment is a browser, false otherwise.
  */
 export const isClient = () => !isServer();
 
 /**
  * Returns a function that checks if a given date is "locked" (not allowed) for a specific payment type.
- * This is used to disable certain dates in the date picker based on the payment type.
- * @param type The type of the payment field.
+ * This is used to disable certain dates in date picker based on payment type.
+ * @param type The type of payment field.
  * @returns A function that takes a Date and returns a boolean (true if locked, false if allowed).
  */
 export const isDateLocked = (type: PaymentFieldType) => {
@@ -123,9 +123,9 @@ export const centsToBrl = (cents: number | null | undefined): string => {
 /**
  * Retry wrapper for Firebase functions with exponential backoff
  * @param fn The Firebase callable function to retry
- * @param data The data to pass to the function
+ * @param data The data to pass to function
  * @param maxRetries Maximum number of retries (default: 3)
- * @returns Promise with the function result
+ * @returns Promise with function result
  */
 export const retryFirebaseFunction = async <T = unknown>(
   fn: (data?: unknown) => Promise<{ data: T }>,
@@ -154,7 +154,7 @@ export const retryFirebaseFunction = async <T = unknown>(
         throw error;
       }
       
-      // If this is the last attempt, throw the error
+      // If this is last attempt, throw error
       if (attempt === maxRetries) {
         throw error;
       }
