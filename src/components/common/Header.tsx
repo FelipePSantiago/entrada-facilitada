@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { auth } from "../../lib/firebase/clientApp";
+import { auth } from "@/lib/firebase/client";
 import { signOut } from "firebase/auth";
 
 export default function Header() {

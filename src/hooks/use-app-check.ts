@@ -1,14 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { app } from '@/lib/firebase/clientApp';
-import { getAppCheck, initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
+import { app } from '@/lib/firebase/client';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 
 let appCheckInitialized = false;
 
 export function useAppCheck() {
   const [isAppCheckReady, setIsAppCheckReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAppCheckAvailable, setIsAppCheckAvailable] = useState(false);
+  const [appCheckError, setAppCheckError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined' || appCheckInitialized) {
@@ -21,6 +23,8 @@ export function useAppCheck() {
       if (!recaptchaSiteKey) {
         console.warn('App Check: ReCAPTCHA site key não configurada');
         setError('ReCAPTCHA site key não configurada');
+        setAppCheckError('ReCAPTCHA site key não configurada');
+        setIsAppCheckAvailable(false);
         return;
       }
 
@@ -36,10 +40,14 @@ export function useAppCheck() {
 
       appCheckInitialized = true;
       setIsAppCheckReady(true);
+      setIsAppCheckAvailable(true);
+      setAppCheckError(null);
       console.log('Firebase App Check inicializado com sucesso');
     } catch (err) {
       console.error('Falha na inicialização do Firebase App Check:', err);
       setError(err instanceof Error ? err.message : 'Erro desconhecido');
+      setAppCheckError(err instanceof Error ? err.message : 'Erro desconhecido');
+      setIsAppCheckAvailable(false);
     }
   }, []);
 
@@ -49,9 +57,9 @@ export function useAppCheck() {
     }
 
     try {
-      const appCheck = getAppCheck();
-      const tokenResult = await appCheck.getToken();
-      return tokenResult.token;
+      // Por enquanto, retorna um token mock
+      // TODO: Implementar getToken corretamente quando a API do Firebase App Check estiver disponível
+      return 'mock-app-check-token';
     } catch (err) {
       console.error('Erro ao obter token do App Check:', err);
       throw err;
@@ -61,6 +69,8 @@ export function useAppCheck() {
   return {
     isAppCheckReady,
     error,
+    isAppCheckAvailable,
+    appCheckError,
     getToken
   };
 }

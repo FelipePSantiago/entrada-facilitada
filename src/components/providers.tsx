@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import React, { useEffect } from 'react';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
-import { app } from '../lib/firebase/clientApp';
+import { app } from '@/lib/firebase/client';
 
 const ClientProviders = dynamic(() => import('./client-providers').then(mod => mod.ClientProviders), {
   ssr: false,

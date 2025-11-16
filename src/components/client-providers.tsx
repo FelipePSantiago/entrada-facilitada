@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { onAuthStateChanged, type User } from 'firebase/auth';
+import { onAuthStateChanged, type User, type Auth, type MultiFactorResolver } from 'firebase/auth';
 import { onSnapshot, doc, collection } from 'firebase/firestore';
 
 import { AuthContext } from '@/contexts/AuthContext';
 import type { Property, AppUser } from '@/types';
-import { auth, app, db } from '../lib/firebase/clientApp';
+import { auth, app, db } from '@/lib/firebase/client';
 import { getFunctions, type Functions, httpsCallable } from 'firebase/functions';
 import { retryFirebaseFunction } from '@/lib/utils';
 
@@ -39,6 +39,7 @@ export function ClientProviders({ children }: ProvidersProps) {
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertiesLoading, setPropertiesLoading] = useState(true);
   const [functions, setFunctions] = useState<Functions | null>(null);
+  const [mfaResolver, setMfaResolver] = useState<MultiFactorResolver | null>(null);
 
   useEffect(() => {
     const funcs = getFunctions(app);
@@ -265,6 +266,8 @@ export function ClientProviders({ children }: ProvidersProps) {
         isPageLoading,
         setIsPageLoading,
         functions,
+        auth,
+        setMfaResolver,
         checkAdminStatus,
         setUserAdmin
     }}>

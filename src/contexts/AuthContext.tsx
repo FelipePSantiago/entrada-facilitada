@@ -1,7 +1,8 @@
 'use client';
 
 import { createContext, useContext } from 'react';
-import type { User } from 'firebase/auth';
+import type { User, Auth } from 'firebase/auth';
+import type { MultiFactorResolver } from 'firebase/auth';
 import type { Functions } from 'firebase/functions';
 import type { Property } from '@/types';
 
@@ -19,6 +20,8 @@ interface AuthContextType {
   isPageLoading: boolean;
   setIsPageLoading: (isLoading: boolean) => void;
   functions: Functions | null;
+  auth: Auth | null;
+  setMfaResolver: (resolver: MultiFactorResolver | null) => void;
   checkAdminStatus: () => Promise<{ uid: string; email: string; isAdmin: boolean; exists: boolean }>;
   setUserAdmin: (targetUserId: string, isAdmin: boolean) => Promise<{ success: boolean; message: string }>;
 }
@@ -37,6 +40,8 @@ export const AuthContext = createContext<AuthContextType>({
   isPageLoading: true,
   setIsPageLoading: () => {},
   functions: null,
+  auth: null,
+  setMfaResolver: () => {},
   checkAdminStatus: async () => ({ uid: '', email: '', isAdmin: false, exists: false }),
   setUserAdmin: async () => ({ success: false, message: '' }),
 });
