@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { auth, app, db } from '@/lib/firebase/clientApp';
+import { getFunctions, Functions } from 'firebase/functions';
 import { 
   onAuthStateChanged, 
   User as FirebaseUser,
@@ -16,7 +17,9 @@ import {
   multiFactor,
   PhoneMultiFactorGenerator,
   TotpMultiFactorGenerator,
-  getMultiFactorResolver
+  getMultiFactorResolver,
+  MultiFactorResolver,
+  Auth
 } from 'firebase/auth';
 import { 
   collection, 
@@ -34,8 +37,10 @@ import {
   arrayRemove,
   serverTimestamp,
   Timestamp,
-  DocumentData
+  DocumentData,
+  FieldValue
 } from 'firebase/firestore';
+import type { Property } from '@/types';
 
 export interface AppUser {
   uid: string;
@@ -43,8 +48,8 @@ export interface AppUser {
   displayName: string | null;
   photoURL: string | null;
   emailVerified: boolean;
-  createdAt?: Timestamp;
-  lastLoginAt?: Timestamp;
+  createdAt?: Timestamp | FieldValue;
+  lastLoginAt?: Timestamp | FieldValue;
   role?: 'user' | 'admin' | 'moderator';
   status?: 'active' | 'inactive' | 'suspended';
   phoneNumber?: string | null;
@@ -59,22 +64,41 @@ export interface AppUser {
     lastSignInTime?: string;
     creationTime?: string;
   };
+  // Firebase User methods
+  getIdToken: (forceRefresh?: boolean) => Promise<string>;
 }
 
 interface AuthContextType {
   user: AppUser | null;
-  loading: boolean;
-  error: string | null;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, displayName?: string) => Promise<void>;
-  signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<void>;
-  updateUserProfile: (data: Partial<AppUser>) => Promise<void>;
-  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
-  enableTwoFactor: () => Promise<void>;
-  disableTwoFactor: () => Promise<void>;
-  verifyTwoFactor: (verificationCode: string) => Promise<void>;
-  refreshUser: () => Promise<void>;
+  isAdmin: boolean;
+  authLoading: boolean;
+  isFullyAuthenticated: boolean;
+  setIsFullyAuthenticated: (isAuth: boolean) => void;
+  has2FA: boolean | undefined;
+  is2FAVerified: boolean;
+  setIs2FAVerified: (isVerified: boolean) => void;
+  properties: Property[];
+  propertiesLoading: boolean;
+  isPageLoading: boolean;
+  setIsPageLoading: (isLoading: boolean) => void;
+  functions: Functions | null;
+  auth: Auth | null;
+  setMfaResolver: (resolver: MultiFactorResolver | null) => void;
+  checkAdminStatus: () => Promise<{ uid: string; email: string; isAdmin: boolean; exists: boolean }>;
+  setUserAdmin: (targetUserId: string, isAdmin: boolean) => Promise<{ success: boolean; message: string }>;
+  // Legacy methods for backward compatibility
+  loading?: boolean;
+  error?: string | null;
+  signIn?: (email: string, password: string) => Promise<void>;
+  signUp?: (email: string, password: string, displayName?: string) => Promise<void>;
+  signOut?: () => Promise<void>;
+  resetPassword?: (email: string) => Promise<void>;
+  updateUserProfile?: (data: Partial<AppUser>) => Promise<void>;
+  changePassword?: (currentPassword: string, newPassword: string) => Promise<void>;
+  enableTwoFactor?: () => Promise<void>;
+  disableTwoFactor?: () => Promise<void>;
+  verifyTwoFactor?: (verificationCode: string) => Promise<void>;
+  refreshUser?: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -90,18 +114,27 @@ export const useAuth = () => {
 export const useAppCheck = () => {
   const [appCheckVerified, setAppCheckVerified] = useState(false);
   const [appCheckLoading, setAppCheckLoading] = useState(true);
+  const [isAppCheckAvailable, setIsAppCheckAvailable] = useState(false);
+  const [appCheckError, setAppCheckError] = useState<string | null>(null);
 
   useEffect(() => {
     // Simulate app check verification
     const timer = setTimeout(() => {
       setAppCheckVerified(true);
       setAppCheckLoading(false);
+      setIsAppCheckAvailable(true);
+      setAppCheckError(null);
     }, 1000);
 
     return () => clearTimeout(timer);
   }, []);
 
-  return { appCheckVerified, appCheckLoading };
+  return { 
+    appCheckVerified, 
+    appCheckLoading, 
+    isAppCheckAvailable, 
+    appCheckError 
+  };
 };
 
 interface AuthProviderProps {
@@ -112,6 +145,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // New state properties for complete AuthContextType
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isFullyAuthenticated, setIsFullyAuthenticated] = useState(false);
+  const [has2FA, setHas2FA] = useState<boolean | undefined>(undefined);
+  const [is2FAVerified, setIs2FAVerified] = useState(false);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [propertiesLoading, setPropertiesLoading] = useState(true);
+  const [isPageLoading, setIsPageLoading] = useState(true);
+  const [functions, setFunctions] = useState<Functions | null>(null);
+  const [auth, setAuth] = useState<Auth | null>(null);
+  const [mfaResolver, setMfaResolver] = useState<MultiFactorResolver | null>(null);
+
+  // Initialize Firebase Functions and Auth
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setFunctions(getFunctions(app));
+      setAuth(auth);
+    }
+  }, []);
 
   const firebaseUserToAppUser = async (firebaseUser: FirebaseUser): Promise<AppUser> => {
     const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
@@ -135,17 +189,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       },
       metadata: firebaseUser.metadata,
       createdAt: userData?.createdAt,
-      lastLoginAt: userData?.lastLoginAt
+      lastLoginAt: userData?.lastLoginAt,
+      // Add Firebase User methods
+      getIdToken: firebaseUser.getIdToken.bind(firebaseUser)
     };
   };
 
   useEffect(() => {
+    if (!auth) return;
+    
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoading(true);
+      setAuthLoading(true);
       try {
         if (firebaseUser) {
           const appUser = await firebaseUserToAppUser(firebaseUser);
           setUser(appUser);
+          
+          // Set derived states
+          setIsAdmin(appUser.role === 'admin');
+          setHas2FA(appUser.twoFactorEnabled);
+          setIsFullyAuthenticated(appUser.emailVerified && !appUser.twoFactorEnabled);
+          setAuthLoading(false);
 
           // Update last login
           await updateDoc(doc(db, 'users', firebaseUser.uid), {
@@ -153,22 +218,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           });
         } else {
           setUser(null);
+          setIsAdmin(false);
+          setHas2FA(undefined);
+          setIsFullyAuthenticated(false);
+          setAuthLoading(false);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Erro ao autenticar usuário');
+        setAuthLoading(false);
       } finally {
         setLoading(false);
+        setPropertiesLoading(false);
+        setIsPageLoading(false);
       }
     });
 
     return unsubscribe;
-  }, []);
+  }, [auth]);
 
   const signIn = async (email: string, password: string) => {
     setLoading(true);
     setError(null);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      if (auth) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        throw new Error('Firebase Auth não está inicializado');
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao fazer login';
       setError(errorMessage);
@@ -182,6 +258,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
+      if (!auth) {
+        throw new Error('Firebase Auth não está inicializado');
+      }
+
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       
       if (displayName) {
@@ -223,7 +303,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
-      await firebaseSignOut(auth);
+      if (auth) {
+        await firebaseSignOut(auth);
+      } else {
+        throw new Error('Firebase Auth não está inicializado');
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao sair';
       setError(errorMessage);
@@ -237,7 +321,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
-      await sendPasswordResetEmail(auth, email);
+      if (auth) {
+        await sendPasswordResetEmail(auth, email);
+      } else {
+        throw new Error('Firebase Auth não está inicializado');
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao redefinir senha';
       setError(errorMessage);
@@ -248,7 +336,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const updateUserProfile = async (data: Partial<AppUser>) => {
-    if (!auth.currentUser) throw new Error('Usuário não autenticado');
+    if (!auth?.currentUser) throw new Error('Usuário não autenticado');
     
     setLoading(true);
     setError(null);
@@ -282,7 +370,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const changePassword = async (currentPassword: string, newPassword: string) => {
-    if (!auth.currentUser || !auth.currentUser.email) {
+    if (!auth?.currentUser || !auth.currentUser.email) {
       throw new Error('Usuário não autenticado');
     }
 
@@ -306,7 +394,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const enableTwoFactor = async () => {
-    if (!auth.currentUser) throw new Error('Usuário não autenticado');
+    if (!auth?.currentUser) throw new Error('Usuário não autenticado');
     
     setLoading(true);
     setError(null);
@@ -331,7 +419,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const disableTwoFactor = async () => {
-    if (!auth.currentUser) throw new Error('Usuário não autenticado');
+    if (!auth?.currentUser) throw new Error('Usuário não autenticado');
     
     setLoading(true);
     setError(null);
@@ -370,7 +458,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const refreshUser = async () => {
-    if (!auth.currentUser) return;
+    if (!auth?.currentUser) return;
     
     setLoading(true);
     try {
@@ -381,6 +469,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setError(errorMessage);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkAdminStatus = async () => {
+    if (!user) {
+      return { uid: '', email: '', isAdmin: false, exists: false };
+    }
+    
+    try {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const userData = userDoc.data();
+      
+      return {
+        uid: user.uid,
+        email: user.email || '',
+        isAdmin: userData?.role === 'admin',
+        exists: userDoc.exists()
+      };
+    } catch (err) {
+      console.error('Erro ao verificar status de admin:', err);
+      return { uid: user.uid, email: user.email || '', isAdmin: false, exists: false };
+    }
+  };
+
+  const setUserAdmin = async (targetUserId: string, isAdmin: boolean) => {
+    try {
+      await updateDoc(doc(db, 'users', targetUserId), {
+        role: isAdmin ? 'admin' : 'user',
+        updatedAt: serverTimestamp()
+      });
+      
+      return { 
+        success: true, 
+        message: `Status de admin ${isAdmin ? 'concedido' : 'revogado'} com sucesso` 
+      };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao atualizar status de admin';
+      return { success: false, message: errorMessage };
     }
   };
 
@@ -397,7 +523,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     enableTwoFactor,
     disableTwoFactor,
     verifyTwoFactor,
-    refreshUser
+    refreshUser,
+    // New properties
+    isAdmin,
+    authLoading,
+    isFullyAuthenticated,
+    setIsFullyAuthenticated,
+    has2FA,
+    is2FAVerified,
+    setIs2FAVerified,
+    properties,
+    propertiesLoading,
+    isPageLoading,
+    setIsPageLoading,
+    functions,
+    auth,
+    setMfaResolver,
+    checkAdminStatus,
+    setUserAdmin
   };
 
   return (
@@ -409,5 +552,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
 // Export Providers component for client-boundary.tsx
 export const Providers: React.FC<{ children: ReactNode }> = ({ children }) => {
+  return <AuthProvider>{children}</AuthProvider>;
+};
+
+// Export ClientProviders for providers.tsx
+export const ClientProviders: React.FC<{ children: ReactNode }> = ({ children }) => {
   return <AuthProvider>{children}</AuthProvider>;
 };
