@@ -5,7 +5,7 @@ import { getMultiFactorResolver, MultiFactorError, sendEmailVerification, signIn
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from 'next/navigation';
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -19,9 +19,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [password, setPassword] = useState("");
-  const { authLoading, isFullyAuthenticated, user, setMfaResolver, auth } = useAuth(); // <<< auth OBTIDO AQUI
+  const { authLoading, isFullyAuthenticated, user, setMfaResolver, auth, setIsPageLoading } = useAuth(); // <<< auth OBTIDO AQUI
   const { toast } = useToast();
   const router = useRouter();
+
+  // Resetar isPageLoading quando a página de login montar
+  useEffect(() => {
+    setIsPageLoading(false);
+  }, [setIsPageLoading]);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();

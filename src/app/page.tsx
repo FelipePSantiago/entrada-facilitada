@@ -34,6 +34,8 @@ export default function RootPage() {
   const handleNavigate = (path: string) => {
     setIsPageLoading(true);
     router.push(path);
+    // Resetar após um pequeno delay para permitir a navegação
+    setTimeout(() => setIsPageLoading(false), 100);
   };
 
   return (

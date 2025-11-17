@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/components/client-providers";
 import { useToast } from "@/hooks/use-toast";
 import { auth } from "@/lib/firebase/clientApp";
 import { signOut } from "firebase/auth";
