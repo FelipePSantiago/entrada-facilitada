@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 5% 96%; /* Light Gray */
+    --foreground: 240 6% 10%; /* Dark Gray */
+    --card: 240 0% 100%; /* White */
+    --card-foreground: 240 6% 10%;
+    --popover: 240 0% 100%;
+    --popover-foreground: 240 6% 10%;
+    --primary: 217 91% 60%; /* Apple Blue */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 96%; /* Light Gray */
+    --secondary-foreground: 240 6% 10%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
+    --accent: 240 5% 96%;
+    --accent-foreground: 240 6% 10%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 6% 90%; /* Light Gray */
+    --input: 240 6% 90%;
+    --ring: 217 91% 60%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 240 6% 10%; /* Very Dark Gray */
+    --foreground: 240 5% 96%; /* Light Gray */
+    --card: 240 6% 12%; /* Darker Gray */
+    --card-foreground: 240 5% 96%;
+    --popover: 240 6% 10%;
+    --popover-foreground: 240 5% 96%;
+    --primary: 217 91% 60%; /* Apple Blue */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4% 16%; /* Dark Gray */
+    --secondary-foreground: 240 5% 96%;
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 4% 64%;
+    --accent: 240 4% 16%;
+    --accent-foreground: 240 5% 96%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 4% 16%; /* Dark Gray */
+    --input: 240 4% 16%;
+    --ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  }
+}
+
+@layer components {
+  .tutorial-highlight {
+    @apply ring-2 ring-primary ring-offset-2 ring-offset-background rounded-md transition-all duration-300 animate-pulse;
+    position: relative;
+  }
+}

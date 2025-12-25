@@ -1,0 +1,18 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Rules for the 'properties' collection
+    match /properties/{propertyId} {
+      // Any authenticated user can read (get, list) the properties collection.
+      allow read: if request.auth != null;
+      // Only admins can write to the properties collection.
+      allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    // Admins can manage all user documents, while regular users can only manage their own.
+    match /users/{userId} {
+      allow read, write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true || request.auth.uid == userId;
+    }
+  }
+}

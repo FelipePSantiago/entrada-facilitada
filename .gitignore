@@ -1,0 +1,36 @@
+
+# Dependencies
+/node_modules
+/functions/node_modules
+
+# Next.js build output
+/.next/
+/out/
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Environment variables
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env
+
+# Firebase - IMPORTANT
+# This file contains sensitive credentials. DO NOT commit it to version control.
+service-account-key.json
+
+# IDE config
+.vscode/
+.idx/
+
+# Mac files
+.DS_Store
+
+# Puppeteer/Chromium
+/functions/.local-chromium
+.local-chromium
