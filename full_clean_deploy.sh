@@ -204,11 +204,16 @@ fi
 
 # 15. VERIFICAR SE ESTÁ LOGADO NO FIREBASE
 echo -e "\n${BLUE}🔥 15. Verificando login no Firebase...${NC}"
-if firebase login:list | grep -q "No active users"; then
+# A lógica aqui é invertida: `grep` tem sucesso (exit code 0) se encontra a string.
+# Portanto, se `grep` for bem-sucedido, o usuário NÃO está logado.
+if firebase login:list 2>&1 | grep -q "No active users"; then
     echo -e "${RED}❌ Você não está logado no Firebase!${NC}"
     echo -e "${YELLOW}Execute: firebase login${NC}"
     exit 1
 else
+    # Se `grep` falhar (exit code não-zero), significa que a string não foi encontrada,
+    # o que implica que há um usuário logado. Neste caso, forçamos um exit code 0 para `check_success`.
+    (exit 0)
     check_success "Login no Firebase verificado"
 fi
 

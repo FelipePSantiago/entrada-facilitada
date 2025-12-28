@@ -41,10 +41,18 @@ const allowedOrigins = [
 // ================================ FUNÇÕES AUXILIARES =================================
 // =======================================================================================
 
+export const setAdminClaimAction = onCall({ ...publicOptions, maxInstances: 5 }, 
+  withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
+  (async (request: CallableRequest) => { // ensureAuth(request) is now handled by withSecurity's requireAuth
+    if (!request.data?.uid) throw new HttpsError('invalid-argument', 'UID do usuário é obrigatório.');
+    return actions.setAdminClaimAction(request.data.uid);
+  })
+);
+
 export const extractPricing = onCall({ ...publicOptions, maxInstances: 10 }, 
   withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.PDF_EXTRACTION, allowedOrigins, maxFileSize: 10 })
   (async (request: CallableRequest) => {
-    ensureAuth(request);
+    ensureAuth(request); // This specific action still uses ensureAuth for internal UID extraction
     if (!request.data?.dataUrl) throw new HttpsError('invalid-argument', 'Nenhum arquivo enviado.');
     const dataUrl = sanitizeInput.fileBase64(request.data.dataUrl, 10);
     return actions.extractPricingAction(dataUrl);
@@ -58,32 +66,32 @@ export const processSumupPaymentAction = onCall({ ...publicOptions, secrets: ["S
 
 export const savePropertyAction = onCall({ ...publicOptions, maxInstances: 5 }, 
   withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
-  ((request: CallableRequest) => (ensureAuth(request), actions.savePropertyAction({ ...request.data, idToken: request.data.idToken })))
+  ((request: CallableRequest) => actions.savePropertyAction(request.data)) // Removed ensureAuth(request) and idToken
 );
 
 export const batchCreatePropertiesAction = onCall({ ...publicOptions, maxInstances: 3 }, 
   withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
-  ((request: CallableRequest) => (ensureAuth(request), actions.batchCreatePropertiesAction({ ...request.data, idToken: request.data.idToken })))
+  ((request: CallableRequest) => actions.batchCreatePropertiesAction(request.data)) // Removed ensureAuth(request) and idToken
 );
 
 export const deletePropertyAction = onCall({ ...publicOptions, maxInstances: 5 }, 
   withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
-  ((request: CallableRequest) => (ensureAuth(request), actions.deletePropertyAction({ ...request.data, idToken: request.data.idToken })))
+  ((request: CallableRequest) => actions.deletePropertyAction(request.data)) // Removed ensureAuth(request) and idToken
 );
 
 export const deleteAllPropertiesAction = onCall({ ...publicOptions, maxInstances: 1 }, 
   withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
-  ((request: CallableRequest) => (ensureAuth(request), actions.deleteAllPropertiesAction({ ...request.data, idToken: request.data.idToken })))
+  ((request: CallableRequest) => actions.deleteAllPropertiesAction(request.data)) // Removed ensureAuth(request) and idToken
 );
 
 export const updatePropertyPricingAction = onCall({ ...publicOptions, maxInstances: 5 }, 
   withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
-  ((request: CallableRequest) => (ensureAuth(request), actions.updatePropertyPricingAction({ ...request.data, idToken: request.data.idToken })))
+  ((request: CallableRequest) => actions.updatePropertyPricingAction(request.data)) // Removed ensureAuth(request) and idToken
 );
 
 export const deletePropertyPricingAction = onCall({ ...publicOptions, maxInstances: 5 }, 
   withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
-  ((request: CallableRequest) => (ensureAuth(request), actions.deletePropertyPricingAction({ ...request.data, idToken: request.data.idToken })))
+  ((request: CallableRequest) => actions.deletePropertyPricingAction(request.data)) // Removed ensureAuth(request) and idToken
 );
 
 export const generateTwoFactorSecretAction = onCall({ ...publicOptions, maxInstances: 10 }, 
@@ -108,17 +116,20 @@ export const verifyTokenAction = onCall({ ...publicOptions, maxInstances: 20 },
 
 export const handleUnitStatusChangeAction = onCall({ ...publicOptions, maxInstances: 10 }, 
   withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
-  ((request: CallableRequest) => (ensureAuth(request), actions.handleUnitStatusChangeAction(request.data)))
+  ((request: CallableRequest) => actions.handleUnitStatusChangeAction(request.data)) // Removed ensureAuth(request)
 );
 
 export const updatePropertyAvailabilityAction = onCall({ ...publicOptions, maxInstances: 10 }, 
   withSecurity({ requireAuth: true, requireAdmin: true, rateLimitConfig: RATE_LIMIT_CONFIGS.ADMIN, allowedOrigins })
-  ((request: CallableRequest) => (ensureAuth(request), actions.updatePropertyAvailabilityAction(request.data)))
+  ((request: CallableRequest) => actions.updatePropertyAvailabilityAction(request.data)) // Removed ensureAuth(request)
 );
 
 export const getPropertiesAction = onCall({ ...publicOptions, maxInstances: 20 }, 
   withSecurity({ requireAuth: true, rateLimitConfig: RATE_LIMIT_CONFIGS.API, allowedOrigins })
-  (async (request: CallableRequest) => (ensureAuth(request), { properties: await actions.getPropertiesAction() }))
+  (async (request: CallableRequest) => {
+    ensureAuth(request); // Still need ensureAuth for the UID context if getPropertiesAction needs it, otherwise remove.
+    return { properties: await actions.getPropertiesAction() };
+  })
 );
 
 // =======================================================================================
@@ -182,7 +193,7 @@ const SELECTORS_CORRIGIDOS = {
         submitButton: 'a[onclick*="document.getElementById(\'form\').submit();"]' 
     },
     pagina4: { 
-        opcaoEnquadramento: 'a[href="listaenquadramentos.modalidade/3074"]'
+        opcaoEnquadramento: 'a[href="listaenquadramentos.modalidade/1976"]'
     },
     pagina5: { 
         sistemaAmortizacao: '#rcrRge', 
@@ -320,7 +331,7 @@ withSecurity({
         try {
             console.log(`[DEBUG] Estratégia 1: Buscando seletor específico...`);
             
-            await page.waitForSelector('a[href="listaenquadramentos.modalidade/3074"]', { 
+            await page.waitForSelector('a[href="listaenquadramentos.modalidade/1976"]', { 
                 timeout: 10000 
             });
             
@@ -331,7 +342,7 @@ withSecurity({
                     waitUntil: 'networkidle2', 
                     timeout: NAVIGATION_TIMEOUT 
                 }),
-                page.click('a[href="listaenquadramentos.modalidade/3074"]')
+                page.click('a[href="listaenquadramentos.modalidade/1976"]')
             ]);
             
             console.log(`[DEBUG] ✅ Navegação via clique normal bem-sucedida`);
@@ -343,25 +354,25 @@ withSecurity({
             try {
                 console.log(`[DEBUG] Estratégia 2: Buscando por conteúdo...`);
                 
-                // CORREÇÃO: Buscar elemento que contenha "3074" no texto usando evaluate
-                const elemento3074 = await page.evaluate(() => {
+                // CORREÇÃO: Buscar elemento que contenha "1976" no texto usando evaluate
+                const elemento1976 = await page.evaluate(() => {
                     const links = Array.from(document.querySelectorAll('a'));
                     const targetLink = links.find(link => 
-                        link.textContent?.includes('3074') || 
-                        link.getAttribute('href')?.includes('3074')
+                        link.textContent?.includes('1976') || 
+                        link.getAttribute('href')?.includes('1976')
                     );
                     return targetLink ? targetLink.outerHTML : null;
                 });
                 
-                if (elemento3074) {
+                if (elemento1976) {
                     console.log(`[DEBUG] ✅ Elemento encontrado por conteúdo. Clique via JavaScript...`);
                     
                     // Clique via evaluate para evitar problemas de tipo
                     await page.evaluate(() => {
                         const links = Array.from(document.querySelectorAll('a'));
                         const targetLink = links.find(link => 
-                            link.textContent?.includes('3074') || 
-                            link.getAttribute('href')?.includes('3074')
+                            link.textContent?.includes('1976') || 
+                            link.getAttribute('href')?.includes('1976')
                         ) as HTMLAnchorElement;
                         if (targetLink) {
                             targetLink.click();
@@ -385,17 +396,17 @@ withSecurity({
                     
                     // CORREÇÃO: Executar clique via evaluate
                     const cliqueExecutado = await page.evaluate(() => {
-                        const link = document.querySelector('a[href="listaenquadramentos.modalidade/3074"]') as HTMLAnchorElement;
+                        const link = document.querySelector('a[href="listaenquadramentos.modalidade/1976"]') as HTMLAnchorElement;
                         if (link) {
                             console.log(`[JS] Clicando no link: ${link.href}`);
                             link.click();
                             return true;
                         } else {
-                            // Fallback: procurar qualquer link com 3074
+                            // Fallback: procurar qualquer link com 1976
                             const allLinks = Array.from(document.querySelectorAll('a'));
                             const targetLink = allLinks.find(a => 
-                                a.getAttribute('href')?.includes('3074') || 
-                                a.textContent?.includes('3074')
+                                a.getAttribute('href')?.includes('1976') || 
+                                a.textContent?.includes('1976')
                             ) as HTMLAnchorElement;
                             if (targetLink) {
                                 console.log(`[JS] Clique fallback no link: ${targetLink.href}`);
@@ -413,7 +424,7 @@ withSecurity({
 
                         console.log(`[DEBUG] ✅ Navegação via JavaScript bem-sucedida`);
                     } else {
-                        throw new Error('Nenhum link com 3074 encontrado');
+                        throw new Error('Nenhum link com 1976 encontrado');
                     }
                     
                 } catch (error3: any) {
@@ -825,7 +836,9 @@ withSecurity({
             console.log(`[DEBUG] ❌ Dados essenciais ainda não encontrados após todas as estratégias`);
             
             // Capturar screenshot para debug
-            await takeScreenshot(page, 'pagina7_erro_extracao');
+            if (page) { // Added null check for page
+              await takeScreenshot(page, 'pagina7_erro_extracao');
+            }
             
             // Capturar HTML completo para análise
             const htmlContent = await page.content();

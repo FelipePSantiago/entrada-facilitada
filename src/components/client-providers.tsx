@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { onSnapshot, doc, collection } from 'firebase/firestore';
@@ -98,40 +98,44 @@ export function ClientProviders({ children }: ProvidersProps) {
     if (!user || appUser === undefined) {
         return;
     }
-    
+
     setAuthLoading(true);
-    if (appUser === null) { // User document doesn't exist or couldn't be read
+
+    if (appUser === null) {
         setHas2FA(false);
         setIsFullyAuthenticated(false);
         setAuthLoading(false);
         return;
     }
 
-    if (appUser.isAdmin) {
-        setHas2FA(true);
-        setIsFullyAuthenticated(true);
-        setAuthLoading(false);
-    } else {
-        const checkTwoFactor = async () => {
-            try {
-                const getTwoFactorSecret = httpsCallable(functions!, 'getTwoFactorSecretAction');
-                const result = await getTwoFactorSecret();
-                const hasTwoFactor = !!(result.data as string | null);
-                setHas2FA(hasTwoFactor);
-                const canAccessApp = hasTwoFactor && is2FAVerified;
-                setIsFullyAuthenticated(canAccessApp);
-            } catch (e) {
-                console.error("Falha ao verificar o status do 2FA:", e);
-                setHas2FA(false);
-                setIsFullyAuthenticated(false);
-            } finally {
-                setAuthLoading(false);
-            }
-        };
-        checkTwoFactor();
-    }
-}, [appUser, user, functions, is2FAVerified]);
+    const processAuthLogic = async () => {
+        try {
+            const getTwoFactorSecret = httpsCallable(functions!, 'getTwoFactorSecretAction');
+            const result = await getTwoFactorSecret();
+            const userHas2FAFromBackend = !!(result.data as string | null);
 
+            setHas2FA(userHas2FAFromBackend);
+
+            if (appUser.isAdmin) {
+                setIsFullyAuthenticated(userHas2FAFromBackend && is2FAVerified);
+
+                if (is2FAVerified) {
+                    await user.getIdToken(true);
+                }
+            } else {
+                setIsFullyAuthenticated(!userHas2FAFromBackend || (userHas2FAFromBackend && is2FAVerified));
+            }
+        } catch (e) {
+            console.error("Falha crítica no processamento da lógica de autenticação:", e);
+            setHas2FA(false);
+            setIsFullyAuthenticated(false);
+        } finally {
+            setAuthLoading(false);
+        }
+    };
+
+    processAuthLogic();
+  }, [appUser, user, functions, is2FAVerified]);
 
   useEffect(() => {
     if (authLoading || (user && has2FA === undefined)) {
@@ -163,18 +167,17 @@ export function ClientProviders({ children }: ProvidersProps) {
         }
       }
     } else {
-      if (pathname !== '/setup-2fa') {
+      if (appUser?.isAdmin && pathname !== '/setup-2fa') {
         router.replace('/setup-2fa');
         setIsPageLoading(true);
       }
     }
   }, [authLoading, user, appUser, has2FA, is2FAVerified, pathname, router]);
 
-
   useEffect(() => {
-    if (!isFullyAuthenticated) {
+    if (!user || !appUser) {
       setProperties([]);
-      setPropertiesLoading(true);
+      setPropertiesLoading(false);
       return;
     }
 
@@ -189,31 +192,34 @@ export function ClientProviders({ children }: ProvidersProps) {
       setPropertiesLoading(false);
     }, (error) => {
       console.error("Erro ao buscar propriedades: ", error);
+      setProperties([]);
       setPropertiesLoading(false);
     });
 
     return () => unsubscribeProperties();
-  }, [isFullyAuthenticated]);
+  }, [user, appUser]);
 
-  const isAdmin = appUser?.isAdmin ?? false;
-  const showLoader = authLoading || (user && has2FA === undefined) || (router && isPageLoading);
+  const isAdmin = useMemo(() => appUser?.isAdmin ?? false, [appUser]);
+  const showLoader = authLoading || (user && appUser === undefined) || isPageLoading;
+  
+  const contextValue = useMemo(() => ({
+    user, 
+    isAdmin, 
+    authLoading, 
+    isFullyAuthenticated, 
+    setIsFullyAuthenticated, 
+    has2FA, 
+    is2FAVerified, 
+    setIs2FAVerified,
+    properties, 
+    propertiesLoading,
+    isPageLoading,
+    setIsPageLoading,
+    functions
+  }), [user, isAdmin, authLoading, isFullyAuthenticated, has2FA, is2FAVerified, properties, propertiesLoading, isPageLoading, functions]);
 
   return (
-    <AuthContext.Provider value={{ 
-        user, 
-        isAdmin, 
-        authLoading, 
-        isFullyAuthenticated, 
-        setIsFullyAuthenticated, 
-        has2FA, 
-        is2FAVerified, 
-        setIs2FAVerified, // Adicionado
-        properties, 
-        propertiesLoading,
-        isPageLoading,
-        setIsPageLoading,
-        functions
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {showLoader ? <LoadingScreen /> : children}
     </AuthContext.Provider>
   );

@@ -61,23 +61,8 @@ function verifyTotp(secret: string, token: string): boolean {
     }
 }
 
-async function verifyAdmin(idToken?: string) {
-    if (!idToken) throw new HttpsError('unauthenticated', 'Unauthorized: No token provided.');
-    try {
-        const decodedToken = await adminAuth.verifyIdToken(idToken);
-        let userDoc = UserCache.getUser(decodedToken.uid);
-        if (!userDoc) {
-            const userDocSnapshot = await adminDb.collection('users').doc(decodedToken.uid).get();
-            if (!userDocSnapshot.exists) throw new HttpsError('permission-denied', 'Forbidden: User document not found.');
-            userDoc = userDocSnapshot.data() as AppUser;
-            UserCache.setUser(decodedToken.uid, userDoc);
-        }
-        if (!userDoc.isAdmin) throw new HttpsError('permission-denied', 'Forbidden: User is not an administrator.');
-        return decodedToken.uid;
-    } catch (error) {
-        throw new HttpsError('permission-denied', `Forbidden: Could not verify admin status. ${getErrorMessage(error)}`);
-    }
-}
+// REMOVED: The verifyAdmin function is removed as custom claims are now used for admin checks.
+
 
 export const getPropertiesAction = withCache(
   () => 'properties:list',
@@ -98,7 +83,7 @@ export const getPropertiesAction = withCache(
 );
 
 export async function savePropertyAction(values: PropertyFormValues & { idToken?: string }): Promise<void> {
-  await verifyAdmin(values.idToken);
+  // REMOVED: await verifyAdmin(values.idToken); - Admin check will be done via custom claims in withSecurity middleware
   try {
     if (!values.id || !values.enterpriseName) throw new HttpsError('invalid-argument', "ID e nome do empreendimento são obrigatórios.");
 
@@ -123,7 +108,7 @@ export async function savePropertyAction(values: PropertyFormValues & { idToken?
 
 export async function batchCreatePropertiesAction(data: { fileContent: string, idToken: string }): Promise<{ addedCount: number }> {
   const { fileContent, idToken } = data;
-  await verifyAdmin(idToken);
+  // REMOVED: await verifyAdmin(idToken); - Admin check will be done via custom claims in withSecurity middleware
   try {
     const parsedData = parseExcel(fileContent);
     if (!parsedData.length) throw new HttpsError('invalid-argument', "Nenhum empreendimento encontrado na planilha.");
@@ -151,7 +136,7 @@ export async function batchCreatePropertiesAction(data: { fileContent: string, i
       if (!existingPropertyIds.has(prop.id)) {
         const newPropertyRef = propertiesCollection.doc(prop.id);
         const startDate = prop.constructionStartDate ? format(prop.constructionStartDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
-        const deliveryDate = prop.deliveryDate ? format(prop.deliveryDate, 'yyyy-MM-dd') : format(addYears(new Date(), 2), 'yyyy-MM-dd');
+        const deliveryDate = prop.deliveryDate ? format(parseISO(startDate), 'yyyy-MM-dd') : format(addYears(new Date(), 2), 'yyyy-MM-dd'); // Corrected prop.constructionStartDate to startDate
         await newPropertyRef.set({
           id: prop.id,
           enterpriseName: prop.enterpriseName,
@@ -171,12 +156,11 @@ export async function batchCreatePropertiesAction(data: { fileContent: string, i
 }
 
 export async function deletePropertyAction(data: { propertyId: string, idToken: string }): Promise<void> {
-  const { propertyId, idToken } = data;
-  await verifyAdmin(idToken);
+  // REMOVED: await verifyAdmin(data.idToken); - Admin check will be done via custom claims in withSecurity middleware
   try {
-    if (!propertyId) throw new HttpsError('invalid-argument', "ID do empreendimento não fornecido.");
-    await adminDb.collection("properties").doc(propertyId).delete();
-    PropertyCache.invalidateProperty(propertyId);
+    if (!data.propertyId) throw new HttpsError('invalid-argument', "ID do empreendimento não fornecido.");
+    await adminDb.collection("properties").doc(data.propertyId).delete();
+    PropertyCache.invalidateProperty(data.propertyId);
     PropertyCache.invalidateAll();
   } catch (error: unknown) {
     throw new HttpsError('internal', `Não foi possível remover o empreendimento: ${getErrorMessage(error)}`);
@@ -184,7 +168,7 @@ export async function deletePropertyAction(data: { propertyId: string, idToken: 
 }
 
 export async function deleteAllPropertiesAction(data: { idToken: string }): Promise<{ deletedCount: number }> {
-  await verifyAdmin(data.idToken);
+  // REMOVED: await verifyAdmin(data.idToken); - Admin check will be done via custom claims in withSecurity middleware
   try {
     const propertiesCollection = adminDb.collection("properties");
     const snapshot = await propertiesCollection.get();
@@ -202,8 +186,7 @@ export async function deleteAllPropertiesAction(data: { idToken: string }): Prom
 }
 
 export async function updatePropertyPricingAction(data: { propertyId: string, pricingData: UnitPricing[], idToken: string }): Promise<void> {
-  const { propertyId, pricingData, idToken } = data;
-  await verifyAdmin(idToken);
+  // REMOVED: await verifyAdmin(data.idToken); - Admin check will be done via custom claims in withSecurity middleware
   try {
     if (!propertyId || !pricingData?.length) throw new HttpsError('invalid-argument', "Dados de preço ou ID do empreendimento não fornecidos.");
 
@@ -260,7 +243,7 @@ export async function updatePropertyPricingAction(data: { propertyId: string, pr
 }
 
 export async function deletePropertyPricingAction(data: { propertyId: string, idToken: string }): Promise<void> {
-    await verifyAdmin(data.idToken);
+    // REMOVED: await verifyAdmin(data.idToken); - Admin check will be done via custom claims in withSecurity middleware
     try {
       if (!data.propertyId) throw new HttpsError('invalid-argument', "ID do empreendimento não fornecido.");
       await adminDb.collection("properties").doc(data.propertyId).update({
@@ -303,26 +286,79 @@ export const verifyAndEnableTwoFactorAction = async (data: { uid: string, secret
     }
 };
 
+export const setAdminClaimAction = async (uid: string) => {
+    try {
+        if (!uid) {
+            throw new HttpsError('invalid-argument', 'UID do usuário inválido.');
+        }
+
+        // Set the custom claim 'admin' to true and 'isActive' to true
+        await adminAuth.setCustomUserClaims(uid, { admin: true, isActive: true });
+
+        // Update the user's document in Firestore to reflect isAdmin and isActive
+        // This is primarily for the AppUser type consistency in the client,
+        // but permissions are enforced by custom claims in rules and middleware.
+        await adminDb.collection("users").doc(uid).set({ 
+            isAdmin: true,
+            isActive: true // Ensure isActive is also set
+        }, { merge: true });
+
+        UserCache.invalidateUser(uid); // Invalidate cache for this user
+        console.log(`Custom claim 'admin: true' and 'isActive: true' set for user ${uid}.`);
+    } catch (error: unknown) {
+        throw new HttpsError('internal', `Não foi possível definir o claim de administrador: ${getErrorMessage(error)}`);
+    }
+};
+
 export const getTwoFactorSecretAction = async (uid: string): Promise<string | null> => {
     try {
         if (!uid) throw new HttpsError('invalid-argument', "UID do usuário inválido.");
         let userDoc = UserCache.getUser(uid);
+        let userRecord = await adminAuth.getUser(uid); // Always fetch userRecord to check email
+
         if (!userDoc) {
             const userDocRef = adminDb.collection("users").doc(uid);
             const userDocSnapshot = await userDocRef.get();
             if (userDocSnapshot.exists) {
                 userDoc = userDocSnapshot.data() as AppUser;
             } else {
-                const userRecord = await adminAuth.getUser(uid);
+                // If user document doesn't exist, create it with initial isAdmin/isActive status
                 if (!userRecord.email) throw new HttpsError('not-found', "E-mail do usuário não encontrado.");
                 const isAdmin = adminEmails.includes(userRecord.email);
-                userDoc = { uid, email: userRecord.email, isAdmin, twoFactorEnabled: false };
+                
+                userDoc = { uid, email: userRecord.email, isAdmin, twoFactorEnabled: false, isActive: true }; // Default isActive to true
                 await userDocRef.set(userDoc, { merge: true });
                 UserCache.setUser(uid, userDoc);
-                return null;
             }
-            UserCache.setUser(uid, userDoc);
         }
+
+        // Ensure custom claims are set/updated if they don't match Firestore doc or adminEmails list
+        // This is crucial for syncing custom claims with Firestore rules.
+        const currentCustomClaims = userRecord.customClaims;
+        const shouldBeAdmin = userDoc.isAdmin; // Based on the Firestore doc's isAdmin property (which is derived from adminEmails on creation)
+        const shouldBeActive = userDoc.isActive; // Based on the Firestore doc's isActive property (default true)
+
+        let claimsChanged = false;
+        if (currentCustomClaims?.admin !== shouldBeAdmin) {
+            claimsChanged = true;
+        }
+        if (currentCustomClaims?.isActive !== shouldBeActive) {
+            claimsChanged = true;
+        }
+
+        if (claimsChanged) {
+            const updatedClaims = { 
+                ...currentCustomClaims, 
+                admin: shouldBeAdmin,
+                isActive: shouldBeActive 
+            };
+            await adminAuth.setCustomUserClaims(uid, updatedClaims);
+            console.log(`Custom claims updated for user ${uid}: admin=${shouldBeAdmin}, isActive=${shouldBeActive}`);
+            
+            // Force refresh of the ID token on the client-side next time it's fetched
+            // The client will get the updated claims when it calls getIdToken(true)
+        }
+
         return userDoc.twoFactorURI || null;
     } catch (error: unknown) {
         throw new HttpsError('internal', `Não foi possível obter o segredo 2FA: ${getErrorMessage(error)}`);
@@ -357,7 +393,7 @@ export const verifyTokenAction = async (data: { uid: string, token: string }, co
 
 export const handleUnitStatusChangeAction = async (data: { propertyId: string, unitId: string, newStatus: UnitStatus, idToken: string }): Promise<void> => {
     const { propertyId, unitId, newStatus, idToken } = data;
-    await verifyAdmin(idToken);
+    // REMOVED: await verifyAdmin(idToken); - Admin check will be done via custom claims in withSecurity middleware
     try {
         if (!propertyId || !unitId || !newStatus) throw new HttpsError('invalid-argument', "Dados da unidade inválidos.");
 
@@ -394,7 +430,7 @@ export const handleUnitStatusChangeAction = async (data: { propertyId: string, u
 
 export const updatePropertyAvailabilityAction = async (data: { propertyId: string, fileContent: string, idToken: string }): Promise<{ unitsUpdatedCount: number }> => {
     const { propertyId, fileContent, idToken } = data;
-    await verifyAdmin(idToken);
+    // REMOVED: await verifyAdmin(idToken); - Admin check will be done via custom claims in withSecurity middleware
     try {
         if (!propertyId || !fileContent) throw new HttpsError('invalid-argument', "Dados do arquivo ou empreendimento inválidos.");
 
